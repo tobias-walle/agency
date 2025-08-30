@@ -21,7 +21,7 @@ The Orchestra tool orchestrates parallel-running AI CLI agents in isolated Git w
 
 ### Tasks
 
-- Task files live at `./.orchestra/tasks/{id}:{slug}.md`
+- Task files live at `./.orchestra/tasks/{id}-{slug}.md`
 - `id` (numeric, autoincrement) and `slug` (string) are parsed from the filename
 - YAML header is the only persisted metadata; do not duplicate computable or ephemeral fields
 
@@ -30,33 +30,38 @@ YAML fields:
 ```markdown
 ---
 title: <string>
-base_branch: <string>      # e.g. main
-status: <enum>             # draft | running | idle | completed | reviewed | failed | merged
+base_branch: <string> # e.g. main
+status: <enum> # draft | running | idle | completed | reviewed | failed | merged
 labels: [<string>]
 created_at: <ISO8601>
-agent: <enum>              # opencode | claude-code | custom
-session_id: <string|null>  # updated if the tool starts a new session (/new, /clear)
+agent: <enum> # opencode | claude-code | fake
+session_id: <string|null> # set initially; updated if the tool starts a new session (e.g., /new, /clear)
 ---
+
 <freeform markdown description>
 ```
 
 Derived (not stored):
+
 - worktree path: `./.orchestra/worktrees/{id}-{slug}`
-- branch name: `orchestra/task-{id}-{slug}`
-- base branch head SHA at start is captured in memory/events
+- branch name: `orchestra/{id}-{slug}`
+- Base branch head SHA is captured when the task is started and recorded in the central event log as `base_sha` (not persisted in YAML). This value is used for diff computation and merge validation.
 
 ### Status Lifecycle
 
-- draft → running → idle ↔ running → completed/reviewed/failed → merged
-- Remove `paused`. `failed` can be set by MCP/CLI.
-- `merged` is set after a successful merge; `gc` deletes merged tasks on request.
+- draft → running → idle ↔ running → completed/failed/reviewed → merged
+- `failed` and `completed` can be set by MCP/CLI.
+- `reviewed` can be set from the user with the CLI.
+- `merged` is set after a successful merge
+- `gc` deletes merged tasks on request.
 
 Transitions:
+
 - new task: `draft`
 - start: allocate worktree/branch, run setup, spawn agent in PTY, set `running`
-- idle detection: if no PTY output for 10s (configurable), set `idle`; any output or user keystroke flips back to `running` (with 2s dwell to avoid flapping)
-- complete/review/fail: explicit user or adapter/agent signals
-- merge: allowed only from `completed` or `reviewed`; on success set `merged` and clean up
+- idle detection: if no PTY output for 10s (configurable), set `idle`; any output or user keystroke flips back to `running` (with 2s dwell to avoid flapping). The idle state can also be triggered via the CLI `orchestra idle <session-id|id|slug>` (via adapter hooks)
+- complete/reviewed/fail: explicit user or adapter/agent signals
+- merge: allowed only from `completed` or `reviewed`; on success set `merged` (cleanup needs to be triggered via gc)
 
 ## Architecture
 
@@ -65,10 +70,11 @@ Transitions:
 - Single user-level daemon written in Rust
 - Exposes JSON-RPC 2.0 over a Unix domain socket
 - Socket path controlled by `ORCHESTRA_SOCKET`
-  - Linux default: `$XDG_RUNTIME_DIR/orchestra.sock` or fallback `/tmp/orchestra.sock`
-  - macOS default: `$TMPDIR/orchestra.sock`
+  - Linux default: `$XDG_RUNTIME_DIR/orchestra.sock` or fallback `/var/run/orchestra.sock`
+  - macOS default: `$XDG_RUNTIME_DIR/orchestra.sock` or fallback `/Library/Application Support/orchestra/orchestra.sock`
+  - Windows: Not supported (return error)
 - PID and in-memory state (process handles, PTY sessions) managed internally; only one instance runs (file lock on socket path)
-- `orchestra install` optionally sets up a launchd agent (macOS) with user confirmation
+- `orchestra daemon install` optionally sets up a launchd agent (macOS) with user confirmation
 
 ### PTY Backend
 
@@ -81,20 +87,21 @@ Transitions:
 
 - Use `git2` for worktrees/branches
 - Worktree: `./.orchestra/worktrees/{id}-{slug}`
-- Branch: `orchestra/task-{id}-{slug}`
+- Branch: `orchestra/{id}-{slug}`
 - On start: ensure `base_branch` exists and is up to date; record base tip SHA in events/in-memory
 - After merge: remove worktree and optionally delete local task branch; mark task `merged`
 
 ### Interfaces
 
 - CLI (via `clap`) acts as a JSON-RPC client to the daemon
-- MCP server exposed by `orchestra mcp` subcommand, bridging to the daemon task API
+- MCP server exposed by `orchestra mcp` subcommand, bridging to the daemon task API (uses <https://github.com/modelcontextprotocol/rust-sdk>)
 
 ### Configuration
 
-- Global: `~/.config/orchestra/config.yaml`
-- Project: `./.orchestra/config.yaml`
+- Global: `~/.config/orchestra/config.toml`
+- Project: `./.orchestra/config.toml`
 - Settings include: log level (off|warn|info|debug|trace), idle timeout (default 10s), concurrency limits, confirmation policy defaults
+- Global and local config are merged
 
 ### Setup Script
 
@@ -108,37 +115,43 @@ Transitions:
 - Each log entry includes timestamp, level, task id/slug (when applicable), and event context
 - Log level configured globally or per project; verbose logging opt-in
 - Event timeline per task appended to the central log stream (no per-task files in v1)
-- `orchestra status --json` for machine-readable state, with `--watch` for streaming
 
 ## Agents and Adapters
 
-- Built-in adapters: `opencode` (v1), `claude-code` (v1/1.1), and `fake` for testing
-- Adapter trait:
-  - prepare(env, cwd) -> Result<()> (optional)
-  - start(task, ctx) -> spawn command under PTY; return handle bound to daemon state
-  - stop(task) -> graceful then kill with timeout
-  - parse_session_update(output_chunk) -> Option<session_id>
-- `session_id` is updated if tools emit a new session token; fallback CLI: `orchestra session set <id|slug> <session_id>`
+- Initial Adapters: `opencode`, `claude-code`, and `fake` for testing
+- Adapters are configured via `.orchestra/agents/*.toml`.
+  Each adapter defines how to spawn the agent or resume the session.
+
+  **Example (`.orchestra/agents/fake.toml`):**
+
+  ```toml
+  [adapter]
+  name = "fake"
+  cmd = "orchestra-fake-agent"
+  cmd_resume = "orchestra-fake-agent --resume $ORCHESTRA_SESSION_ID"
+  ```
+
+- Include a `fake` adapter for tests.
 
 ## CLI Commands
 
-- `orchestra init`                   # create project scaffolding and config
-- `orchestra install`                # interactive setup of launch agent (macOS)
+- `orchestra init` # create project scaffolding and config
+- `orchestra daemon install` # interactive setup of launch agent (macOS)
 - `orchestra daemon start|status|stop`
-- `orchestra new [slug]`             # creates task file, opens $EDITOR to set title/body
+- `orchestra new [slug]` # creates task file, opens $EDITOR to set title/body
 - `orchestra edit <id|slug>`
 - `orchestra start <id|slug>`
-- `orchestra stop <id|slug>`         # confirm unless `-y`
+- `orchestra stop <id|slug>` # confirm unless `-y`
 - `orchestra attach <id|slug>`
+- `orchestra idle <id|slug>` # manually set idle state (optional)
 - `orchestra complete <id|slug>`
 - `orchestra fail <id|slug>`
-- `orchestra review <id|slug>`
-- `orchestra status [--json]`
-- `orchestra merge <id|slug> [--into <branch>]`  # confirm unless `-y`
-- `orchestra gc`                     # deletes tasks in `merged` state (confirm unless `-y`)
-- `orchestra path <id|slug>`         # prints worktree path
-- `orchestra shell-hook`             # prints shell function to `cd` into worktree (zsh/bash/fish)
-- `orchestra config get|set <key> [value]`
+- `orchestra reviewed <id|slug>`
+- `orchestra status`
+- `orchestra merge <id|slug> [--into <branch>]`
+- `orchestra gc` # deletes tasks in `merged` state (list all tasks to delete and confirm unless `-y`)
+- `orchestra path <id|slug>` # prints worktree path
+- `orchestra shell-hook` # prints shell function to `cd` into worktree (zsh/bash/fish/nushell)
 - `orchestra session set <id|slug> <session_id>`
 
 All destructive commands prompt for confirmation by default; `-y` overrides. Defaults configurable.
@@ -170,25 +183,15 @@ All destructive commands prompt for confirmation by default; `-y` overrides. Def
 - E2E tests: spawn daemon, PTY attach, resize handling, idle transitions, merge flow
 - Minimal mocking: PTY and filesystem boundaries only
 - Deterministic outputs from fake agent; CI-friendly without network
+- Utilities are provided for tempfiles/folders
 
 ## Implementation Stack (Rust)
 
 - Async runtime: `tokio`
 - PTY: `portable-pty`
-- JSON-RPC over Unix sockets: `jsonrpsee` (or similar)
+- JSON-RPC over Unix sockets: `jsonrpsee`
 - CLI: `clap`
 - Git: `git2`
-- YAML/JSON: `serde`, `serde_yaml`, `serde_json`
+- TOML/JSON: `serde`, `toml`, `serde_json`
 - Logging: `tracing`, JSON formatter
-- Filesystem utils: `tokio::fs`, `tempfile` for tests
-
-## Acceptance Criteria
-
-- Create, start, attach to, and complete a task in a temp repo with Opencode and the fake agent
-- Idle flips after 10s of no PTY output and returns to running on new output
-- Merge only allowed from completed/reviewed; marks task as merged; cleans worktree and local branch
-- `gc` removes merged tasks after confirmation
-- Single daemon instance enforces socket lock; configurable via `ORCHESTRA_SOCKET`
-- Logs written to `./.orchestra/logs.jsonl` with structured fields and configurable levels
-- TUI agents render correctly via PTY; attach/detach preserves state; resize works
-- CLI provides JSON output for status and returns non-zero on errors
+- Filesystem utils: `tokio::fs`
