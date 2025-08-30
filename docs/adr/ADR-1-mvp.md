@@ -8,11 +8,14 @@ Accepted
 
 ## Context
 
-The Orchestra v1 PRD defines a single-user daemon that orchestrates AI CLI agents in isolated Git worktrees with a JSON-RPC API, MCP interface, and a thin CLI. We want a lean, readable architecture to ship an MVP quickly without over-fragmenting the codebase.
+The Orchestra v1 PRD defines a single-user daemon that orchestrates AI CLI agents in isolated Git worktrees with a JSON-RPC API, MCP interface, and a thin CLI.
+We want a lean, readable architecture to ship an MVP quickly without over-fragmenting the codebase.
+
+Related PRD: [PRD-1-orchestra-v1.md](../prd/PRD-1-orchestra-v1.md)
 
 ## Decision
 
-1. Transport: Use HTTP over Unix Domain Sockets via `hyper` + `hyperlocal` for JSON-RPC (server) in the daemon. Overhead is not a concern.
+1. Transport: Use HTTP over Unix Domain Sockets via `hyper` + `hyperlocal` for JSON-RPC (server) in the daemon. Overhead is not a concern at the moment.
 2. Packaging: Ship a single binary for all commands (`orchestra`), including the CLI and an `mcp` subcommand that starts the MCP server.
 3. CLI Styling: Use `yansi` for colors and `comfy-table` for tabular output.
 4. Defaults: Keep PRD defaults for idle detection (10s idle threshold, 2s dwell) and other timeouts.
@@ -20,7 +23,10 @@ The Orchestra v1 PRD defines a single-user daemon that orchestrates AI CLI agent
 
 ## Architecture Overview
 
-A single long-running daemon exposes a JSON-RPC 2.0 API over a Unix domain socket. The daemon manages task lifecycles, Git worktrees/branches, PTY-backed agent sessions, and structured logging. The `orchestra` binary provides all user commands and also offers an `mcp` subcommand to start the MCP server that bridges to the daemon API. All orchestration and side effects live in `core`; clients remain thin.
+A single long-running daemon exposes a JSON-RPC 2.0 API over a Unix domain socket.
+The daemon manages task lifecycles, Git worktrees/branches, PTY-backed agent sessions, and structured logging.
+The `orchestra` binary provides all user commands and also offers an `mcp` subcommand to start the MCP server that bridges to the daemon API.
+All orchestration and side effects live in `core`; clients remain thin.
 
 ## Workspace Structure (high-level)
 
@@ -35,6 +41,7 @@ orchestra/                     # workspace root
 ```
 
 Notes:
+
 - Start with max four crates to keep boundaries clear and maintenance simple.
 - `core` encapsulates IO, concurrency, and state; `cli` and `mcp` depend on `core` API surface (or JSON-RPC client when appropriate).
 
@@ -84,7 +91,6 @@ Notes:
 
 - `tracing` with JSON formatter writes to `./.orchestra/logs.jsonl`.
 - All lifecycle transitions and significant side effects emit structured events (timestamp, level, task id/slug, context).
-- No per-task files in v1; single central log stream.
 
 ## Dependencies (by crate, latest)
 
@@ -130,7 +136,4 @@ All new dependencies should be added via `cargo add <pkg>` at latest versions; a
 - Raw UDS transport for JSON-RPC to reduce overhead. Rejected for simplicity and familiarity; `hyperlocal` is sufficient.
 - Multiple binaries (separate `orchestra-daemon`, `orchestra-cli`, `orchestra-mcp`). Rejected to minimize distribution complexity and cognitive load.
 - Different CLI UI stacks (`owo-colors`, `tabled`). Chosen `yansi` + `comfy-table` for ergonomics and aesthetics.
-
-## Unresolved Questions
-
-- None for MVP; follow-ups will be tracked in subsequent ADRs as needed.
+- `crossterm` for colors and terminal functionality, but decided it is an overkill for now.
