@@ -133,9 +133,9 @@ Notes:
 
 ## [ ] Phase 10: PTY backend and attach/detach
 
-- What to do: Add `portable-pty` adapter and `pty.attach/input/resize` RPCs with single active attachment. Initially spawn a simple echo program for determinism.
-- Testing strategy: Integration test that attaches, sends input, receives expected output; resize event recorded.
-- Feedback loop: `orchestra attach <task>` shows live PTY output.
+- What to do: Add `portable-pty` adapter and `pty.attach/input/resize` RPCs with single active attachment. Implement detach sequence handling in the CLI attach path: default `Ctrl-p, Ctrl-q` (Docker-style), configurable via `--detach-keys` and config `pty.detach_keys`/env `ORCHESTRA_DETACH_KEYS`. Print hint on attach and do not override `Ctrl-C` by default.
+- Testing strategy: Integration test that attaches, sends input, receives expected output; resize event recorded. Add tests for detach handling (simulate key sequence not forwarded to PTY, local detach occurs, session keeps running) and for custom detach sequences. Snapshot test includes hint line.
+- Feedback loop: `orchestra attach <task>` shows live PTY output; pressing default or configured detach sequence cleanly detaches without stopping the agent.
 
 ## [ ] Phase 11: Idle detection with dwell and signaling
 

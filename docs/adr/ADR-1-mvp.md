@@ -20,6 +20,7 @@ Related PRD: [PRD-1-orchestra-v1.md](../prd/PRD-1-orchestra-v1.md)
 3. CLI Styling: Use `yansi` for colors and `comfy-table` for tabular output.
 4. Defaults: Keep PRD defaults for idle detection (10s idle threshold, 2s dwell) and other timeouts.
 5. Merge Policy: Strictly squash merges by default with optional `--into` to override target branch.
+6. PTY detach UX: Default detach sequence Ctrl-q; configurable via CLI `--detach-keys` and config `pty.detach_keys`/`ORCHESTRA_DETACH_KEYS`. Do not override Ctrl-C by default; print a detach hint on attach.
 
 ## Architecture Overview
 

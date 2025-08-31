@@ -82,6 +82,9 @@ Transitions:
 - Supports TUIs (Opencode, Neovim) reliably
 - Propagate terminal size on attach and handle resize events
 - Single active attachment at a time (v1)
+- Detach: default Ctrl-q; configurable via CLI `--detach-keys`, config `pty.detach_keys`, or env `ORCHESTRA_DETACH_KEYS`
+- Do not override Ctrl-C by default; pass through to the PTY app
+- On successful attach, print hint: "Attached. Detach: Ctrl-q (configurable)"
 
 ### Git Integration
 
@@ -100,7 +103,8 @@ Transitions:
 
 - Global: `~/.config/orchestra/config.toml`
 - Project: `./.orchestra/config.toml`
-- Settings include: log level (off|warn|info|debug|trace), idle timeout (default 10s), concurrency limits, confirmation policy defaults
+- Settings include: log level (off|warn|info|debug|trace), idle timeout (default 10s), dwell (2s), PTY detach keys (`pty.detach_keys`, default `ctrl-p,ctrl-q`), concurrency limits, confirmation policy defaults
+- Env override: `ORCHESTRA_DETACH_KEYS` to override detach sequence per-session
 - Global and local config are merged
 
 ### Setup Script
@@ -142,7 +146,7 @@ Transitions:
 - `orchestra edit <id|slug>`
 - `orchestra start <id|slug>`
 - `orchestra stop <id|slug>` # confirm unless `-y`
-- `orchestra attach <id|slug>`
+- `orchestra attach <id|slug> [--detach-keys <seq>]` # e.g. `ctrl-p,ctrl-q`; hint shown on attach
 - `orchestra idle <id|slug>` # manually set idle state (optional)
 - `orchestra complete <id|slug>`
 - `orchestra fail <id|slug>`
