@@ -9,7 +9,7 @@ For each phase do the following
 - Read the relevant documents to understand the context of this PRD and the architecture:
   - [PRD-1-orchestra-v1.md](../prd/PRD-1-orchestra-v1.md)
   - [ADR-1-mvp.md](../adr/ADR-1-mvp.md)
-- Implement the phase
+- Implement the phase. Make heavy use of Context7 to get up to date info on libraries.
 - Make sure `just check` is not failing and all tests pass
 - Update this document by checking the checkmark in the phase header.
 - Also document (very consisly:
@@ -63,11 +63,16 @@ Notes:
 - Problems: Mutating env vars in tests is unsafe in this toolchain; refactored to a pure function `resolve_socket_path_from()` so tests pass without touching process env.
 - Derivations: None.
 
-## [ ] Phase 5: Structured logging plumbing
+## [x] Phase 5: Structured logging plumbing
 
 - What to do: Wire `tracing` JSON logs to `./.orchestra/logs.jsonl`. Provide `logging::init(&Config)` and attach `task_id`, `session_id` spans when available.
 - Testing strategy: Tempdir tests that initialize logging and assert a JSON line is written with expected fields; use deterministic time via injected clock trait if needed.
 - Feedback loop: Running any command appends structured logs.
+
+Notes:
+
+- Problems: `ChronoUtc::rfc3339()` API mismatch; corrected to `ChronoUtc::rfc_3339()` using Context7 docs.
+- Derivations: Persisted `WorkerGuard` in a `OnceLock` to ensure non-blocking appender flushes at process end; wired logging init in `apps/orchestra/main.rs` before CLI dispatch.
 
 ## [ ] Phase 6: JSON-RPC transport skeleton (daemon)
 
