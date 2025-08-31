@@ -109,6 +109,11 @@ Notes:
 - Problems: `hyper_util::client::legacy::Client::request` returns a legacy error; added a `Client` variant to the CLI error to satisfy `?` conversions and avoid ad-hoc mapping. Also fixed clippy lints (unnecessary to_owned, collapsible if).
 - Derivations: Kept textual output minimal and deterministic for tests (`daemon: running (...)` or `daemon: stopped`) and deferred colorful styling to Phase 16.
 
+## [ ] Phase 7.1: CLI Start/Stop Daemon
+
+- Add a simple commands to start & stop the daemon
+- It doesn't need to do anything yet, except returning the status
+
 ## [ ] Phase 8: Git adapter (worktrees/branches) and init scaffolding
 
 - What to do: Implement `git2` helpers for base branch checks and worktree creation. Add `orchestra init` to scaffold `.orchestra` and default configs.
