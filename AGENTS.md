@@ -29,30 +29,31 @@ Always look up APIs before you use them and verify usage against the official do
 Delegate these research tasks to the `api-docs-expert` agent. Give them all the relevant Context7 ids defined below.
 If you add a new dependency, resolve its Context7 ID and append it [here](./AGENTS.md).
 
-- chrono → /chronotope/chrono
-- dirs → /dirs-dev/dirs-rs
-- regex → /rust-lang/regex
-- serde → /serde-rs/serde
-- serde_yaml → /dtolnay/serde-yaml
-- thiserror → /dtolnay/thiserror
-- toml → /toml-rs/toml
-- tracing → /tokio-rs/tracing
-- tracing-appender → /tokio-rs/tracing (subcrate)
-- tracing-subscriber → /tokio-rs/tracing (subcrate)
-- clap → /clap-rs/clap
-- git2 → /rust-lang/git2-rs
-- tempfile → /Stebalien/tempfile
-- assert_cmd → /assert-rs/assert_cmd
-- pretty_assertions → /colin-kiegel/rust-pretty-assertions
-- proptest → /proptest-rs/proptest
-- serde_json → /serde-rs/json
-- bytes → /tokio-rs/bytes
-- http-body-util → /hyperium/http-body (subcrate)
-- hyper → /hyperium/hyper
-- hyper-util → /hyperium/hyper-util
-- hyperlocal → /softprops/hyperlocal
-- tokio → /tokio-rs/tokio
-- jsonrpsee → /paritytech/jsonrpsee
+- chrono -> /chronotope/chrono
+- dirs -> /dirs-dev/dirs-rs
+- regex -> /rust-lang/regex
+- serde -> /serde-rs/serde
+- serde_yaml -> /dtolnay/serde-yaml
+- thiserror -> /dtolnay/thiserror
+- toml -> /toml-rs/toml
+- tracing -> /tokio-rs/tracing
+- tracing-appender -> /tokio-rs/tracing (subcrate)
+- tracing-subscriber -> /tokio-rs/tracing (subcrate)
+- clap -> /clap-rs/clap
+- git2 -> /rust-lang/git2-rs
+- tempfile -> /Stebalien/tempfile
+- assert_cmd -> /assert-rs/assert_cmd
+- pretty_assertions -> /colin-kiegel/rust-pretty-assertions
+- proptest -> /proptest-rs/proptest
+- serde_json -> /serde-rs/json
+- bytes -> /tokio-rs/bytes
+- http-body-util -> /hyperium/http-body (subcrate)
+- hyper -> /hyperium/hyper
+- hyper-util -> /hyperium/hyper-util
+- hyperlocal -> /softprops/hyperlocal
+- tokio -> /tokio-rs/tokio
+- jsonrpsee -> /paritytech/jsonrpsee
+- crossterm -> /crossterm-rs/crossterm
 
 ## Rules
 

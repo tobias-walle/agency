@@ -32,10 +32,154 @@ pub fn run() {
     Some(args::Commands::Init) => {
       init_project();
     }
+    Some(args::Commands::Attach(a)) => {
+      attach_interactive(a);
+    }
     None => {
       // No subcommand provided; show help
       args::Cli::print_help_and_exit();
     }
+  }
+}
+
+fn parse_task_ref(s: &str) -> orchestra_core::rpc::TaskRef {
+  if let Ok(id) = s.parse::<u64>() {
+    orchestra_core::rpc::TaskRef { id: Some(id), slug: None }
+  } else {
+    orchestra_core::rpc::TaskRef { id: None, slug: Some(s.to_string()) }
+  }
+}
+
+fn parse_detach_keys(s: &str) -> Vec<u8> {
+  // supports "ctrl-q" or "ctrl-p,ctrl-q"
+  let mut seq = Vec::new();
+  for part in s.split(',') {
+    let p = part.trim().to_ascii_lowercase();
+    if let Some(rest) = p.strip_prefix("ctrl-")
+      && let Some(ch) = rest.chars().next()
+    {
+      let upper = ch.to_ascii_uppercase();
+      let code = (upper as u8) & 0x1f;
+      seq.push(code);
+    }
+  }
+  if seq.is_empty() {
+    // fallback single ctrl-q
+    seq.push((b'Q') & 0x1f);
+  }
+  seq
+}
+
+fn attach_interactive(args: args::AttachArgs) {
+  use crossterm::terminal::{disable_raw_mode, enable_raw_mode, size};
+  use std::io::{Read, Write};
+  use std::sync::mpsc;
+  use std::thread;
+
+  let Some(sock) = resolve_socket() else {
+    eprintln!("daemon not running");
+    std::process::exit(1);
+  };
+
+  let root = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+  let tref = parse_task_ref(&args.task);
+  let detach_cfg = std::env::var("ORCHESTRA_DETACH_KEYS").ok().or(args.detach_keys);
+  let detach_seq = detach_cfg
+    .as_deref()
+    .map(parse_detach_keys)
+    .unwrap_or_else(|| vec![("Q".chars().next().unwrap() as u8) & 0x1f]);
+
+  // initial size
+  let (cols, rows) = size().unwrap_or((80, 24));
+  let rt = tokio::runtime::Builder::new_multi_thread().enable_io().enable_time().worker_threads(2).build().unwrap();
+
+  let attach_res = rt.block_on(async {
+    rpc::client::pty_attach(&sock, &root, tref, rows, cols).await
+  });
+  let attachment_id = match attach_res {
+    Ok(r) => r.attachment_id,
+    Err(e) => {
+      eprintln!("attach failed: {e}");
+      std::process::exit(1);
+    }
+  };
+
+  println!("Attached. Detach: {} (configurable)", detach_cfg.clone().unwrap_or_else(|| "ctrl-q".to_string()));
+
+  enable_raw_mode().ok();
+
+  enum Msg { Data(Vec<u8>), Detach }
+  let (tx, rx) = mpsc::channel::<Msg>();
+  // stdin reader thread
+  let tx_in = tx.clone();
+  let detach_seq_clone = detach_seq.clone();
+  thread::spawn(move || {
+    let mut stdin = std::io::stdin();
+    let mut buf = [0u8; 1024];
+    let mut det_idx = 0usize;
+    loop {
+      match stdin.read(&mut buf) {
+        Ok(0) => break,
+        Ok(n) => {
+          let mut out: Vec<u8> = Vec::with_capacity(n);
+          for &b in &buf[..n] {
+            if det_idx < detach_seq_clone.len() && b == detach_seq_clone[det_idx] {
+              det_idx += 1;
+              if det_idx == detach_seq_clone.len() {
+                let _ = tx_in.send(Msg::Detach);
+                det_idx = 0;
+              }
+              // don't forward matched bytes yet
+              continue;
+            } else {
+              // flush any partial matches before this byte
+              if det_idx > 0 {
+                out.extend_from_slice(&detach_seq_clone[..det_idx]);
+                det_idx = 0;
+              }
+              out.push(b);
+            }
+          }
+          if !out.is_empty() {
+            let _ = tx_in.send(Msg::Data(out));
+          }
+        }
+        Err(_) => break,
+      }
+    }
+  });
+
+  // output polling loop
+  let mut stdout = std::io::stdout();
+  let mut detached = false;
+  rt.block_on(async {
+    loop {
+      // drain output first
+      match rpc::client::pty_read(&sock, &attachment_id, Some(8192)).await {
+        Ok(r) => {
+          if !r.data.is_empty() {
+            let _ = stdout.write_all(r.data.as_bytes());
+            let _ = stdout.flush();
+          }
+          if r.eof { break; }
+        }
+        Err(_) => break,
+      }
+      // handle input
+      match rx.recv_timeout(std::time::Duration::from_millis(20)) {
+        Ok(Msg::Data(d)) => { let _ = rpc::client::pty_input(&sock, &attachment_id, &d).await; }
+        Ok(Msg::Detach) => { detached = true; break; }
+        Err(mpsc::RecvTimeoutError::Timeout) => {}
+        Err(_) => break,
+      }
+    }
+  });
+
+  // cleanup
+  let _ = rt.block_on(async { rpc::client::pty_detach(&sock, &attachment_id).await });
+  let _ = disable_raw_mode();
+  if detached {
+    eprintln!("detached");
   }
 }
 

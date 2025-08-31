@@ -77,3 +77,56 @@ pub struct TaskStartResult {
   pub slug: String,
   pub status: Status,
 }
+
+// ---- PTY RPC DTOs (Phase 10) ----
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct PtyAttachParams {
+  pub project_root: String,
+  pub task: TaskRef,
+  pub rows: u16,
+  pub cols: u16,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct PtyAttachResult {
+  pub attachment_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct PtyReadParams {
+  pub attachment_id: String,
+  #[serde(default)]
+  pub max_bytes: Option<usize>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct PtyReadResult {
+  pub data: String,
+  pub eof: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct PtyInputParams {
+  pub attachment_id: String,
+  pub data: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct PtyResizeParams {
+  pub attachment_id: String,
+  pub rows: u16,
+  pub cols: u16,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct PtyDetachParams {
+  pub attachment_id: String,
+}

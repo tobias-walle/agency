@@ -13,6 +13,17 @@ pub enum Commands {
   Daemon(DaemonArgs),
   /// Create project scaffolding and config
   Init,
+  /// Attach to a task's PTY session
+  Attach(AttachArgs),
+}
+
+#[derive(Debug, ClapArgs)]
+pub struct AttachArgs {
+  /// Task reference: numeric id or slug
+  pub task: String,
+  /// Custom detach keys (e.g., "ctrl-p,ctrl-q" or "ctrl-q").
+  #[arg(long = "detach-keys")]
+  pub detach_keys: Option<String>,
 }
 
 #[derive(Debug, ClapArgs)]

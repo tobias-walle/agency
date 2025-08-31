@@ -14,7 +14,8 @@ use crate::adapters::{fs as fsutil, git as gitutil};
 use crate::domain::task::{Status, Task, TaskFrontMatter, TaskId};
 use crate::rpc::{
   DaemonStatus, TaskInfo, TaskListParams, TaskListResponse, TaskNewParams, TaskRef,
-  TaskStartParams, TaskStartResult,
+  TaskStartParams, TaskStartResult, PtyAttachParams, PtyAttachResult, PtyReadParams, PtyReadResult,
+  PtyInputParams, PtyResizeParams, PtyDetachParams,
 };
 
 /// Handle to the running daemon server.
@@ -222,7 +223,7 @@ pub async fn start(socket_path: &Path) -> io::Result<DaemonHandle> {
     )
     .expect("register task.status");
 
-  // ---- task.start (stub) ----
+  // ---- task.start (stub + PTY spawn) ----
   module
     .register_method("task.start", |params, _ctx: &PathBuf, _ext| -> RpcResult<serde_json::Value> {
       let p: TaskStartParams = params.parse()?;
@@ -230,7 +231,6 @@ pub async fn start(socket_path: &Path) -> io::Result<DaemonHandle> {
       let (path, id, slug) = find_task_path_by_ref(&root, &p.task)
         .map_err(|e| ErrorObjectOwned::owned(-32001, e.to_string(), None::<()>))?;
       // Validate base branch tip and log base_sha
-      // Need to parse file to get base_branch and update status
       let s = fs::read_to_string(&path).map_err(|e| ErrorObjectOwned::owned(-32000, e.to_string(), None::<()>))?;
       let mut task = Task::from_markdown(TaskId(id), slug.clone(), &s)
         .map_err(|e| ErrorObjectOwned::owned(-32000, e.to_string(), None::<()>))?;
@@ -242,10 +242,75 @@ pub async fn start(socket_path: &Path) -> io::Result<DaemonHandle> {
         .map_err(|e| ErrorObjectOwned::owned(-32004, e.to_string(), None::<()>))?;
       let md = task.to_markdown().map_err(|e| ErrorObjectOwned::owned(-32000, e.to_string(), None::<()>))?;
       fs::write(&path, md).map_err(|e| ErrorObjectOwned::owned(-32000, e.to_string(), None::<()>))?;
+      // Ensure PTY session exists for this task
+      {
+        let _ = crate::adapters::pty::ensure_spawn(&root, id);
+      }
       let res = TaskStartResult { id, slug, status: Status::Running };
       Ok(serde_json::to_value(res).unwrap())
     })
     .expect("register task.start");
+
+  // ---- pty.attach ----
+  module
+    .register_method("pty.attach", |params, _ctx: &PathBuf, _ext| -> RpcResult<serde_json::Value> {
+      let p: PtyAttachParams = params.parse()?;
+      let root = PathBuf::from(&p.project_root);
+      let (_path, id, _slug) = find_task_path_by_ref(&root, &p.task)
+        .map_err(|e| ErrorObjectOwned::owned(-32001, e.to_string(), None::<()>))?;
+      // Ensure session exists and attach
+      let attach_id = {
+        let _ = crate::adapters::pty::ensure_spawn(&root, id);
+        crate::adapters::pty::attach(id)
+      }.map_err(|e| ErrorObjectOwned::owned(-32010, e.to_string(), None::<()>))?;
+      // Apply initial size
+      let _ = crate::adapters::pty::resize(&attach_id, p.rows, p.cols);
+      let res = PtyAttachResult { attachment_id: attach_id };
+      Ok(serde_json::to_value(res).unwrap())
+    })
+    .expect("register pty.attach");
+
+  // ---- pty.read ----
+  module
+    .register_method("pty.read", |params, _ctx: &PathBuf, _ext| -> RpcResult<serde_json::Value> {
+      let p: PtyReadParams = params.parse()?;
+      let (data, eof) = crate::adapters::pty::read(&p.attachment_id, p.max_bytes)
+        .map_err(|e| ErrorObjectOwned::owned(-32011, e.to_string(), None::<()>))?;
+      let text = String::from_utf8_lossy(&data).to_string();
+      let res = PtyReadResult { data: text, eof };
+      Ok(serde_json::to_value(res).unwrap())
+    })
+    .expect("register pty.read");
+
+  // ---- pty.input ----
+  module
+    .register_method("pty.input", |params, _ctx: &PathBuf, _ext| -> RpcResult<serde_json::Value> {
+      let p: PtyInputParams = params.parse()?;
+      crate::adapters::pty::input(&p.attachment_id, p.data.as_bytes())
+        .map_err(|e| ErrorObjectOwned::owned(-32012, e.to_string(), None::<()>))?;
+      Ok(serde_json::json!(true))
+    })
+    .expect("register pty.input");
+
+  // ---- pty.resize ----
+  module
+    .register_method("pty.resize", |params, _ctx: &PathBuf, _ext| -> RpcResult<serde_json::Value> {
+      let p: PtyResizeParams = params.parse()?;
+      crate::adapters::pty::resize(&p.attachment_id, p.rows, p.cols)
+        .map_err(|e| ErrorObjectOwned::owned(-32013, e.to_string(), None::<()>))?;
+      Ok(serde_json::json!(true))
+    })
+    .expect("register pty.resize");
+
+  // ---- pty.detach ----
+  module
+    .register_method("pty.detach", |params, _ctx: &PathBuf, _ext| -> RpcResult<serde_json::Value> {
+      let p: PtyDetachParams = params.parse()?;
+      crate::adapters::pty::detach(&p.attachment_id)
+        .map_err(|e| ErrorObjectOwned::owned(-32014, e.to_string(), None::<()>))?;
+      Ok(serde_json::json!(true))
+    })
+    .expect("register pty.detach");
 
   let svc_builder = server::Server::builder().to_service_builder();
 

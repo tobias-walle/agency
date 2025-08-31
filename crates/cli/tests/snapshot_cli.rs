@@ -19,6 +19,7 @@ Usage: orchestra [COMMAND]
 Commands:
   daemon  Daemon related commands
   init    Create project scaffolding and config
+  attach  Attach to a task's PTY session
   help    Print this message or the help of the given subcommand(s)
 
 Options:
