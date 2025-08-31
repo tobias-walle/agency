@@ -11,7 +11,7 @@ fn daemon_status_when_running_prints_running() {
   let mut cmd = Command::cargo_bin("orchestra").expect("compile bin");
   cmd.env_remove("ORCHESTRA_SOCKET");
   let output = cmd
-    .args(["daemon", "status"]) 
+    .args(["daemon", "status"])
     .assert()
     .success()
     .get_output()

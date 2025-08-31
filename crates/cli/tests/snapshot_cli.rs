@@ -47,7 +47,10 @@ fn daemon_start_status_stop_end_to_end() {
     .stdout
     .clone();
   let text = String::from_utf8_lossy(&output);
-  assert!(text.contains("daemon: running ("), "unexpected start output: {text}");
+  assert!(
+    text.contains("daemon: running ("),
+    "unexpected start output: {text}"
+  );
 
   // Status
   let mut status = Command::cargo_bin("orchestra").expect("compile bin");
@@ -60,7 +63,10 @@ fn daemon_start_status_stop_end_to_end() {
     .stdout
     .clone();
   let text2 = String::from_utf8_lossy(&out2);
-  assert!(text2.contains("daemon: running ("), "unexpected status output: {text2}");
+  assert!(
+    text2.contains("daemon: running ("),
+    "unexpected status output: {text2}"
+  );
 
   // Stop
   let mut stop = Command::cargo_bin("orchestra").expect("compile bin");
@@ -75,6 +81,3 @@ fn daemon_start_status_stop_end_to_end() {
   let text3 = String::from_utf8_lossy(&out3);
   pretty_assertions::assert_eq!(text3, "daemon: stopped\n");
 }
-
-
-

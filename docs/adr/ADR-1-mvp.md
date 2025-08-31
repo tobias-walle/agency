@@ -186,8 +186,8 @@ apps/orchestra/
 ## Configuration & Defaults
 
 - Global config: `~/.config/orchestra/config.toml`; Project config: `./.orchestra/config.toml`; merged with project overriding global.
-- Key settings: log level (off|warn|info|debug|trace), idle timeout (10s), dwell (2s), concurrency limits, confirmation defaults.
-- Socket path: `ORCHESTRA_SOCKET` with platform-specific defaults from PRD; Windows not supported.
+- Key settings: log level (off|warn|info|debug|trace), idle timeout (10s), dwell (2s), concurrency limits, confirmation defaults (default answer is "No"; `confirm_by_default = false`).
+- Socket path: `ORCHESTRA_SOCKET` with platform-specific defaults from PRD; prefer `dirs::runtime_dir()` over `dirs::data_dir()` for the default socket location; Windows not supported.
 
 ## Logging & Observability
 

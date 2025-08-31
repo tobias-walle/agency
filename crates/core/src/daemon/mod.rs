@@ -1,14 +1,21 @@
 use std::path::{Path, PathBuf};
 use std::{fs, io};
 
+use chrono::Utc;
 use jsonrpsee::core::RpcResult;
 use jsonrpsee::server::{self, RpcModule};
+use jsonrpsee::types::ErrorObjectOwned;
 use tokio::net::UnixListener;
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
 use tracing::{error, info};
 
-use crate::rpc::DaemonStatus;
+use crate::adapters::{fs as fsutil, git as gitutil};
+use crate::domain::task::{Status, Task, TaskFrontMatter, TaskId};
+use crate::rpc::{
+  DaemonStatus, TaskInfo, TaskListParams, TaskListResponse, TaskNewParams, TaskRef,
+  TaskStartParams, TaskStartResult,
+};
 
 /// Handle to the running daemon server.
 pub struct DaemonHandle {
@@ -36,8 +43,61 @@ impl DaemonHandle {
   }
 }
 
+fn next_task_id(tasks_dir: &Path) -> io::Result<u64> {
+  let mut max_id = 0u64;
+  if tasks_dir.exists() {
+    for entry in fs::read_dir(tasks_dir)? {
+      let entry = entry?;
+      let name = entry.file_name();
+      let name = name.to_string_lossy();
+      if let Ok((TaskId(id), _slug)) = Task::parse_filename(&name)
+        && id > max_id
+      {
+        max_id = id;
+      }
+    }
+  }
+  Ok(max_id + 1)
+}
+
+fn read_task_info(path: &Path, id: u64, slug: String) -> io::Result<TaskInfo> {
+  let s = fs::read_to_string(path)?;
+  let t = Task::from_markdown(TaskId(id), slug.clone(), &s)
+    .map_err(|e| io::Error::other(e.to_string()))?;
+  Ok(TaskInfo {
+    id,
+    slug,
+    title: t.front_matter.title,
+    status: t.front_matter.status,
+  })
+}
+
+fn find_task_path_by_ref(project_root: &Path, r: &TaskRef) -> io::Result<(PathBuf, u64, String)> {
+  let dir = fsutil::tasks_dir(project_root);
+  let mut found: Option<(PathBuf, u64, String)> = None;
+  for entry in fs::read_dir(&dir)? {
+    let entry = entry?;
+    let name = entry.file_name();
+    let name = name.to_string_lossy().to_string();
+    if let Ok((TaskId(id), slug)) = Task::parse_filename(&name) {
+      let mut ok = false;
+      if let Some(want) = r.id {
+        ok = want == id;
+      }
+      if !ok && let Some(wslug) = &r.slug {
+        ok = &slug == wslug;
+      }
+      if ok {
+        found = Some((entry.path(), id, slug));
+        break;
+      }
+    }
+  }
+  found.ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "task not found"))
+}
+
 /// Start a JSON-RPC server over a Unix domain socket using jsonrpsee.
-/// Supports methods `daemon.status` and `daemon.shutdown`.
+/// Supports methods `daemon.status` and `daemon.shutdown` and task.* (Phase 9).
 pub async fn start(socket_path: &Path) -> io::Result<DaemonHandle> {
   if let Some(parent) = socket_path.parent() {
     fs::create_dir_all(parent)?;
@@ -70,13 +130,122 @@ pub async fn start(socket_path: &Path) -> io::Result<DaemonHandle> {
   let shutdown_tx_for_shutdown = shutdown_tx.clone();
 
   module
-    .register_method("daemon.shutdown", move |_params, _ctx: &PathBuf, _ext| -> RpcResult<serde_json::Value> {
-      info!(event = "daemon_shutdown_requested", "shutdown requested via RPC");
-      // Signal accept loop to exit; existing connections will drain
-      let _ = shutdown_tx_for_shutdown.send(true);
-      Ok(serde_json::json!(true))
-    })
+    .register_method(
+      "daemon.shutdown",
+      move |_params, _ctx: &PathBuf, _ext| -> RpcResult<serde_json::Value> {
+        info!(
+          event = "daemon_shutdown_requested",
+          "shutdown requested via RPC"
+        );
+        // Signal accept loop to exit; existing connections will drain
+        let _ = shutdown_tx_for_shutdown.send(true);
+        Ok(serde_json::json!(true))
+      },
+    )
     .expect("register daemon.shutdown");
+
+  // ---- task.new ----
+  module
+    .register_method(
+      "task.new",
+      |params, _ctx: &PathBuf, _ext| -> RpcResult<serde_json::Value> {
+        let p: TaskNewParams = params.parse()?;
+        let root = PathBuf::from(&p.project_root);
+        fsutil::ensure_layout(&root)
+          .map_err(|e| ErrorObjectOwned::owned(-32000, e.to_string(), None::<()>))?;
+        let tasks_dir = fsutil::tasks_dir(&root);
+        let id = next_task_id(&tasks_dir)
+          .map_err(|e| ErrorObjectOwned::owned(-32000, e.to_string(), None::<()>))?;
+        let slug = p.slug;
+        let title = p.title;
+        let fm = TaskFrontMatter {
+          title: title.clone(),
+          base_branch: p.base_branch,
+          status: Status::Draft,
+          labels: p.labels,
+          created_at: Utc::now(),
+          agent: p.agent,
+          session_id: None,
+        };
+        let task = Task {
+          id: TaskId(id),
+          slug: slug.clone(),
+          front_matter: fm,
+          body: p.body.unwrap_or_default(),
+        };
+        let md = task
+          .to_markdown()
+          .map_err(|e| ErrorObjectOwned::owned(-32000, e.to_string(), None::<()>))?;
+        let file_path = tasks_dir.join(Task::format_filename(task.id, &slug));
+        fs::write(&file_path, md)
+          .map_err(|e| ErrorObjectOwned::owned(-32000, e.to_string(), None::<()>))?;
+        info!(event = "task_new", id, slug = %slug, path = %file_path.display(), "task created");
+        let info = TaskInfo {
+          id,
+          slug,
+          title,
+          status: Status::Draft,
+        };
+        Ok(serde_json::to_value(info).unwrap())
+      },
+    )
+    .expect("register task.new");
+
+  // ---- task.status ----
+  module
+    .register_method(
+      "task.status",
+      |params, _ctx: &PathBuf, _ext| -> RpcResult<serde_json::Value> {
+        let p: TaskListParams = params.parse()?;
+        let root = PathBuf::from(&p.project_root);
+        let tasks_dir = fsutil::tasks_dir(&root);
+        let mut tasks: Vec<TaskInfo> = Vec::new();
+        if tasks_dir.exists() {
+          for entry in fs::read_dir(&tasks_dir)
+            .map_err(|e| ErrorObjectOwned::owned(-32000, e.to_string(), None::<()>))?
+          {
+            let entry =
+              entry.map_err(|e| ErrorObjectOwned::owned(-32000, e.to_string(), None::<()>))?;
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            if let Ok((TaskId(id), slug)) = Task::parse_filename(&name)
+              && let Ok(info) = read_task_info(&entry.path(), id, slug)
+            {
+              tasks.push(info);
+            }
+          }
+        }
+        tasks.sort_by_key(|t| t.id);
+        let resp = TaskListResponse { tasks };
+        Ok(serde_json::to_value(resp).unwrap())
+      },
+    )
+    .expect("register task.status");
+
+  // ---- task.start (stub) ----
+  module
+    .register_method("task.start", |params, _ctx: &PathBuf, _ext| -> RpcResult<serde_json::Value> {
+      let p: TaskStartParams = params.parse()?;
+      let root = PathBuf::from(&p.project_root);
+      let (path, id, slug) = find_task_path_by_ref(&root, &p.task)
+        .map_err(|e| ErrorObjectOwned::owned(-32001, e.to_string(), None::<()>))?;
+      // Validate base branch tip and log base_sha
+      // Need to parse file to get base_branch and update status
+      let s = fs::read_to_string(&path).map_err(|e| ErrorObjectOwned::owned(-32000, e.to_string(), None::<()>))?;
+      let mut task = Task::from_markdown(TaskId(id), slug.clone(), &s)
+        .map_err(|e| ErrorObjectOwned::owned(-32000, e.to_string(), None::<()>))?;
+      let repo = git2::Repository::open(&root).map_err(|e| ErrorObjectOwned::owned(-32002, e.to_string(), None::<()>))?;
+      let base_sha = gitutil::resolve_base_branch_tip(&repo, &task.front_matter.base_branch)
+        .map_err(|e| ErrorObjectOwned::owned(-32003, e.to_string(), None::<()>))?;
+      info!(event = "task_start_validated", id, slug = %slug, base_branch = %task.front_matter.base_branch, base_sha = %base_sha.to_string(), "validated git base");
+      task.transition_to(Status::Running)
+        .map_err(|e| ErrorObjectOwned::owned(-32004, e.to_string(), None::<()>))?;
+      let md = task.to_markdown().map_err(|e| ErrorObjectOwned::owned(-32000, e.to_string(), None::<()>))?;
+      fs::write(&path, md).map_err(|e| ErrorObjectOwned::owned(-32000, e.to_string(), None::<()>))?;
+      let res = TaskStartResult { id, slug, status: Status::Running };
+      Ok(serde_json::to_value(res).unwrap())
+    })
+    .expect("register task.start");
 
   let svc_builder = server::Server::builder().to_service_builder();
 
@@ -114,5 +283,9 @@ pub async fn start(socket_path: &Path) -> io::Result<DaemonHandle> {
     info!(event = "daemon_stopped", socket = %sock.display(), "daemon server stopped");
   });
 
-  Ok(DaemonHandle { task, socket_path: socket_path.to_path_buf(), _server_handle })
+  Ok(DaemonHandle {
+    task,
+    socket_path: socket_path.to_path_buf(),
+    _server_handle,
+  })
 }

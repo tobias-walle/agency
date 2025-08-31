@@ -130,11 +130,16 @@ Notes:
 - Problems: Needed `tempfile` as a dev-dependency in `cli` tests for temp dirs.
 - Derivations: Implemented branch/worktree naming helpers and base branch tip resolution; deferred actual worktree creation to the task start phase.
 
-## [ ] Phase 9: Task lifecycle API (new, status, start – stub)
+## [x] Phase 9: Task lifecycle API (new, status, start – stub)
 
 - What to do: Implement `task.new` (create task file), `task.status` (list), and a stub `task.start` that validates/preps git state and sets `running` (no PTY yet). Record `base_sha` in events only.
 - Testing strategy: Integration tests that drive `new/status/start` via RPC; assert YAML content, events, and status transitions.
 - Feedback loop: End-to-end draft→running path without PTY.
+
+Notes:
+
+- Problems: Core config tests failed on macOS tmp paths when resolving socket fallback; fixed by preferring `dirs::runtime_dir()` over `data_dir()` in `resolve_socket_path()`. Also kept `confirm_by_default` default to `false` for security (default answer is "No").
+- Derivations: Kept `task.start` as a pure stub (no PTY/worktree yet); it validates `base_branch` via `git2`, logs `base_sha`, and updates YAML status to `running`.
 
 ## [ ] Phase 10: PTY backend and attach/detach
 

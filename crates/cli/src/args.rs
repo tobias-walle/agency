@@ -33,7 +33,6 @@ pub enum DaemonSubcommand {
   Run,
 }
 
-
 impl Cli {
   pub fn print_help_and_exit() {
     let mut cmd = Cli::command();

@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use http_body_util::{BodyExt, Full};
-use hyper::{body::Bytes, Method, Request};
+use hyper::{Method, Request, body::Bytes};
 use hyper_util::client::legacy::{Client, Error as LegacyClientError};
 use hyperlocal::UnixClientExt;
 use orchestra_core::rpc::DaemonStatus;
@@ -23,7 +23,11 @@ pub enum Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-async fn rpc_call(sock: &Path, method: &str, params: Option<serde_json::Value>) -> Result<serde_json::Value> {
+async fn rpc_call(
+  sock: &Path,
+  method: &str,
+  params: Option<serde_json::Value>,
+) -> Result<serde_json::Value> {
   let url = hyperlocal::Uri::new(sock, "/");
   let req_body = json!({
     "jsonrpc": "2.0",
@@ -43,7 +47,10 @@ async fn rpc_call(sock: &Path, method: &str, params: Option<serde_json::Value>) 
   let status_code = resp.status();
   let bytes = resp.into_body().collect().await?.to_bytes();
   if !status_code.is_success() {
-    return Err(Error::HttpStatus(status_code.as_u16(), String::from_utf8_lossy(&bytes).into()));
+    return Err(Error::HttpStatus(
+      status_code.as_u16(),
+      String::from_utf8_lossy(&bytes).into(),
+    ));
   }
   let v: serde_json::Value = serde_json::from_slice(&bytes)?;
   if let Some(err) = v.get("error") {

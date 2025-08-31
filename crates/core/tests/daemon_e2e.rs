@@ -3,13 +3,13 @@ use std::sync::OnceLock;
 use std::time::Duration;
 
 use http_body_util::{BodyExt, Full};
-use hyper::{Method, Request};
 use hyper::body::Bytes;
+use hyper::{Method, Request};
 use hyper_util::client::legacy::Client;
 use hyperlocal::UnixClientExt;
 use orchestra_core::{adapters::fs as fsutil, logging, rpc::DaemonStatus};
 use serde::de::DeserializeOwned;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 struct TestEnv {
   // Keep the socket tempdir alive for test duration
@@ -40,12 +40,19 @@ async fn start_test_env() -> TestEnv {
 
   let td = tempfile::tempdir().unwrap();
   let sock = td.path().join("orchestra.sock");
-  let handle = orchestra_core::daemon::start(&sock).await.expect("start daemon");
+  let handle = orchestra_core::daemon::start(&sock)
+    .await
+    .expect("start daemon");
 
   // small delay to ensure server is listening
   tokio::time::sleep(Duration::from_millis(200)).await;
 
-  TestEnv { _td: td, log_path, sock, handle }
+  TestEnv {
+    _td: td,
+    log_path,
+    sock,
+    handle,
+  }
 }
 
 fn build_request(sock: &Path, body: Value) -> Request<Full<Bytes>> {
@@ -75,7 +82,11 @@ struct RpcResp<T> {
   error: Option<RpcError>,
 }
 
-async fn rpc_call<T: DeserializeOwned>(sock: &Path, method: &str, params: Option<Value>) -> RpcResp<T> {
+async fn rpc_call<T: DeserializeOwned>(
+  sock: &Path,
+  method: &str,
+  params: Option<Value>,
+) -> RpcResp<T> {
   let req_body = json!({
     "jsonrpc": "2.0",
     "id": 1,
@@ -107,7 +118,11 @@ async fn daemon_status_roundtrip() {
   if let Ok(log_text) = std::fs::read_to_string(&env.log_path)
     && !log_text.is_empty()
   {
-    assert!(log_text.contains("daemon_status"), "missing daemon_status log entry; logs: {}", log_text);
+    assert!(
+      log_text.contains("daemon_status"),
+      "missing daemon_status log entry; logs: {}",
+      log_text
+    );
   }
 
   // Cleanup
@@ -164,12 +179,15 @@ async fn shutdown_via_rpc_stops_server() {
   tokio::time::sleep(Duration::from_millis(200)).await;
 
   // Subsequent call should fail at HTTP layer or return JSON-RPC error; emulate by trying to connect
-  let req = build_request(&env.sock, json!({
-    "jsonrpc": "2.0",
-    "id": 1,
-    "method": "daemon.status",
-    "params": null
-  }));
+  let req = build_request(
+    &env.sock,
+    json!({
+      "jsonrpc": "2.0",
+      "id": 1,
+      "method": "daemon.status",
+      "params": null
+    }),
+  );
   let client = Client::unix();
   let res = client.request(req).await;
   assert!(res.is_err(), "server should be down");

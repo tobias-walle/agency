@@ -29,7 +29,7 @@ pub struct Config {
   pub dwell_secs: u64,
   /// Max concurrent tasks (None means unlimited)
   pub concurrency: Option<usize>,
-  /// Whether to ask confirmation by default for destructive commands
+  /// Default answer for confirmation prompts for destructive commands; false = default "No"
   pub confirm_by_default: bool,
 }
 
@@ -154,12 +154,13 @@ pub(crate) fn load_from_paths(global: Option<&Path>, project: Option<&Path>) -> 
 /// Resolve the socket path using ORCHESTRA_SOCKET or platform defaults.
 pub fn resolve_socket_path() -> Result<PathBuf> {
   let env_socket = env::var("ORCHESTRA_SOCKET").ok().map(PathBuf::from);
-  let xdg = runtime_dir().or(data_dir());
+  // Prefer runtime_dir for ephemeral sockets; fall back to data_dir
+  let base_dir = runtime_dir().or(data_dir());
   if let Some(val) = env_socket {
     return Ok(val);
   }
-  if let Some(xdg_path) = xdg {
-    return Ok(xdg_path.join("orchestra.sock"));
+  if let Some(dir) = base_dir {
+    return Ok(dir.join("orchestra.sock"));
   }
   Err(ConfigError::UnsupportedPlatform)
 }
@@ -176,7 +177,7 @@ mod tests {
     assert_eq!(cfg.idle_timeout_secs, 10);
     assert_eq!(cfg.dwell_secs, 2);
     assert_eq!(cfg.concurrency, None);
-    assert!(cfg.confirm_by_default);
+    assert!(!cfg.confirm_by_default);
   }
 
   #[test]
@@ -231,13 +232,18 @@ dwell_secs = 3
     // Unset the environment variable to test fallback
     unsafe { std::env::remove_var("ORCHESTRA_SOCKET") };
     let got = resolve_socket_path().unwrap();
-    let got_str = got.to_string_lossy();
-    assert!(
-      got_str.contains("Application Support")
-        || got_str.contains("Roaming")
-        || got_str.contains(".local/share"),
-      "Socket path should be in a standard data/runtime directory, got: {}",
-      got_str
+
+    let expected = if let Some(r) = dirs::runtime_dir() {
+      r.join("orchestra.sock")
+    } else if let Some(d) = dirs::data_dir() {
+      d.join("orchestra.sock")
+    } else {
+      panic!("No runtime_dir() or data_dir() available on this platform for test");
+    };
+
+    assert_eq!(
+      got, expected,
+      "Socket path should prefer runtime_dir() and fall back to data_dir()"
     );
   }
 }

@@ -50,7 +50,10 @@ fn init_project() {
     eprintln!("failed to write config: {e}");
     std::process::exit(1);
   }
-  println!("initialized .orchestra at {}", root.join(".orchestra").display());
+  println!(
+    "initialized .orchestra at {}",
+    root.join(".orchestra").display()
+  );
 }
 
 fn resolve_socket() -> Option<PathBuf> {
@@ -132,14 +135,22 @@ fn start_daemon() {
   // Ensure child and parent agree on socket path
   cmd.env("ORCHESTRA_SOCKET", &sock);
   // Detach stdio
-  cmd.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
+  cmd
+    .stdin(Stdio::null())
+    .stdout(Stdio::null())
+    .stderr(Stdio::null());
 
   match cmd.spawn() {
     Ok(_child) => {
       // Poll status for a short time
-      let rt = tokio::runtime::Builder::new_current_thread().enable_io().enable_time().build().unwrap();
+      let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_io()
+        .enable_time()
+        .build()
+        .unwrap();
       let running = rt.block_on(async {
-        for _ in 0..20u8 { // ~2s
+        for _ in 0..20u8 {
+          // ~2s
           if rpc::client::daemon_status(&sock).await.is_ok() {
             return true;
           }
@@ -163,12 +174,17 @@ fn stop_daemon() {
     return;
   };
 
-  let rt = tokio::runtime::Builder::new_current_thread().enable_io().enable_time().build().unwrap();
+  let rt = tokio::runtime::Builder::new_current_thread()
+    .enable_io()
+    .enable_time()
+    .build()
+    .unwrap();
   let stopped = rt.block_on(async move {
     // Try graceful shutdown via RPC
     let _ = rpc::client::daemon_shutdown(&sock).await;
     // Wait until status fails
-    for _ in 0..20u8 { // ~2s
+    for _ in 0..20u8 {
+      // ~2s
       if rpc::client::daemon_status(&sock).await.is_err() {
         return true;
       }

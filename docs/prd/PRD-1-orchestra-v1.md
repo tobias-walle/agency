@@ -158,7 +158,7 @@ Transitions:
 - `orchestra shell-hook` # prints shell function to `cd` into worktree (zsh/bash/fish/nushell)
 - `orchestra session set <id|slug> <session_id>`
 
-All destructive commands prompt for confirmation by default; `-y` overrides. Defaults configurable.
+All destructive commands prompt for confirmation by default; `-y` overrides. Defaults configurable. The default answer is "No" (`confirm_by_default = false`) for safety; users can opt-in to auto-confirm via config or flags.
 
 ## Idle Detection
 
