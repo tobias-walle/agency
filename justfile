@@ -14,4 +14,4 @@ test *ARGS:
 # Check for compiler or linting error
 check:
   cargo check
-  cargo clippy
+  cargo clippy -- -D warnings

@@ -9,8 +9,20 @@ pub fn run() {
     return;
   }
 
-  // Parse arguments (no subcommands yet). This will also handle --help/--version.
-  let _ = args::Cli::parse();
+  // Parse arguments; this will also handle --help/--version.
+  let cli = args::Cli::parse();
+  match cli.command {
+    Some(args::Commands::Daemon(daemon)) => match daemon.command {
+      args::DaemonSubcommand::Status => {
+        // Placeholder: print a deterministic status line for tests
+        println!("daemon: stopped");
+      }
+    },
+    None => {
+      // No subcommand provided; show help
+      args::Cli::print_help_and_exit();
+    }
+  }
 }
 
 #[cfg(test)]

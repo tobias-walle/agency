@@ -28,11 +28,15 @@ Notes:
 - Problems: Binary discovery in smoke test failed due to `CARGO_BIN_EXE_orchestra` not being set when invoking `cargo test -p orchestra`. Resolved by using `assert_cmd::Command::cargo_bin("orchestra")` which compiles and locates the binary under test.
 - Derivations: Renamed `core` crate to `orchestra-core` to avoid collision with Rust's standard library name.
 
-## [ ] Phase 2: Establish test infrastructure early
+## [x] Phase 2: Establish test infrastructure early
 
 - What to do: Set up workspace-level testing scaffolding. Add a Git repo temp utility for tests, a snapshot testing baseline for CLI, and a temp `.orchestra` folder helper. Introduce fake filesystem/log helpers.
 - Testing strategy: Introduce `tests/common` module with helpers available via `dev-dependencies`. Add one golden snapshot for `daemon status` placeholder and one for `cli --help`. Configure test-only env vars for deterministic output.
 - Feedback loop: `cargo test` runs at workspace and crate levels; snapshots pass.
+
+Notes:
+- Problems: `git2` pulled in `openssl` on macOS and failed to compile. Resolved by installing OpenSSL in the environment. Kept default features.
+- Derivations: Replaced snapshot testing with normal multiline string assertions and filtered help output to stable lines to avoid churn across clap versions. Added a minimal placeholder `daemon status` implementation printing `daemon: stopped` for determinism.
 
 ## [ ] Phase 3: Core domain seed (Tasks, Status, YAML front matter)
 
