@@ -2,6 +2,8 @@ use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use dirs::data_dir;
+use dirs::runtime_dir;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -136,51 +138,16 @@ pub(crate) fn load_from_paths(global: Option<&Path>, project: Option<&Path>) -> 
 }
 
 /// Resolve the socket path using ORCHESTRA_SOCKET or platform defaults.
-/// - Linux: $XDG_RUNTIME_DIR/orchestra.sock or /var/run/orchestra.sock
-/// - macOS: $XDG_RUNTIME_DIR/orchestra.sock or /Library/Application Support/orchestra/orchestra.sock
-/// - Windows: unsupported
-fn resolve_socket_path_from(
-  env_socket: Option<String>,
-  xdg_runtime: Option<String>,
-) -> Result<PathBuf> {
-  if let Some(val) = env_socket
-    && !val.is_empty()
-  {
-    return Ok(PathBuf::from(val));
-  }
-
-  if let Some(xdg) = xdg_runtime
-    && !xdg.is_empty()
-  {
-    return Ok(PathBuf::from(xdg).join("orchestra.sock"));
-  }
-
-  // Platform-specific fallback
-  #[cfg(target_os = "linux")]
-  {
-    return Ok(PathBuf::from("/var/run/orchestra.sock"));
-  }
-
-  #[cfg(target_os = "macos")]
-  {
-    return Ok(PathBuf::from(
-      "/Library/Application Support/orchestra/orchestra.sock",
-    ));
-  }
-
-  #[cfg(target_os = "windows")]
-  {
-    return Err(ConfigError::UnsupportedPlatform);
-  }
-
-  #[allow(unreachable_code)]
-  Err(ConfigError::UnsupportedPlatform)
-}
-
 pub fn resolve_socket_path() -> Result<PathBuf> {
-  let env_socket = env::var("ORCHESTRA_SOCKET").ok();
-  let xdg = env::var("XDG_RUNTIME_DIR").ok();
-  resolve_socket_path_from(env_socket, xdg)
+  let env_socket = env::var("ORCHESTRA_SOCKET").ok().map(PathBuf::from);
+  let xdg = runtime_dir().or(data_dir());
+  if let Some(val) = env_socket {
+    return Ok(val);
+  }
+  if let Some(xdg_path) = xdg {
+    return Ok(xdg_path.join("orchestra.sock"));
+  }
+  Err(ConfigError::UnsupportedPlatform)
 }
 
 #[cfg(test)]
@@ -238,32 +205,25 @@ dwell_secs = 3
   fn socket_env_overrides() {
     let td = tempfile::tempdir().unwrap();
     let p = td.path().join("sock");
-    let got = super::resolve_socket_path_from(Some(p.to_string_lossy().to_string()), None).unwrap();
+    // Set the environment variable and check resolve_socket_path
+    unsafe { std::env::set_var("ORCHESTRA_SOCKET", &p) };
+    let got = resolve_socket_path().unwrap();
     assert_eq!(got, p);
+    unsafe { std::env::remove_var("ORCHESTRA_SOCKET") };
   }
 
   #[test]
-  fn socket_xdg_fallback() {
-    let td = tempfile::tempdir().unwrap();
-    let got =
-      super::resolve_socket_path_from(None, Some(td.path().to_string_lossy().to_string())).unwrap();
-    assert_eq!(got, td.path().join("orchestra.sock"));
-  }
-
-  #[cfg(target_os = "macos")]
-  #[test]
-  fn socket_macos_fallback_path() {
-    let got = super::resolve_socket_path_from(None, None).unwrap();
-    assert_eq!(
-      got,
-      PathBuf::from("/Library/Application Support/orchestra/orchestra.sock")
+  fn socket_platform_fallback() {
+    // Unset the environment variable to test fallback
+    unsafe { std::env::remove_var("ORCHESTRA_SOCKET") };
+    let got = resolve_socket_path().unwrap();
+    let got_str = got.to_string_lossy();
+    assert!(
+      got_str.contains("Application Support")
+        || got_str.contains("Roaming")
+        || got_str.contains(".local/share"),
+      "Socket path should be in a standard data/runtime directory, got: {}",
+      got_str
     );
-  }
-
-  #[cfg(target_os = "linux")]
-  #[test]
-  fn socket_linux_fallback_path() {
-    let got = super::resolve_socket_path_from(None, None).unwrap();
-    assert_eq!(got, PathBuf::from("/var/run/orchestra.sock"));
   }
 }

@@ -23,13 +23,13 @@ pub enum Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-pub async fn daemon_status(sock: &Path) -> Result<DaemonStatus> {
+async fn rpc_call(sock: &Path, method: &str, params: Option<serde_json::Value>) -> Result<serde_json::Value> {
   let url = hyperlocal::Uri::new(sock, "/");
   let req_body = json!({
     "jsonrpc": "2.0",
     "id": 1,
-    "method": "daemon.status",
-    "params": null
+    "method": method,
+    "params": params
   });
   let req = Request::builder()
     .method(Method::POST)
@@ -53,6 +53,16 @@ pub async fn daemon_status(sock: &Path) -> Result<DaemonStatus> {
     .get("result")
     .cloned()
     .ok_or_else(|| Error::Rpc("missing result".to_string()))?;
-  let status: DaemonStatus = serde_json::from_value(result)?;
+  Ok(result)
+}
+
+pub async fn daemon_status(sock: &Path) -> Result<DaemonStatus> {
+  let v = rpc_call(sock, "daemon.status", None).await?;
+  let status: DaemonStatus = serde_json::from_value(v)?;
   Ok(status)
+}
+
+pub async fn daemon_shutdown(sock: &Path) -> Result<()> {
+  let _ = rpc_call(sock, "daemon.shutdown", None).await?;
+  Ok(())
 }

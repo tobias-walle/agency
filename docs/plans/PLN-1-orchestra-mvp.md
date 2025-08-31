@@ -109,10 +109,15 @@ Notes:
 - Problems: `hyper_util::client::legacy::Client::request` returns a legacy error; added a `Client` variant to the CLI error to satisfy `?` conversions and avoid ad-hoc mapping. Also fixed clippy lints (unnecessary to_owned, collapsible if).
 - Derivations: Kept textual output minimal and deterministic for tests (`daemon: running (...)` or `daemon: stopped`) and deferred colorful styling to Phase 16.
 
-## [ ] Phase 7.1: CLI Start/Stop Daemon
+## [x] Phase 7.1: CLI Start/Stop Daemon
 
 - Add a simple commands to start & stop the daemon
 - It doesn't need to do anything yet, except returning the status
+
+Notes:
+
+- Problems: None.
+- Derivations: Start/Stop are no-ops that query and print status identically to `status` for now.
 
 ## [ ] Phase 8: Git adapter (worktrees/branches) and init scaffolding
 

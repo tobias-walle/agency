@@ -23,7 +23,14 @@ pub struct DaemonArgs {
 pub enum DaemonSubcommand {
   /// Show daemon status
   Status,
+  /// Start the daemon
+  Start,
+  /// Stop the daemon
+  Stop,
+  /// Run the daemon (foreground)
+  Run,
 }
+
 
 impl Cli {
   pub fn print_help_and_exit() {

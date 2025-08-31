@@ -150,3 +150,27 @@ async fn handles_multiple_connections() {
 
   env.handle.stop();
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn shutdown_via_rpc_stops_server() {
+  let env = start_test_env().await;
+
+  // Request shutdown
+  let v: RpcResp<serde_json::Value> = rpc_call(&env.sock, "daemon.shutdown", None).await;
+  assert!(v.error.is_none());
+  assert!(v.result.is_some());
+
+  // Wait a moment for shutdown to take effect
+  tokio::time::sleep(Duration::from_millis(200)).await;
+
+  // Subsequent call should fail at HTTP layer or return JSON-RPC error; emulate by trying to connect
+  let req = build_request(&env.sock, json!({
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "daemon.status",
+    "params": null
+  }));
+  let client = Client::unix();
+  let res = client.request(req).await;
+  assert!(res.is_err(), "server should be down");
+}
