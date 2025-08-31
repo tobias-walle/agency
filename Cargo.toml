@@ -1,6 +1,8 @@
-[package]
-name = "orchestra"
-version = "0.1.0"
-edition = "2024"
-
-[dependencies]
+[workspace]
+members = [
+  "crates/core",
+  "crates/cli",
+  "crates/mcp",
+  "apps/orchestra",
+]
+resolver = "2"

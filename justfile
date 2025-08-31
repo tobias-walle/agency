@@ -5,7 +5,7 @@ _list:
 
 # Start the app
 start:
-  cargo run
+  cargo run -p orchestra
 
 # Run the tests
 test ARGS:
