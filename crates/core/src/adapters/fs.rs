@@ -19,6 +19,11 @@ pub fn worktrees_dir(project_root: &Path) -> PathBuf {
   orchestra_dir(project_root).join("worktrees")
 }
 
+/// Resolve the worktree path for a given task id and slug, as `worktrees/{id}-{slug}`
+pub fn worktree_path(project_root: &Path, id: u64, slug: &str) -> PathBuf {
+  worktrees_dir(project_root).join(format!("{}-{}", id, slug))
+}
+
 /// Ensure the `.orchestra` layout exists (directories are created if missing)
 pub fn ensure_layout(project_root: &Path) -> std::io::Result<()> {
   fs::create_dir_all(tasks_dir(project_root))?;
@@ -50,5 +55,13 @@ mod tests {
     assert!(orchestra_dir(root).exists());
     assert!(tasks_dir(root).exists());
     assert!(worktrees_dir(root).exists());
+  }
+
+  #[test]
+  fn worktree_path_is_under_worktrees() {
+    let td = tempfile::tempdir().unwrap();
+    let root = td.path();
+    let p = worktree_path(root, 42, "abc");
+    assert_eq!(p, root.join(".orchestra/worktrees/42-abc"));
   }
 }

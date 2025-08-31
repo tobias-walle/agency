@@ -6,7 +6,6 @@ Date: 2025-08-31
 
 - Default detach sequence: Ctrl-q (C-q). Configurable via config (`pty.detach_keys`) and env `ORCHESTRA_DETACH_KEYS`. No CLI flag required.
 - `pty.attach` may be invoked when the task is not `running`, but the daemon must respond with a clear error describing the required state.
-- Switch the CLI to use `jsonrpsee` client (replace custom HTTP/UDS JSON-RPC client), using a custom Hyper client to support Unix Domain Sockets.
 - PTY shell: spawn plain `sh` (no `-l`) for deterministic output and stable tests.
 
 ## Scope
@@ -16,7 +15,6 @@ Deliver a complete, test-backed PTY attach/detach implementation with a clear li
 - Provide CLI commands to create and start tasks: `orchestra new`, `orchestra start`, `orchestra status`.
 - Enforce lifecycle boundaries: PTY session created on `task.start`; `pty.attach` requires `running`.
 - Stable PTY behavior and bounded buffers; correct resize and single-attachment semantics.
-- Switch CLI transport to `jsonrpsee` with UDS support.
 - Fill the test gaps at core (daemon) and CLI levels.
 - Align docs (ADR/PRD) around defaults and add `pty.read` call (polling) to interfaces.
 
@@ -64,10 +62,9 @@ Deliver a complete, test-backed PTY attach/detach implementation with a clear li
     - Keep raw-mode input, filtering detach bytes locally; poll `pty.read`; on detach, call `pty.detach` and exit with message "detached".
 
 - `src/rpc/client.rs`
-  - Replace manual HTTP/UDS JSON-RPC with `jsonrpsee` HTTP client.
-  - Build a Hyper client with `hyperlocal` connector and inject into `jsonrpsee` `HttpClientBuilder::with_client(...)` to support UDS.
+  - Keep the manual HTTP/UDS JSON-RPC client; ensure robust Unix Domain Socket support (e.g., via `hyperlocal`).
   - Provide typed wrappers for `task.new`, `task.start`, `task.status`, and existing `pty.*`.
-  - Map jsonrpsee errors to CLI errors; preserve server-provided messages for UX clarity.
+  - Map transport/JSON-RPC errors to CLI errors; preserve server-provided messages for UX clarity.
 
 ### docs
 
@@ -110,13 +107,11 @@ Deliver a complete, test-backed PTY attach/detach implementation with a clear li
 - Default detach is Ctrl‑q; configurable via config/env; CLI has no `--detach-keys`.
 - PTY output is deterministic enough for stable tests (no login shell noise).
 - PTY output buffer is bounded to ~1 MiB.
-- CLI uses `jsonrpsee` client with UDS-supported Hyper client.
+- CLI uses a custom HTTP/UDS JSON-RPC client with UDS support.
 - ADR/PRD references match implementation (defaults + `pty.read`).
 
 ## Risks and mitigations
 
-- Jsonrpsee client over UDS: requires custom Hyper client integration.
-  - Mitigation: Use `HttpClientBuilder::with_client(custom_hyper_client)` and construct the request against a dummy base URL; validate with integration tests. Consult docs with the `api-docs-expert` agent.
 - PTY timing flakiness:
   - Mitigation: Poll with small delays and allow short waits in tests; avoid strict exact match of shell prompts; assert substrings like `hi`.
 - Buffer bounding complexity:
@@ -124,11 +119,11 @@ Deliver a complete, test-backed PTY attach/detach implementation with a clear li
 
 ## Tasks (execution checklist)
 
-1. [ ] Config: add `pty.detach_keys` to `Config` (+ merge, defaults, tests).
-2. [ ] Core: worktree path helper; PTY spawn in `task.start` only; enforce `running` on `pty.attach`.
-3. [ ] Core: PTY behavior tweaks (plain `sh`, cwd to worktree, bounded buffer, keep child handle).
-4. [ ] CLI: add `new`, `start`, `status` subcommands; remove `--detach-keys` from `attach`.
-5. [ ] CLI: switch RPC client to `jsonrpsee` with hyperlocal UDS client; port all calls.
+1. [x] Config: add `pty.detach_keys` to `Config` (+ merge, defaults, tests).
+2. [x] Core: worktree path helper; PTY spawn in `task.start` only; enforce `running` on `pty.attach`.
+3. [x] CLI: keep/strengthen manual HTTP/UDS JSON-RPC client with hyperlocal UDS support; add typed wrappers and port all calls.
+4. [x] CLI: add `new`, `start`, `status` subcommands; remove `--detach-keys` from `attach`.
+5. [ ] Core: PTY behavior tweaks (plain `sh`, cwd to worktree, bounded buffer, keep child handle).
 6. [ ] Tests: core PTY integration tests; CLI E2E attach tests; config merge tests for detach keys.
 7. [ ] Docs: update ADR/PRD (defaults, `pty.read`) and add a note in PLN‑1 Phase 10.
 8. [ ] Run `just check` and `just test`; fix any lints/clippy issues.

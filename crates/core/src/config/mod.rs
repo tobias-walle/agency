@@ -19,6 +19,14 @@ pub enum LogLevel {
   Trace,
 }
 
+/// PTY-related configuration
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct PtyConfig {
+  /// Detach sequence as a comma-separated list like "ctrl-q" or "ctrl-p,ctrl-q".
+  /// None means use the built-in default (Ctrl-Q) at use sites.
+  pub detach_keys: Option<String>,
+}
+
 /// Effective configuration after merging defaults, global, and project config
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Config {
@@ -31,6 +39,8 @@ pub struct Config {
   pub concurrency: Option<usize>,
   /// Default answer for confirmation prompts for destructive commands; false = default "No"
   pub confirm_by_default: bool,
+  /// PTY configuration
+  pub pty: PtyConfig,
 }
 
 impl Default for Config {
@@ -41,6 +51,22 @@ impl Default for Config {
       dwell_secs: 2,
       concurrency: None,
       confirm_by_default: false,
+      pty: PtyConfig::default(),
+    }
+  }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+struct PartialPtyConfig {
+  /// Use Option<Option<String>> to distinguish missing vs explicit empty/null in future, even
+  /// though TOML has no null literal. Missing means keep base; Some(v) overrides.
+  pub detach_keys: Option<String>,
+}
+
+impl PartialPtyConfig {
+  fn merge_over(self, base: PtyConfig) -> PtyConfig {
+    PtyConfig {
+      detach_keys: self.detach_keys.or(base.detach_keys),
     }
   }
 }
@@ -52,6 +78,7 @@ struct PartialConfig {
   pub dwell_secs: Option<u64>,
   pub concurrency: Option<Option<usize>>, // Some(None) means explicit null, None means not provided
   pub confirm_by_default: Option<bool>,
+  pub pty: Option<PartialPtyConfig>,
 }
 
 impl PartialConfig {
@@ -62,6 +89,7 @@ impl PartialConfig {
       dwell_secs: self.dwell_secs.unwrap_or(base.dwell_secs),
       concurrency: self.concurrency.unwrap_or(base.concurrency),
       confirm_by_default: self.confirm_by_default.unwrap_or(base.confirm_by_default),
+      pty: self.pty.unwrap_or_default().merge_over(base.pty),
     }
   }
 }
@@ -96,7 +124,12 @@ pub fn write_default_project_config(project_root: &Path) -> std::io::Result<()> 
   }
   if !path.exists() {
     let cfg = Config::default();
-    let s = toml::to_string_pretty(&cfg).unwrap_or_else(|_| String::from(""));
+    let mut s = toml::to_string_pretty(&cfg).unwrap_or_else(|_| String::from(""));
+    // Ensure a [pty] section is present with a commented example for detach_keys.
+    // We avoid setting a value to keep default None semantics.
+    s.push_str(
+      "\n[pty]\n# Detach key sequence for attach. Comma-separated control keys.\n# Leave unset to use the default Ctrl-Q. Examples:\n# detach_keys = \"ctrl-q\"\n# detach_keys = \"ctrl-p,ctrl-q\"\n",
+    );
     std::fs::write(&path, s)?;
   }
   Ok(())
@@ -178,6 +211,7 @@ mod tests {
     assert_eq!(cfg.dwell_secs, 2);
     assert_eq!(cfg.concurrency, None);
     assert!(!cfg.confirm_by_default);
+    assert_eq!(cfg.pty.detach_keys, None);
   }
 
   #[test]
@@ -192,6 +226,8 @@ mod tests {
 log_level = "warn"
 idle_timeout_secs = 5
 confirm_by_default = false
+[pty]
+detach_keys = "ctrl-p"
 "#,
     )
     .unwrap();
@@ -201,6 +237,8 @@ confirm_by_default = false
       r#"
 log_level = "debug"
 dwell_secs = 3
+[pty]
+detach_keys = "ctrl-q"
 "#,
     )
     .unwrap();
@@ -214,6 +252,8 @@ dwell_secs = 3
     assert_eq!(cfg.dwell_secs, 3);
     // global changed default
     assert!(!cfg.confirm_by_default);
+    // pty precedence
+    assert_eq!(cfg.pty.detach_keys.as_deref(), Some("ctrl-q"));
   }
 
   #[test]

@@ -4,7 +4,11 @@ use http_body_util::{BodyExt, Full};
 use hyper::{Method, Request, body::Bytes};
 use hyper_util::client::legacy::{Client, Error as LegacyClientError};
 use hyperlocal::UnixClientExt;
-use orchestra_core::rpc::{DaemonStatus, PtyAttachParams, PtyAttachResult, PtyReadParams, PtyReadResult, PtyInputParams, PtyResizeParams, PtyDetachParams, TaskRef};
+use orchestra_core::rpc::{
+  DaemonStatus,
+  PtyAttachParams, PtyAttachResult, PtyReadParams, PtyReadResult, PtyInputParams, PtyResizeParams, PtyDetachParams,
+  TaskRef, TaskNewParams, TaskInfo, TaskListParams, TaskListResponse, TaskStartParams, TaskStartResult,
+};
 use serde_json::json;
 
 #[derive(Debug, thiserror::Error)]
@@ -15,8 +19,8 @@ pub enum Error {
   Client(#[from] LegacyClientError),
   #[error("json: {0}")]
   Json(#[from] serde_json::Error),
-  #[error("rpc: {0}")]
-  Rpc(String),
+  #[error("rpc {code}: {message}")]
+  Rpc { code: i32, message: String, data: Option<serde_json::Value> },
   #[error("http status {0}: {1}")]
   HttpStatus(u16, String),
 }
@@ -54,12 +58,18 @@ async fn rpc_call(
   }
   let v: serde_json::Value = serde_json::from_slice(&bytes)?;
   if let Some(err) = v.get("error") {
-    return Err(Error::Rpc(err.to_string()));
+    let code = err.get("code").and_then(|c| c.as_i64()).unwrap_or(-32000) as i32;
+    let message = match err.get("message").and_then(|m| m.as_str()) {
+      Some(m) => m.to_string(),
+      None => err.to_string(),
+    };
+    let data = err.get("data").cloned();
+    return Err(Error::Rpc { code, message, data });
   }
   let result = v
     .get("result")
     .cloned()
-    .ok_or_else(|| Error::Rpc("missing result".to_string()))?;
+    .ok_or_else(|| Error::Rpc { code: -32000, message: "missing result".to_string(), data: None })?;
   Ok(result)
 }
 
@@ -73,6 +83,30 @@ pub async fn daemon_shutdown(sock: &Path) -> Result<()> {
   let _ = rpc_call(sock, "daemon.shutdown", None).await?;
   Ok(())
 }
+
+// ---- Task wrappers ----
+
+pub async fn task_new(sock: &Path, params: TaskNewParams) -> Result<TaskInfo> {
+  let v = rpc_call(sock, "task.new", Some(serde_json::to_value(params)?)).await?;
+  let info: TaskInfo = serde_json::from_value(v)?;
+  Ok(info)
+}
+
+pub async fn task_status(sock: &Path, project_root: &Path) -> Result<TaskListResponse> {
+  let params = TaskListParams { project_root: project_root.display().to_string() };
+  let v = rpc_call(sock, "task.status", Some(serde_json::to_value(params)?)).await?;
+  let resp: TaskListResponse = serde_json::from_value(v)?;
+  Ok(resp)
+}
+
+pub async fn task_start(sock: &Path, project_root: &Path, task: TaskRef) -> Result<TaskStartResult> {
+  let params = TaskStartParams { project_root: project_root.display().to_string(), task };
+  let v = rpc_call(sock, "task.start", Some(serde_json::to_value(params)?)).await?;
+  let res: TaskStartResult = serde_json::from_value(v)?;
+  Ok(res)
+}
+
+// ---- PTY wrappers ----
 
 pub async fn pty_attach(sock: &Path, project_root: &Path, task: TaskRef, rows: u16, cols: u16) -> Result<PtyAttachResult> {
   let params = serde_json::to_value(PtyAttachParams {

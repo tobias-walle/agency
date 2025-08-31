@@ -60,6 +60,7 @@ If you add a new dependency, resolve its Context7 ID and append it [here](./AGEN
 - Indent code always with 2 spaces
 - Then committing, follow the [conventional commits](https://www.conventionalcommits.org) format
 - Only add dependencies in their latest version with `cargo add [pkg]`. Never modify the Cargo.toml directly.
-- Make heavy use of the Context7 MCP then working with libraries
+- Use the `api-docs-expert` subagent then working with libraries
   - Lookup new APIs before you use them
   - Check correct API use then encountering an error
+- Never use single letter variable names if they span more than 3 lines

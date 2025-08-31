@@ -242,7 +242,11 @@ pub async fn start(socket_path: &Path) -> io::Result<DaemonHandle> {
         .map_err(|e| ErrorObjectOwned::owned(-32004, e.to_string(), None::<()>))?;
       let md = task.to_markdown().map_err(|e| ErrorObjectOwned::owned(-32000, e.to_string(), None::<()>))?;
       fs::write(&path, md).map_err(|e| ErrorObjectOwned::owned(-32000, e.to_string(), None::<()>))?;
-      // Ensure PTY session exists for this task
+      // Ensure worktree directory exists and spawn PTY session for this task
+      let wt = crate::adapters::fs::worktree_path(&root, id, &slug);
+      if let Err(e) = fs::create_dir_all(&wt) {
+        return Err(ErrorObjectOwned::owned(-32000, e.to_string(), None::<()>));
+      }
       {
         let _ = crate::adapters::pty::ensure_spawn(&root, id);
       }
@@ -256,13 +260,22 @@ pub async fn start(socket_path: &Path) -> io::Result<DaemonHandle> {
     .register_method("pty.attach", |params, _ctx: &PathBuf, _ext| -> RpcResult<serde_json::Value> {
       let p: PtyAttachParams = params.parse()?;
       let root = PathBuf::from(&p.project_root);
-      let (_path, id, _slug) = find_task_path_by_ref(&root, &p.task)
+      let (path, id, _slug) = find_task_path_by_ref(&root, &p.task)
         .map_err(|e| ErrorObjectOwned::owned(-32001, e.to_string(), None::<()>))?;
-      // Ensure session exists and attach
-      let attach_id = {
-        let _ = crate::adapters::pty::ensure_spawn(&root, id);
-        crate::adapters::pty::attach(id)
-      }.map_err(|e| ErrorObjectOwned::owned(-32010, e.to_string(), None::<()>))?;
+      // Enforce running state; do not spawn here
+      let s = fs::read_to_string(&path).map_err(|e| ErrorObjectOwned::owned(-32000, e.to_string(), None::<()>))?;
+      let task = Task::from_markdown(TaskId(id), "_".into(), &s)
+        .map_err(|e| ErrorObjectOwned::owned(-32000, e.to_string(), None::<()>))?;
+      if task.front_matter.status != Status::Running {
+        return Err(ErrorObjectOwned::owned(
+          -32010,
+          format!("cannot attach: task is not running (status: {:?})", task.front_matter.status),
+          None::<()>,
+        ));
+      }
+      // Attach to existing session
+      let attach_id = crate::adapters::pty::attach(id)
+        .map_err(|e| ErrorObjectOwned::owned(-32010, e.to_string(), None::<()>))?;
       // Apply initial size
       let _ = crate::adapters::pty::resize(&attach_id, p.rows, p.cols);
       let res = PtyAttachResult { attachment_id: attach_id };

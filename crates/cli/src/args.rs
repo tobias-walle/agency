@@ -1,4 +1,4 @@
-use clap::{Args as ClapArgs, CommandFactory, Parser, Subcommand};
+use clap::{Args as ClapArgs, CommandFactory, Parser, Subcommand, ValueEnum};
 
 #[derive(Debug, Parser)]
 #[command(author, version, about = "Orchestra CLI", long_about = None, bin_name = "orchestra")]
@@ -13,17 +13,54 @@ pub enum Commands {
   Daemon(DaemonArgs),
   /// Create project scaffolding and config
   Init,
+  /// Create a new task
+  New(NewArgs),
+  /// Start a task
+  Start(StartArgs),
+  /// Show task status list
+  Status,
   /// Attach to a task's PTY session
   Attach(AttachArgs),
+}
+
+#[derive(Debug, ClapArgs)]
+pub struct NewArgs {
+  /// Task slug (kebab-case)
+  pub slug: String,
+  /// Task title
+  #[arg(long)]
+  pub title: String,
+  /// Base branch to branch from
+  #[arg(long, default_value = "main")]
+  pub base_branch: String,
+  /// Optional label (repeatable)
+  #[arg(long = "label")]
+  pub labels: Vec<String>,
+  /// Agent to use (opencode|claude-code|fake)
+  #[arg(long, value_enum, default_value = "fake")]
+  pub agent: AgentArg,
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+pub enum AgentArg {
+  #[value(name = "opencode")]
+  Opencode,
+  #[value(name = "claude-code")]
+  ClaudeCode,
+  #[value(name = "fake")]
+  Fake,
+}
+
+#[derive(Debug, ClapArgs)]
+pub struct StartArgs {
+  /// Task reference: numeric id or slug
+  pub task: String,
 }
 
 #[derive(Debug, ClapArgs)]
 pub struct AttachArgs {
   /// Task reference: numeric id or slug
   pub task: String,
-  /// Custom detach keys (e.g., "ctrl-p,ctrl-q" or "ctrl-q").
-  #[arg(long = "detach-keys")]
-  pub detach_keys: Option<String>,
 }
 
 #[derive(Debug, ClapArgs)]

@@ -32,6 +32,15 @@ pub fn run() {
     Some(args::Commands::Init) => {
       init_project();
     }
+    Some(args::Commands::New(a)) => {
+      new_task(a);
+    }
+    Some(args::Commands::Start(a)) => {
+      start_task(a);
+    }
+    Some(args::Commands::Status) => {
+      list_status();
+    }
     Some(args::Commands::Attach(a)) => {
       attach_interactive(a);
     }
@@ -70,6 +79,93 @@ fn parse_detach_keys(s: &str) -> Vec<u8> {
   seq
 }
 
+fn agent_arg_to_core(a: args::AgentArg) -> orchestra_core::domain::task::Agent {
+  match a {
+    args::AgentArg::Opencode => orchestra_core::domain::task::Agent::Opencode,
+    args::AgentArg::ClaudeCode => orchestra_core::domain::task::Agent::ClaudeCode,
+    args::AgentArg::Fake => orchestra_core::domain::task::Agent::Fake,
+  }
+}
+
+fn new_task(a: args::NewArgs) {
+  let Some(sock) = resolve_socket() else {
+    eprintln!("daemon not running");
+    std::process::exit(1);
+  };
+  let root = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+  let params = orchestra_core::rpc::TaskNewParams {
+    project_root: root.display().to_string(),
+    slug: a.slug,
+    title: a.title,
+    base_branch: a.base_branch,
+    labels: a.labels,
+    agent: agent_arg_to_core(a.agent),
+    body: None,
+  };
+  let rt = tokio::runtime::Builder::new_current_thread().enable_io().build().unwrap();
+  let res = rt.block_on(async { rpc::client::task_new(&sock, params).await });
+  match res {
+    Ok(info) => {
+      println!("{} {} {}", info.id, info.slug, info.title);
+    }
+    Err(e) => {
+      eprintln!("new failed: {e}");
+      std::process::exit(1);
+    }
+  }
+}
+
+fn start_task(a: args::StartArgs) {
+  let Some(sock) = resolve_socket() else {
+    eprintln!("daemon not running");
+    std::process::exit(1);
+  };
+  let root = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+  let tref = parse_task_ref(&a.task);
+  let rt = tokio::runtime::Builder::new_current_thread().enable_io().build().unwrap();
+  let res = rt.block_on(async { rpc::client::task_start(&sock, &root, tref).await });
+  match res {
+    Ok(r) => {
+      println!("{} {} {:?}", r.id, r.slug, r.status);
+    }
+    Err(e) => {
+      eprintln!("start failed: {e}");
+      std::process::exit(1);
+    }
+  }
+}
+
+fn list_status() {
+  let Some(sock) = resolve_socket() else {
+    eprintln!("daemon not running");
+    std::process::exit(1);
+  };
+  let root = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+  let rt = tokio::runtime::Builder::new_current_thread().enable_io().build().unwrap();
+  let res = rt.block_on(async { rpc::client::task_status(&sock, &root).await });
+  match res {
+    Ok(list) => {
+      println!("ID   SLUG                 STATUS     TITLE");
+      for t in list.tasks {
+        let status = match t.status {
+          orchestra_core::domain::task::Status::Draft => "draft",
+          orchestra_core::domain::task::Status::Running => "running",
+          orchestra_core::domain::task::Status::Idle => "idle",
+          orchestra_core::domain::task::Status::Completed => "completed",
+          orchestra_core::domain::task::Status::Reviewed => "reviewed",
+          orchestra_core::domain::task::Status::Failed => "failed",
+          orchestra_core::domain::task::Status::Merged => "merged",
+        };
+        println!("{:<4} {:<20} {:<10} {}", t.id, t.slug, status, t.title);
+      }
+    }
+    Err(e) => {
+      eprintln!("status failed: {e}");
+      std::process::exit(1);
+    }
+  }
+}
+
 fn attach_interactive(args: args::AttachArgs) {
   use crossterm::terminal::{disable_raw_mode, enable_raw_mode, size};
   use std::io::{Read, Write};
@@ -83,7 +179,9 @@ fn attach_interactive(args: args::AttachArgs) {
 
   let root = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
   let tref = parse_task_ref(&args.task);
-  let detach_cfg = std::env::var("ORCHESTRA_DETACH_KEYS").ok().or(args.detach_keys);
+  // Determine detach keys: env overrides config; default to ctrl-q
+  let cfg = orchestra_core::config::load(Some(&root)).unwrap_or_default();
+  let detach_cfg = std::env::var("ORCHESTRA_DETACH_KEYS").ok().or_else(|| cfg.pty.detach_keys.clone());
   let detach_seq = detach_cfg
     .as_deref()
     .map(parse_detach_keys)
@@ -104,7 +202,8 @@ fn attach_interactive(args: args::AttachArgs) {
     }
   };
 
-  println!("Attached. Detach: {} (configurable)", detach_cfg.clone().unwrap_or_else(|| "ctrl-q".to_string()));
+  let shown = detach_cfg.clone().unwrap_or_else(|| "ctrl-q".to_string());
+  println!("Attached. Detach: {} (configurable via config/env)", shown);
 
   enable_raw_mode().ok();
 
