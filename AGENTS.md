@@ -10,7 +10,7 @@ The Orchestra tool orchestrates parallel-running AI CLI agents in isolated Git w
 
 - `./docs/prd/PRD-[id]-[slug].md` - Store for PRD (Product Requirement Documents). Each PRD has an ID and a slug. Then asked to create a PRD, increment the id.
 - `./docs/adr/ADR-[id]-[slug].md` - Store the ADR (Architecture Decision Records). Also increment the ids here.
-- `./docs/plans/PLAN-[id]-[slug].md` - High level plans are stored here. Each plan has one or more phases. Each phase is self contained and should not take more than half a day to build by a skilled engineer.
+- `./docs/plans/PLN-[id]-[slug].md` - High level plans are stored here. Each plan has one or more phases. Each phase is self contained and should not take more than half a day to build by a skilled engineer.
 - `./justfile` - Project scripts
 
 ## Justfile
