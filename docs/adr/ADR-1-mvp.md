@@ -20,7 +20,7 @@ Related PRD: [PRD-1-orchestra-v1.md](../prd/PRD-1-orchestra-v1.md)
 3. CLI Styling: Use `yansi` for colors and `comfy-table` for tabular output.
 4. Defaults: Keep PRD defaults for idle detection (10s idle threshold, 2s dwell) and other timeouts.
 5. Merge Policy: Strictly squash merges by default with optional `--into` to override target branch.
-6. PTY detach UX: Default detach sequence Ctrl-q; configurable via CLI `--detach-keys` and config `pty.detach_keys`/`ORCHESTRA_DETACH_KEYS`. Do not override Ctrl-C by default; print a detach hint on attach.
+6. PTY detach UX: Default detach sequence Ctrl-q; configurable via config `pty.detach_keys` and env `ORCHESTRA_DETACH_KEYS` (no CLI flag). Do not override Ctrl-C by default; print a detach hint on attach.
 
 ## Architecture Overview
 
@@ -180,7 +180,7 @@ apps/orchestra/
 - JSON-RPC 2.0 over HTTP/UDS (hyperlocal). Example method groups:
   - `daemon.*`: `status`.
   - `task.*`: `new`, `edit`, `start`, `stop`, `idle`, `complete`, `fail`, `reviewed`, `merge`, `gc`, `status`, `path`, `session.set`.
-  - `pty.*`: `attach` (server-sent stream), `input`, `resize`.
+  - `pty.*`: `attach` (server-sent stream), `read` (polling MVP), `input`, `resize`.
 - MCP: methods mirror task/pty operations, acting as a thin bridge to the daemon.
 
 ## Configuration & Defaults

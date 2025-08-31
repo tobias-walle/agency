@@ -53,9 +53,15 @@ pub fn run() {
 
 fn parse_task_ref(s: &str) -> orchestra_core::rpc::TaskRef {
   if let Ok(id) = s.parse::<u64>() {
-    orchestra_core::rpc::TaskRef { id: Some(id), slug: None }
+    orchestra_core::rpc::TaskRef {
+      id: Some(id),
+      slug: None,
+    }
   } else {
-    orchestra_core::rpc::TaskRef { id: None, slug: Some(s.to_string()) }
+    orchestra_core::rpc::TaskRef {
+      id: None,
+      slug: Some(s.to_string()),
+    }
   }
 }
 
@@ -77,6 +83,17 @@ fn parse_detach_keys(s: &str) -> Vec<u8> {
     seq.push((b'Q') & 0x1f);
   }
   seq
+}
+
+fn render_rpc_failure(action: &str, sock: &std::path::Path, err: &rpc::client::Error) -> String {
+  match err {
+    rpc::client::Error::Client(_) | rpc::client::Error::Http(_) => format!(
+      "{} failed: daemon not reachable at {}. Start it with `orchestra daemon start` or set ORCHESTRA_SOCKET to a valid path.",
+      action,
+      sock.display()
+    ),
+    _ => format!("{} failed: {}", action, err),
+  }
 }
 
 fn agent_arg_to_core(a: args::AgentArg) -> orchestra_core::domain::task::Agent {
@@ -102,14 +119,17 @@ fn new_task(a: args::NewArgs) {
     agent: agent_arg_to_core(a.agent),
     body: None,
   };
-  let rt = tokio::runtime::Builder::new_current_thread().enable_io().build().unwrap();
+  let rt = tokio::runtime::Builder::new_current_thread()
+    .enable_io()
+    .build()
+    .unwrap();
   let res = rt.block_on(async { rpc::client::task_new(&sock, params).await });
   match res {
     Ok(info) => {
       println!("{} {} {}", info.id, info.slug, info.title);
     }
     Err(e) => {
-      eprintln!("new failed: {e}");
+      eprintln!("{}", render_rpc_failure("new", &sock, &e));
       std::process::exit(1);
     }
   }
@@ -122,14 +142,17 @@ fn start_task(a: args::StartArgs) {
   };
   let root = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
   let tref = parse_task_ref(&a.task);
-  let rt = tokio::runtime::Builder::new_current_thread().enable_io().build().unwrap();
+  let rt = tokio::runtime::Builder::new_current_thread()
+    .enable_io()
+    .build()
+    .unwrap();
   let res = rt.block_on(async { rpc::client::task_start(&sock, &root, tref).await });
   match res {
     Ok(r) => {
       println!("{} {} {:?}", r.id, r.slug, r.status);
     }
     Err(e) => {
-      eprintln!("start failed: {e}");
+      eprintln!("{}", render_rpc_failure("start", &sock, &e));
       std::process::exit(1);
     }
   }
@@ -141,7 +164,10 @@ fn list_status() {
     std::process::exit(1);
   };
   let root = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
-  let rt = tokio::runtime::Builder::new_current_thread().enable_io().build().unwrap();
+  let rt = tokio::runtime::Builder::new_current_thread()
+    .enable_io()
+    .build()
+    .unwrap();
   let res = rt.block_on(async { rpc::client::task_status(&sock, &root).await });
   match res {
     Ok(list) => {
@@ -160,7 +186,7 @@ fn list_status() {
       }
     }
     Err(e) => {
-      eprintln!("status failed: {e}");
+      eprintln!("{}", render_rpc_failure("status", &sock, &e));
       std::process::exit(1);
     }
   }
@@ -181,7 +207,9 @@ fn attach_interactive(args: args::AttachArgs) {
   let tref = parse_task_ref(&args.task);
   // Determine detach keys: env overrides config; default to ctrl-q
   let cfg = orchestra_core::config::load(Some(&root)).unwrap_or_default();
-  let detach_cfg = std::env::var("ORCHESTRA_DETACH_KEYS").ok().or_else(|| cfg.pty.detach_keys.clone());
+  let detach_cfg = std::env::var("ORCHESTRA_DETACH_KEYS")
+    .ok()
+    .or_else(|| cfg.pty.detach_keys.clone());
   let detach_seq = detach_cfg
     .as_deref()
     .map(parse_detach_keys)
@@ -189,15 +217,19 @@ fn attach_interactive(args: args::AttachArgs) {
 
   // initial size
   let (cols, rows) = size().unwrap_or((80, 24));
-  let rt = tokio::runtime::Builder::new_multi_thread().enable_io().enable_time().worker_threads(2).build().unwrap();
+  let rt = tokio::runtime::Builder::new_multi_thread()
+    .enable_io()
+    .enable_time()
+    .worker_threads(2)
+    .build()
+    .unwrap();
 
-  let attach_res = rt.block_on(async {
-    rpc::client::pty_attach(&sock, &root, tref, rows, cols).await
-  });
+  let attach_res =
+    rt.block_on(async { rpc::client::pty_attach(&sock, &root, tref, rows, cols).await });
   let attachment_id = match attach_res {
     Ok(r) => r.attachment_id,
     Err(e) => {
-      eprintln!("attach failed: {e}");
+      eprintln!("{}", render_rpc_failure("attach", &sock, &e));
       std::process::exit(1);
     }
   };
@@ -207,7 +239,10 @@ fn attach_interactive(args: args::AttachArgs) {
 
   enable_raw_mode().ok();
 
-  enum Msg { Data(Vec<u8>), Detach }
+  enum Msg {
+    Data(Vec<u8>),
+    Detach,
+  }
   let (tx, rx) = mpsc::channel::<Msg>();
   // stdin reader thread
   let tx_in = tx.clone();
@@ -221,11 +256,12 @@ fn attach_interactive(args: args::AttachArgs) {
         Ok(0) => break,
         Ok(n) => {
           let mut out: Vec<u8> = Vec::with_capacity(n);
+          let mut pending_detach = false;
           for &b in &buf[..n] {
             if det_idx < detach_seq_clone.len() && b == detach_seq_clone[det_idx] {
               det_idx += 1;
               if det_idx == detach_seq_clone.len() {
-                let _ = tx_in.send(Msg::Detach);
+                pending_detach = true;
                 det_idx = 0;
               }
               // don't forward matched bytes yet
@@ -241,6 +277,9 @@ fn attach_interactive(args: args::AttachArgs) {
           }
           if !out.is_empty() {
             let _ = tx_in.send(Msg::Data(out));
+          }
+          if pending_detach {
+            let _ = tx_in.send(Msg::Detach);
           }
         }
         Err(_) => break,
@@ -260,14 +299,21 @@ fn attach_interactive(args: args::AttachArgs) {
             let _ = stdout.write_all(r.data.as_bytes());
             let _ = stdout.flush();
           }
-          if r.eof { break; }
+          if r.eof {
+            break;
+          }
         }
         Err(_) => break,
       }
       // handle input
       match rx.recv_timeout(std::time::Duration::from_millis(20)) {
-        Ok(Msg::Data(d)) => { let _ = rpc::client::pty_input(&sock, &attachment_id, &d).await; }
-        Ok(Msg::Detach) => { detached = true; break; }
+        Ok(Msg::Data(d)) => {
+          let _ = rpc::client::pty_input(&sock, &attachment_id, &d).await;
+        }
+        Ok(Msg::Detach) => {
+          detached = true;
+          break;
+        }
         Err(mpsc::RecvTimeoutError::Timeout) => {}
         Err(_) => break,
       }

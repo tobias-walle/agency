@@ -9,18 +9,27 @@ use std::thread;
 use once_cell::sync::Lazy;
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use uuid::Uuid;
+use anyhow::Context;
+
+const MAX_BUFFER_BYTES: usize = 1024 * 1024; // ~1 MiB cap
 
 pub struct PtySession {
   pub id: u64,
   master: Mutex<Box<dyn portable_pty::MasterPty + Send>>, // serialized access
   writer: Mutex<Option<Box<dyn Write + Send>>>,
-  buffer: Mutex<Vec<u8>>, // accumulated output
+  buffer: Mutex<Vec<u8>>, // accumulated output (bounded)
   eof: AtomicBool,
   active_attach: Mutex<Option<String>>, // single attachment id
+  #[allow(dead_code)]
+  child: Mutex<Option<Box<dyn portable_pty::Child + Send + Sync>>>, // retain child handle
 }
 
 impl PtySession {
-  fn new(id: u64, master: Box<dyn portable_pty::MasterPty + Send>) -> Self {
+  fn new(
+    id: u64,
+    master: Box<dyn portable_pty::MasterPty + Send>,
+    child: Box<dyn portable_pty::Child + Send + Sync>,
+  ) -> Self {
     Self {
       id,
       master: Mutex::new(master),
@@ -28,6 +37,7 @@ impl PtySession {
       buffer: Mutex::new(Vec::new()),
       eof: AtomicBool::new(false),
       active_attach: Mutex::new(None),
+      child: Mutex::new(Some(child)),
     }
   }
 }
@@ -41,26 +51,31 @@ struct Registry {
 static REGISTRY: Lazy<Mutex<Registry>> = Lazy::new(|| Mutex::new(Registry::default()));
 
 /// Ensure a PTY session exists for the given task id; if not, spawn a default shell.
-pub fn ensure_spawn(_project_root: &Path, task_id: u64) -> anyhow::Result<()> {
+pub fn ensure_spawn(_project_root: &Path, task_id: u64, worktree_path: &Path) -> anyhow::Result<()> {
   let mut reg = REGISTRY.lock().unwrap();
   if reg.sessions.contains_key(&task_id) {
     return Ok(());
   }
 
   let pty_system = native_pty_system();
-  let pair = pty_system.openpty(PtySize {
-    rows: 24,
-    cols: 80,
-    pixel_width: 0,
-    pixel_height: 0,
-  })?;
+  let pair = pty_system
+    .openpty(PtySize {
+      rows: 24,
+      cols: 80,
+      pixel_width: 0,
+      pixel_height: 0,
+    })
+    .with_context(|| format!("openpty failed for task {}", task_id))?;
 
-  // Spawn a shell into the pty (portable default: sh)
+  // Spawn a plain POSIX sh (no -l) into the pty with cwd set to worktree
   let mut cmd = CommandBuilder::new("sh");
-  cmd.arg("-l");
-  let _child = pair.slave.spawn_command(cmd)?;
+  cmd.cwd(worktree_path.as_os_str());
+  let child = pair
+    .slave
+    .spawn_command(cmd)
+    .with_context(|| format!("spawn 'sh' in {}", worktree_path.display()))?;
 
-  let session = Arc::new(PtySession::new(task_id, pair.master));
+  let session = Arc::new(PtySession::new(task_id, pair.master, child));
 
   // Start reader thread that continuously reads from the master and appends to buffer
   let sess_for_thread = Arc::clone(&session);
@@ -80,6 +95,11 @@ pub fn ensure_spawn(_project_root: &Path, task_id: u64) -> anyhow::Result<()> {
           Ok(n) => {
             let mut b = sess_for_thread.buffer.lock().unwrap();
             b.extend_from_slice(&tmp[..n]);
+            // Enforce bounded buffer (~1 MiB); drop oldest data first
+            if b.len() > MAX_BUFFER_BYTES {
+              let excess = b.len() - MAX_BUFFER_BYTES;
+              b.drain(0..excess);
+            }
           }
           Err(_) => {
             sess_for_thread.eof.store(true, Ordering::SeqCst);

@@ -123,10 +123,10 @@ Deliver a complete, test-backed PTY attach/detach implementation with a clear li
 2. [x] Core: worktree path helper; PTY spawn in `task.start` only; enforce `running` on `pty.attach`.
 3. [x] CLI: keep/strengthen manual HTTP/UDS JSON-RPC client with hyperlocal UDS support; add typed wrappers and port all calls.
 4. [x] CLI: add `new`, `start`, `status` subcommands; remove `--detach-keys` from `attach`.
-5. [ ] Core: PTY behavior tweaks (plain `sh`, cwd to worktree, bounded buffer, keep child handle).
-6. [ ] Tests: core PTY integration tests; CLI E2E attach tests; config merge tests for detach keys.
-7. [ ] Docs: update ADR/PRD (defaults, `pty.read`) and add a note in PLN‑1 Phase 10.
-8. [ ] Run `just check` and `just test`; fix any lints/clippy issues.
+5. [x] Core: PTY behavior tweaks (plain `sh`, cwd to worktree, bounded buffer, keep child handle).
+6. [x] Tests: core PTY integration tests; CLI E2E attach tests; config merge tests for detach keys.
+7. [x] Docs: update ADR/PRD (defaults, `pty.read`) and add a note in PLN‑1 Phase 10.
+8. [x] Run `just check` and `just test`; fix any lints/clippy issues.
 
 ## Out of scope (follow-ups)
 

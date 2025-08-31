@@ -248,7 +248,7 @@ pub async fn start(socket_path: &Path) -> io::Result<DaemonHandle> {
         return Err(ErrorObjectOwned::owned(-32000, e.to_string(), None::<()>));
       }
       {
-        let _ = crate::adapters::pty::ensure_spawn(&root, id);
+        let _ = crate::adapters::pty::ensure_spawn(&root, id, &wt);
       }
       let res = TaskStartResult { id, slug, status: Status::Running };
       Ok(serde_json::to_value(res).unwrap())

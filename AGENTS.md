@@ -20,7 +20,7 @@ All common scripts should be kept in the `./justfile` for easy access. Update th
 Available recipes:
 
 - `just check` # Check for compiler or linting error
-- `just start` # Start the app
+- `just orchestra *ARGS` # Start the app with the given args
 - `just test *ARGS` # Run the tests (alias to cargo test)
 
 ## Context7 Library IDs
@@ -58,8 +58,10 @@ If you add a new dependency, resolve its Context7 ID and append it [here](./AGEN
 ## Rules
 
 - Indent code always with 2 spaces
-- Then committing, follow the [conventional commits](https://www.conventionalcommits.org) format
-- Only add dependencies in their latest version with `cargo add [pkg]`. Never modify the Cargo.toml directly.
+- Then committing, follow the **conventional commits** format
+- Only add dependencies in their version with `cargo add [pkg]` (Exception the dependency already exists in the repo).
+  Never modify the Cargo.toml directly.
+- Make use of subagents via the `task` tool to keep the context concise
 - Use the `api-docs-expert` subagent then working with libraries
   - Lookup new APIs before you use them
   - Check correct API use then encountering an error
