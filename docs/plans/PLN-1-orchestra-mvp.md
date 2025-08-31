@@ -2,7 +2,6 @@
 
 This plan breaks the MVP into small, self-contained phases that compile and run after each step, emphasizing fast feedback and early automated testing.
 
-
 ## Workflow
 
 For each phase do the following
@@ -25,6 +24,7 @@ For each phase do the following
 - Feedback loop: `just start` prints help banner; `just check` passes.
 
 Notes:
+
 - Problems: Binary discovery in smoke test failed due to `CARGO_BIN_EXE_orchestra` not being set when invoking `cargo test -p orchestra`. Resolved by using `assert_cmd::Command::cargo_bin("orchestra")` which compiles and locates the binary under test.
 - Derivations: Renamed `core` crate to `orchestra-core` to avoid collision with Rust's standard library name.
 
@@ -35,6 +35,7 @@ Notes:
 - Feedback loop: `cargo test` runs at workspace and crate levels; snapshots pass.
 
 Notes:
+
 - Problems: `git2` pulled in `openssl` on macOS and failed to compile. Resolved by installing OpenSSL in the environment. Kept default features.
 - Derivations: Replaced snapshot testing with normal multiline string assertions and filtered help output to stable lines to avoid churn across clap versions. Added a minimal placeholder `daemon status` implementation printing `daemon: stopped` for determinism.
 
@@ -45,6 +46,7 @@ Notes:
 - Feedback loop: `cargo test -p core` green.
 
 Notes:
+
 - Problems: Clippy flagged match-like patterns; replaced with `matches!` to satisfy `-D warnings`.
 - Problems: YAML front matter parsing initially inserted an extra leading newline; trimmed correctly to make round-trip stable.
 - Derivations: None.
@@ -65,7 +67,8 @@ Notes:
 
 - What to do: Start a minimal daemon using `hyper` + `hyperlocal` + `jsonrpsee`. Expose `daemon.status` returning version/pid/socket path.
 - Testing strategy: Integration test that starts daemon bound to a temp UDS path, sends JSON-RPC call, asserts response and logs written.
-- Feedback loop: `orchestra daemon start` then `orchestra daemon status` works.
+  NOTE: Make sure to save the socket in a tmp folder during testing to not impact the global system. Add a config if necessary.
+- Feedback loop: `orchestra daemon start` then `orchestra daemon status` works. (Cleanup afterwards)
 
 ## [ ] Phase 7: CLI RPC client + basic UX
 
