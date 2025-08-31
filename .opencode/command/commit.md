@@ -4,30 +4,18 @@ agent: build
 ---
 
 <context>
-<recent-logs>
-
+<git-log-n-15>
 !`git log --oneline -15`
-
-</recent-logs>
-
-<status>
-
+</git-log-n-15>
+<git-status>
 !`git status --porcelain=v1 -uall`
-
-</status>
-
-<unstaged-commits>
-
+</git-status>
+<git-diff-unstaged>
 !`git diff --patch --submodule`
-
-</unstaged-commits>
-
-<staged-commits>
-
+</git-diff-unstaged>
+<git-diff-staged>
 !`git diff --staged --patch --submodule`
-
-</staged-commits>
-
+</git-diff-staged>
 </context>
 
 Commit the current changes.
