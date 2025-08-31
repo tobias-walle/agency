@@ -23,6 +23,34 @@ Available recipes:
 - `just start` # Start the app
 - `just test *ARGS` # Run the tests (alias to cargo test)
 
+## Context7 Library IDs
+
+Always look up APIs before you use them and verify usage against the official docs. For speed, reuse these pre-verified Context7 IDs. If you add a new dependency, resolve its Context7 ID and append it here.
+
+- chrono → /chronotope/chrono
+- dirs → /dirs-dev/dirs-rs
+- regex → /rust-lang/regex
+- serde → /serde-rs/serde
+- serde_yaml → /dtolnay/serde-yaml
+- thiserror → /dtolnay/thiserror
+- toml → /toml-rs/toml
+- tracing → /tokio-rs/tracing
+- tracing-appender → /tokio-rs/tracing (subcrate)
+- tracing-subscriber → /tokio-rs/tracing (subcrate)
+- clap → /clap-rs/clap
+- git2 → /rust-lang/git2-rs
+- tempfile → /Stebalien/tempfile
+- assert_cmd → /assert-rs/assert_cmd
+- pretty_assertions → /colin-kiegel/rust-pretty-assertions
+- proptest → /proptest-rs/proptest
+- serde_json → /serde-rs/json
+
+Example: Using Context7 to read docs quickly
+
+- Resolve (only needed if ID isn’t known yet): resolve-library-id "serde-rs/serde"
+- Fetch docs directly with the known ID:
+  - get-library-docs id="/serde-rs/serde" topic="derive"
+
 ## Rules
 
 - Indent code always with 2 spaces
