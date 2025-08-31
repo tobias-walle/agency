@@ -45,6 +45,107 @@ Notes:
 - Start with max four crates to keep boundaries clear and maintenance simple.
 - `core` encapsulates IO, concurrency, and state; `cli` and `mcp` depend on `core` API surface (or JSON-RPC client when appropriate).
 
+## Crate internal structure (detailed)
+
+### `crates/core`
+
+```
+crates/core/
+  src/
+    lib.rs                 # exports daemon, domain, rpc, adapters, config
+    prelude.rs             # common re-exports (Result, Error, tracing macros)
+    errors.rs              # thiserror::Error for core
+    result.rs              # type Result<T> = std::result::Result<T, Error>
+    config/
+      mod.rs               # Config + defaults + merge logic
+    domain/
+      mod.rs
+      task.rs              # TaskId, Task, Status enum + transitions
+      event.rs             # domain events (for logging/streaming)
+    rpc/
+      mod.rs               # DTOs shared with cli/mcp (serde)
+      types.rs             # requests/responses, strong types
+      server.rs            # jsonrpsee server handlers over hyperlocal
+    daemon/
+      mod.rs
+      state.rs             # in-memory state, indices
+      idle.rs              # idle+dwell detection
+      supervisor.rs        # PTY lifecycle, task supervision
+      startup.rs           # tracing, config, fd-lock, socket init
+    adapters/
+      mod.rs
+      git.rs               # git2 worktrees/branches helpers
+      pty.rs               # portable-pty spawn/attach/resize
+      fs.rs                # paths, .orchestra layout utilities
+    logging/
+      mod.rs               # tracing subscriber (JSON to logs.jsonl)
+  tests/
+    daemon_e2e.rs          # start server, drive flows via UDS
+```
+
+- Keep "domain" pure (no IO). All IO in "adapters" or "daemon".
+- Re-export commonly used items in `prelude.rs` for internal ergonomics.
+
+### `crates/cli`
+
+```
+crates/cli/
+  src/
+    lib.rs               # public CLI API used by apps/orchestra
+    args.rs              # clap parsers (derive)
+    commands/
+      mod.rs
+      task_new.rs
+      task_start.rs
+      task_merge.rs
+      pty_attach.rs
+      # ...one file per PRD command
+    rpc/
+      mod.rs
+      client.rs          # jsonrpsee client (UDS) + helpers
+    ui/
+      style.rs           # yansi styles
+      table.rs           # comfy-table builders
+      prompts.rs         # dialoguer confirmations
+    errors.rs            # CLI errors mapped from core
+  tests/
+    snapshot_cli.rs      # golden tests for table/text output
+```
+
+### `crates/mcp`
+
+```
+crates/mcp/
+  src/
+    lib.rs
+    server.rs            # start MCP server, route handlers
+    handlers/
+      mod.rs
+      task.rs
+      pty.rs
+    rpc_client.rs        # thin wrapper reusing cli/core RPC types
+    errors.rs
+```
+
+### `apps/orchestra`
+
+```
+apps/orchestra/
+  src/
+    main.rs              # entrypoint; delegates to cli; `mcp` subcommand calls mcp::server::run()
+```
+
+### Conventions and guidelines
+
+- Visibility: prefer `pub(crate)`; only DTOs in `core::rpc` are `pub` for cross-crate use.
+- Errors: typed `core::errors::Error`; `type Result<T> = core::result::Result<T, Error>`; map to user-facing messages in `cli`.
+- Async: single Tokio runtime in daemon; spawn only within `daemon::*`; pass cancellations via futures/select and avoid nested runtimes.
+- Serialization: `serde` with `snake_case`; tagged enums (`#[serde(tag = "type")]`); include a `version: u8` field in top-level RPC payloads.
+- RPC: namespaces mirror ADR (`daemon.*`, `task.*`, `pty.*`); client helpers in `cli::rpc::client` keep method names symmetrical.
+- Logging: use `tracing`; attach `task_id`, `session_id` to spans; JSON goes to `./.orchestra/logs.jsonl` via `logging::init()`.
+- Testing: unit tests next to modules (`#[cfg(test)]`); integration/E2E in `tests/` using temp repos and a fake agent.
+- Features: keep default features minimal; avoid optional features for MVP unless needed for portability.
+
 ## Responsibilities (by crate)
 
 - `core`
