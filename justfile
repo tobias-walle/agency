@@ -4,8 +4,8 @@ _list:
   @just --list
 
 # Start the app
-start:
-  cargo run -p orchestra
+start *ARGS:
+  cargo run -p orchestra {{ARGS}}
 
 # Run the tests
 test *ARGS:

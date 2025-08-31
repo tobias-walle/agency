@@ -74,12 +74,24 @@ Notes:
 - Problems: `ChronoUtc::rfc3339()` API mismatch; corrected to `ChronoUtc::rfc_3339()` using Context7 docs.
 - Derivations: Persisted `WorkerGuard` in a `OnceLock` to ensure non-blocking appender flushes at process end; wired logging init in `apps/orchestra/main.rs` before CLI dispatch.
 
-## [ ] Phase 6: JSON-RPC transport skeleton (daemon)
+## [x] Phase 6: JSON-RPC transport skeleton (daemon)
 
 - What to do: Start a minimal daemon using `hyper` + `hyperlocal` + `jsonrpsee`. Expose `daemon.status` returning version/pid/socket path.
 - Testing strategy: Integration test that starts daemon bound to a temp UDS path, sends JSON-RPC call, asserts response and logs written.
   NOTE: Make sure to save the socket in a tmp folder during testing to not impact the global system. Add a config if necessary.
 - Feedback loop: `orchestra daemon start` then `orchestra daemon status` works. (Cleanup afterwards)
+
+Notes:
+
+- Problems: hyper v1 requires wrapping `UnixStream` with `hyper_util::rt::TokioIo` and using `http_body_util::Full<bytes::Bytes>` for bodies. Adjusted server and tests accordingly. Also used `hyperlocal::Client::unix()` from hyper-util legacy to create a UDS client.
+- Derivations: Skipped `jsonrpsee` for now in favor of a hand-rolled minimal JSON-RPC 2.0 handler to keep footprint small; will revisit in later phases if needed.
+
+## [ ] Phase 6.1: Replace handrolled JSON RPC handling with jsonrpsee
+
+- In Phase 6, we handrolled our own JSON RPC implementation
+- Replace it with `jsonrpsee` (like originally planned) to improve correctness and maintainability
+- Use Context7 to understand how to use `jsonrpsee` effectively
+- Make sure to keep the Context7 section ./AGENTS.md updated with all dependency changes
 
 ## [ ] Phase 7: CLI RPC client + basic UX
 

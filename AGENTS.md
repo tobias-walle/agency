@@ -25,7 +25,9 @@ Available recipes:
 
 ## Context7 Library IDs
 
-Always look up APIs before you use them and verify usage against the official docs. For speed, reuse these pre-verified Context7 IDs. If you add a new dependency, resolve its Context7 ID and append it here.
+Always look up APIs before you use them and verify usage against the official docs.
+For speed, reuse these pre-verified Context7 IDs.
+If you add a new dependency, resolve its Context7 ID and append it [here](./AGENTS.md).
 
 - chrono → /chronotope/chrono
 - dirs → /dirs-dev/dirs-rs
@@ -44,6 +46,12 @@ Always look up APIs before you use them and verify usage against the official do
 - pretty_assertions → /colin-kiegel/rust-pretty-assertions
 - proptest → /proptest-rs/proptest
 - serde_json → /serde-rs/json
+- bytes → /tokio-rs/bytes
+- http-body-util → /hyperium/http-body (subcrate)
+- hyper → /hyperium/hyper
+- hyper-util → /hyperium/hyper-util
+- hyperlocal → /softprops/hyperlocal
+- tokio → /tokio-rs/tokio
 
 Example: Using Context7 to read docs quickly
 
