@@ -9,7 +9,7 @@ For each phase do the following
 - Read the relevant documents to understand the context of this PRD and the architecture:
   - [PRD-1-orchestra-v1.md](../prd/PRD-1-orchestra-v1.md)
   - [ADR-1-mvp.md](../adr/ADR-1-mvp.md)
-- Implement the phase. Make heavy use of Context7 to get up to date info on libraries.
+- Implement the phase. Make heavy use of the `api-docs-expert` to get up to date info on libraries.
 - Make sure `just check` is not failing and all tests pass
 - Update this document by checking the checkmark in the phase header.
 - Also document (very consisly:
@@ -98,11 +98,16 @@ Notes:
 - Problems: Compile error due to missing `_server_handle` field on `DaemonHandle` after switching to `jsonrpsee::server::stop_channel`; fixed by storing the returned handle to keep the server alive.
 - Derivations: Kept a thin manual accept loop with `jsonrpsee` service per-connection over `tokio::net::UnixListener` to preserve existing test shape; still fully handled by jsonrpsee modules.
 
-## [ ] Phase 7: CLI RPC client + basic UX
+## [x] Phase 7: CLI RPC client + basic UX
 
 - What to do: Add `jsonrpsee` UDS client, `clap` args, and simple styling for `daemon status`. Friendly error mapping.
 - Testing strategy: Snapshot tests for `orchestra daemon status` output; unit tests for error mapping and arg parsing.
 - Feedback loop: Nice colored output for `daemon status`.
+
+Notes:
+
+- Problems: `hyper_util::client::legacy::Client::request` returns a legacy error; added a `Client` variant to the CLI error to satisfy `?` conversions and avoid ad-hoc mapping. Also fixed clippy lints (unnecessary to_owned, collapsible if).
+- Derivations: Kept textual output minimal and deterministic for tests (`daemon: running (...)` or `daemon: stopped`) and deferred colorful styling to Phase 16.
 
 ## [ ] Phase 8: Git adapter (worktrees/branches) and init scaffolding
 

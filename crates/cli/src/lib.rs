@@ -1,4 +1,5 @@
 pub mod args;
+pub mod rpc;
 
 use clap::Parser;
 
@@ -14,8 +15,31 @@ pub fn run() {
   match cli.command {
     Some(args::Commands::Daemon(daemon)) => match daemon.command {
       args::DaemonSubcommand::Status => {
-        // Placeholder: print a deterministic status line for tests
-        println!("daemon: stopped");
+        // Try to query daemon over UDS; on error print friendly message
+        match orchestra_core::config::resolve_socket_path() {
+          Ok(sock) => {
+            let res = tokio::runtime::Builder::new_current_thread()
+              .enable_io()
+              .build()
+              .unwrap()
+              .block_on(async move { rpc::client::daemon_status(&sock).await });
+            match res {
+              Ok(status) => {
+                // Use minimal styling; avoid unstable snapshot churn
+                println!(
+                  "daemon: running (v{}, pid {}, socket {})",
+                  status.version, status.pid, status.socket_path
+                );
+              }
+              Err(_) => {
+                println!("daemon: stopped");
+              }
+            }
+          }
+          Err(_) => {
+            println!("daemon: stopped");
+          }
+        }
       }
     },
     None => {

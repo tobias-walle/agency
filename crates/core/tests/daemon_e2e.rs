@@ -49,7 +49,7 @@ async fn start_test_env() -> TestEnv {
 }
 
 fn build_request(sock: &Path, body: Value) -> Request<Full<Bytes>> {
-  let url = hyperlocal::Uri::new(sock.to_path_buf(), "/");
+  let url = hyperlocal::Uri::new(sock, "/");
   Request::builder()
     .method(Method::POST)
     .uri(url)
@@ -104,10 +104,10 @@ async fn daemon_status_roundtrip() {
 
   // Best-effort: allow logs to flush and check we logged the event if this test owns the logger.
   tokio::time::sleep(Duration::from_millis(100)).await;
-  if let Ok(log_text) = std::fs::read_to_string(&env.log_path) {
-    if !log_text.is_empty() {
-      assert!(log_text.contains("daemon_status"), "missing daemon_status log entry; logs: {}", log_text);
-    }
+  if let Ok(log_text) = std::fs::read_to_string(&env.log_path)
+    && !log_text.is_empty()
+  {
+    assert!(log_text.contains("daemon_status"), "missing daemon_status log entry; logs: {}", log_text);
   }
 
   // Cleanup
