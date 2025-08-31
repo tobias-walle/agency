@@ -8,7 +8,7 @@ start:
   cargo run -p orchestra
 
 # Run the tests
-test ARGS:
+test *ARGS:
   cargo test {{ARGS}}
 
 # Check for compiler or linting error

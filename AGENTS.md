@@ -21,7 +21,7 @@ Available recipes:
 
 - `just check` # Check for compiler or linting error
 - `just start` # Start the app
-- `just test ARGS` # Run the tests
+- `just test *ARGS` # Run the tests (alias to cargo test)
 
 ## Rules
 
