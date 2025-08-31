@@ -26,6 +26,7 @@ Available recipes:
 ## Rules
 
 - Indent code always with 2 spaces
+- Then committing, follow the [conventional commits](https://www.conventionalcommits.org) format
 - Only add dependencies in their latest version with `cargo add [pkg]`. Never modify the Cargo.toml directly.
 - Make heavy use of the Context7 MCP then working with libraries
   - Lookup new APIs before you use them
