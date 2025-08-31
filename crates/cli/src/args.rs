@@ -11,6 +11,8 @@ pub struct Cli {
 pub enum Commands {
   /// Daemon related commands
   Daemon(DaemonArgs),
+  /// Create project scaffolding and config
+  Init,
 }
 
 #[derive(Debug, ClapArgs)]

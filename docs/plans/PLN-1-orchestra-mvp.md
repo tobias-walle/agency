@@ -119,11 +119,16 @@ Notes:
 - Problems: None.
 - Derivations: Start/Stop are no-ops that query and print status identically to `status` for now.
 
-## [ ] Phase 8: Git adapter (worktrees/branches) and init scaffolding
+## [x] Phase 8: Git adapter (worktrees/branches) and init scaffolding
 
 - What to do: Implement `git2` helpers for base branch checks and worktree creation. Add `orchestra init` to scaffold `.orchestra` and default configs.
 - Testing strategy: Temp repo integration tests that run `init` and inspect created files; unit tests for branch naming and worktree path logic.
 - Feedback loop: `orchestra init` prepares the project reliably.
+
+Notes:
+
+- Problems: Needed `tempfile` as a dev-dependency in `cli` tests for temp dirs.
+- Derivations: Implemented branch/worktree naming helpers and base branch tip resolution; deferred actual worktree creation to the task start phase.
 
 ## [ ] Phase 9: Task lifecycle API (new, status, start – stub)
 

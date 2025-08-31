@@ -29,11 +29,28 @@ pub fn run() {
         run_daemon_foreground();
       }
     },
+    Some(args::Commands::Init) => {
+      init_project();
+    }
     None => {
       // No subcommand provided; show help
       args::Cli::print_help_and_exit();
     }
   }
+}
+
+fn init_project() {
+  let root = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+  // Ensure layout and default config
+  if let Err(e) = orchestra_core::adapters::fs::ensure_layout(&root) {
+    eprintln!("failed to create .orchestra layout: {e}");
+    std::process::exit(1);
+  }
+  if let Err(e) = orchestra_core::config::write_default_project_config(&root) {
+    eprintln!("failed to write config: {e}");
+    std::process::exit(1);
+  }
+  println!("initialized .orchestra at {}", root.join(".orchestra").display());
 }
 
 fn resolve_socket() -> Option<PathBuf> {

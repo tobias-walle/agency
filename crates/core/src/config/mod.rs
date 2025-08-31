@@ -40,7 +40,7 @@ impl Default for Config {
       idle_timeout_secs: 10,
       dwell_secs: 2,
       concurrency: None,
-      confirm_by_default: true,
+      confirm_by_default: false,
     }
   }
 }
@@ -86,6 +86,20 @@ pub fn global_config_path() -> Option<PathBuf> {
 /// Location of the project config file (./.orchestra/config.toml)
 pub fn project_config_path(project_root: &Path) -> PathBuf {
   project_root.join(".orchestra").join("config.toml")
+}
+
+/// Write a default project config if it does not exist yet.
+pub fn write_default_project_config(project_root: &Path) -> std::io::Result<()> {
+  let path = project_config_path(project_root);
+  if let Some(parent) = path.parent() {
+    let _ = std::fs::create_dir_all(parent);
+  }
+  if !path.exists() {
+    let cfg = Config::default();
+    let s = toml::to_string_pretty(&cfg).unwrap_or_else(|_| String::from(""));
+    std::fs::write(&path, s)?;
+  }
+  Ok(())
 }
 
 /// Load configuration by resolving the default global and project paths.
