@@ -2,6 +2,11 @@
 
 This plan breaks the MVP into small, self-contained phases that compile and run after each step, emphasizing fast feedback and early automated testing.
 
+Relevant documents (read them first):
+
+- [PRD-1-orchestra-v1.md](../prd/PRD-1-orchestra-v1.md)
+- [ADR-1-mvp.md](../adr/ADR-1-mvp.md)
+
 ## [ ] Phase 1: Bootstrap workspace and binary entrypoint
 
 - What to do: Convert to ADR workspace layout with `crates/core`, `crates/cli`, `crates/mcp`, and `apps/orchestra`. Keep all crates compiling with minimal code paths. Route `apps/orchestra/src/main.rs` to call into `cli::run()`.
