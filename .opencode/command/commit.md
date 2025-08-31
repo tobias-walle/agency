@@ -63,9 +63,9 @@ Do NOT perform additional tool calls and just work with the context given above.
    Avoid semicolons in the message and keep the title shorter than 80 chars.
    You might add a body for additional explanations, but this should be the exception.
    You can use the footer for references (like related PDRs or ADRs)
-4. Run `git add --all && git commit -m '[message]'`.
+4. Run `git add [relevant files] && git commit -m '[message]'`.
    The user will need to confirm the message and might give you feedback.
+   You might want to create multiple commits if the changes are not related.
+5. Run the commands directly!
 
 </workflow>
-
-$ARGUMENTS
