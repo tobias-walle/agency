@@ -38,11 +38,16 @@ Notes:
 - Problems: `git2` pulled in `openssl` on macOS and failed to compile. Resolved by installing OpenSSL in the environment. Kept default features.
 - Derivations: Replaced snapshot testing with normal multiline string assertions and filtered help output to stable lines to avoid churn across clap versions. Added a minimal placeholder `daemon status` implementation printing `daemon: stopped` for determinism.
 
-## [ ] Phase 3: Core domain seed (Tasks, Status, YAML front matter)
+## [x] Phase 3: Core domain seed (Tasks, Status, YAML front matter)
 
 - What to do: Add pure domain: `TaskId`, `Task`, `Status`, YAML front matter parsing/serialization and transition guards (no IO). Include unit tests and proptests for transitions.
 - Testing strategy: Unit tests for serde round-trips, invalid transitions, and status invariants. Proptests if feasible for id/slug parsing.
 - Feedback loop: `cargo test -p core` green.
+
+Notes:
+- Problems: Clippy flagged match-like patterns; replaced with `matches!` to satisfy `-D warnings`.
+- Problems: YAML front matter parsing initially inserted an extra leading newline; trimmed correctly to make round-trip stable.
+- Derivations: None.
 
 ## [ ] Phase 4: Config and filesystem layout utilities
 
