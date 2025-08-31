@@ -2,15 +2,14 @@
 
 This plan breaks the MVP into small, self-contained phases that compile and run after each step, emphasizing fast feedback and early automated testing.
 
-Relevant documents (read them first):
-
-- [PRD-1-orchestra-v1.md](../prd/PRD-1-orchestra-v1.md)
-- [ADR-1-mvp.md](../adr/ADR-1-mvp.md)
 
 ## Workflow
 
 For each phase do the following
 
+- Read the relevant documents to understand the context of this PRD and the architecture:
+  - [PRD-1-orchestra-v1.md](../prd/PRD-1-orchestra-v1.md)
+  - [ADR-1-mvp.md](../adr/ADR-1-mvp.md)
 - Implement the phase
 - Make sure `just check` is not failing and all tests pass
 - Update this document by checking the checkmark in the phase header.
@@ -19,11 +18,15 @@ For each phase do the following
   - Derivations from the plan
   - NEVER document expected changes
 
-## [ ] Phase 1: Bootstrap workspace and binary entrypoint
+## [x] Phase 1: Bootstrap workspace and binary entrypoint
 
 - What to do: Convert to ADR workspace layout with `crates/core`, `crates/cli`, `crates/mcp`, and `apps/orchestra`. Keep all crates compiling with minimal code paths. Route `apps/orchestra/src/main.rs` to call into `cli::run()`.
 - Testing strategy: Add CI-friendly smoke test in `apps/orchestra` that runs `--help` and asserts non-error exit. Create `just check` and `just test` cadence. Minimal unit test in `cli` to verify argument parsing.
 - Feedback loop: `just start` prints help banner; `just check` passes.
+
+Notes:
+- Problems: Binary discovery in smoke test failed due to `CARGO_BIN_EXE_orchestra` not being set when invoking `cargo test -p orchestra`. Resolved by using `assert_cmd::Command::cargo_bin("orchestra")` which compiles and locates the binary under test.
+- Derivations: Renamed `core` crate to `orchestra-core` to avoid collision with Rust's standard library name.
 
 ## [ ] Phase 2: Establish test infrastructure early
 
