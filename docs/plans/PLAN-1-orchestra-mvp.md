@@ -7,6 +7,18 @@ Relevant documents (read them first):
 - [PRD-1-orchestra-v1.md](../prd/PRD-1-orchestra-v1.md)
 - [ADR-1-mvp.md](../adr/ADR-1-mvp.md)
 
+## Workflow
+
+For each phase do the following
+
+- Implement the phase
+- Make sure `just check` is not failing and all tests pass
+- Update this document by checking the checkmark in the phase header.
+- Also document (very consisly:
+  - Problems and how you resolved them
+  - Derivations from the plan
+  - NEVER document expected changes
+
 ## [ ] Phase 1: Bootstrap workspace and binary entrypoint
 
 - What to do: Convert to ADR workspace layout with `crates/core`, `crates/cli`, `crates/mcp`, and `apps/orchestra`. Keep all crates compiling with minimal code paths. Route `apps/orchestra/src/main.rs` to call into `cli::run()`.
