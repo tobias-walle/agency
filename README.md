@@ -1,6 +1,8 @@
 # Orchestra
 
-Orchestra orchestrates parallel-running AI CLI agents in isolated Git worktrees, powered by a single Rust daemon with JSON-RPC and MCP interfaces. It optimizes for deterministic task lifecycles, ergonomic TUI attach/detach, and low overhead.
+Orchestra lets you run multiple AI CLI agents in parallel, each in its own isolated Git worktree.
+It uses a single Rust daemon with JSON-RPC and MCP interfaces to manage everything.
+Orchestra is designed for predictable task management, easy TUI attach/detach, and minimal overhead.
 
 ## Features
 
