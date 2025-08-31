@@ -86,12 +86,17 @@ Notes:
 - Problems: hyper v1 requires wrapping `UnixStream` with `hyper_util::rt::TokioIo` and using `http_body_util::Full<bytes::Bytes>` for bodies. Adjusted server and tests accordingly. Also used `hyperlocal::Client::unix()` from hyper-util legacy to create a UDS client.
 - Derivations: Skipped `jsonrpsee` for now in favor of a hand-rolled minimal JSON-RPC 2.0 handler to keep footprint small; will revisit in later phases if needed.
 
-## [ ] Phase 6.1: Replace handrolled JSON RPC handling with jsonrpsee
+## [x] Phase 6.1: Replace handrolled JSON RPC handling with jsonrpsee
 
 - In Phase 6, we handrolled our own JSON RPC implementation
 - Replace it with `jsonrpsee` (like originally planned) to improve correctness and maintainability
-- Use Context7 to understand how to use `jsonrpsee` effectively
+- Use the `api-docs-expert` agent to understand how to use `jsonrpsee` effectively
 - Make sure to keep the Context7 section ./AGENTS.md updated with all dependency changes
+
+Notes:
+
+- Problems: Compile error due to missing `_server_handle` field on `DaemonHandle` after switching to `jsonrpsee::server::stop_channel`; fixed by storing the returned handle to keep the server alive.
+- Derivations: Kept a thin manual accept loop with `jsonrpsee` service per-connection over `tokio::net::UnixListener` to preserve existing test shape; still fully handled by jsonrpsee modules.
 
 ## [ ] Phase 7: CLI RPC client + basic UX
 

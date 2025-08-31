@@ -26,7 +26,7 @@ Available recipes:
 ## Context7 Library IDs
 
 Always look up APIs before you use them and verify usage against the official docs.
-For speed, reuse these pre-verified Context7 IDs.
+Delegate these research tasks to the `api-docs-expert` agent. Give them all the relevant Context7 ids defined below.
 If you add a new dependency, resolve its Context7 ID and append it [here](./AGENTS.md).
 
 - chrono → /chronotope/chrono
@@ -52,12 +52,7 @@ If you add a new dependency, resolve its Context7 ID and append it [here](./AGEN
 - hyper-util → /hyperium/hyper-util
 - hyperlocal → /softprops/hyperlocal
 - tokio → /tokio-rs/tokio
-
-Example: Using Context7 to read docs quickly
-
-- Resolve (only needed if ID isn’t known yet): resolve-library-id "serde-rs/serde"
-- Fetch docs directly with the known ID:
-  - get-library-docs id="/serde-rs/serde" topic="derive"
+- jsonrpsee → /paritytech/jsonrpsee
 
 ## Rules
 
