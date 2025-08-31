@@ -51,11 +51,17 @@ Notes:
 - Problems: YAML front matter parsing initially inserted an extra leading newline; trimmed correctly to make round-trip stable.
 - Derivations: None.
 
-## [ ] Phase 4: Config and filesystem layout utilities
+## [x] Phase 4: Config and filesystem layout utilities
 
 - What to do: Implement `Config` merge (global + project), platform socket defaults, `.orchestra` paths (logs, tasks, worktrees). No daemon yet.
 - Testing strategy: Unit tests for default values and merge precedence; tests for platform path derivation guarded with cfgs; tempdir-based tests for `.orchestra` layout.
 - Feedback loop: `cargo test -p core` green.
+
+Notes:
+
+- Problems: Clippy flagged nested ifs and manual Default impl; resolved by using `if let` chains and `#[derive(Default)]` with `#[default]` variant.
+- Problems: Mutating env vars in tests is unsafe in this toolchain; refactored to a pure function `resolve_socket_path_from()` so tests pass without touching process env.
+- Derivations: None.
 
 ## [ ] Phase 5: Structured logging plumbing
 
