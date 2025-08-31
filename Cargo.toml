@@ -1,8 +1,12 @@
 [workspace]
-members = [
-  "crates/core",
-  "crates/cli",
-  "crates/mcp",
-  "apps/orchestra",
-]
+members = ["crates/core", "crates/cli", "crates/mcp", "apps/orchestra"]
 resolver = "2"
+
+[profile.dev]
+opt-level = 1
+debug = true
+incremental = true
+
+[profile.dev.package."*"]
+opt-level = 2
+debug = false
