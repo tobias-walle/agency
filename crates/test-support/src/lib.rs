@@ -1,16 +1,16 @@
 use std::path::PathBuf;
 
-pub struct TempOrchestra {
+pub struct TempAgency {
   pub root: tempfile::TempDir,
 }
 
-impl Default for TempOrchestra {
+impl Default for TempAgency {
   fn default() -> Self {
     Self::new()
   }
 }
 
-impl TempOrchestra {
+impl TempAgency {
   pub fn new() -> Self {
     let root = tempfile::tempdir().expect("tempdir");
     Self { root }
@@ -31,9 +31,9 @@ impl TempOrchestra {
     repo
   }
 
-  pub fn mkdir_orchestra(&self) -> PathBuf {
-    let p = self.path().join(".orchestra");
-    std::fs::create_dir_all(&p).expect("mkdir .orchestra");
+  pub fn mkdir_agency(&self) -> PathBuf {
+    let p = self.path().join(".agency");
+    std::fs::create_dir_all(&p).expect("mkdir .agency");
     p
   }
 }

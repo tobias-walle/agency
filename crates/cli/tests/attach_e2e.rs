@@ -3,9 +3,9 @@ use std::io::Write;
 use std::process::{Command, Stdio};
 
 fn start_daemon(sock: &std::path::Path) {
-  let mut cmd = Command::cargo_bin("orchestra").expect("compile bin");
+  let mut cmd = Command::cargo_bin("agency").expect("compile bin");
   let out = cmd
-    .env("ORCHESTRA_SOCKET", sock.as_os_str())
+    .env("AGENCY_SOCKET", sock.as_os_str())
     .args(["daemon", "start"]) // starts background
     .assert()
     .success()
@@ -17,9 +17,9 @@ fn start_daemon(sock: &std::path::Path) {
 }
 
 fn stop_daemon(sock: &std::path::Path) {
-  let mut cmd = Command::cargo_bin("orchestra").expect("compile bin");
+  let mut cmd = Command::cargo_bin("agency").expect("compile bin");
   let _ = cmd
-    .env("ORCHESTRA_SOCKET", sock.as_os_str())
+    .env("AGENCY_SOCKET", sock.as_os_str())
     .args(["daemon", "stop"]) // best-effort
     .assert()
     .success();
@@ -27,7 +27,7 @@ fn stop_daemon(sock: &std::path::Path) {
 
 #[test]
 fn attach_help_has_no_detach_flag() {
-  let mut cmd = Command::cargo_bin("orchestra").expect("compile bin");
+  let mut cmd = Command::cargo_bin("agency").expect("compile bin");
   let out = cmd
     .args(["attach", "--help"])
     .assert()
@@ -47,7 +47,7 @@ fn attach_help_has_no_detach_flag() {
 fn attach_roundtrip_default_detach_ctrl_q() {
   let td = tempfile::tempdir().unwrap();
   let root = td.path().to_path_buf();
-  let sock = td.path().join("orchestra.sock");
+  let sock = td.path().join("agency.sock");
 
   // Initialize a git repository in the temp directory and make an initial commit
   std::process::Command::new("git")
@@ -70,38 +70,38 @@ fn attach_roundtrip_default_detach_ctrl_q() {
   start_daemon(&sock);
 
   // init project
-  let mut init = Command::cargo_bin("orchestra").expect("compile bin");
+  let mut init = Command::cargo_bin("agency").expect("compile bin");
   init
-    .env("ORCHESTRA_SOCKET", sock.as_os_str())
+    .env("AGENCY_SOCKET", sock.as_os_str())
     .current_dir(&root)
     .args(["init"])
     .assert()
     .success();
 
   // new task
-  let mut newc = Command::cargo_bin("orchestra").expect("compile bin");
+  let mut newc = Command::cargo_bin("agency").expect("compile bin");
   newc
-    .env("ORCHESTRA_SOCKET", sock.as_os_str())
+    .env("AGENCY_SOCKET", sock.as_os_str())
     .current_dir(&root)
     .args(["new", "feat-e2e", "--title", "E2E Task"])
     .assert()
     .success();
 
   // start task
-  let mut start = Command::cargo_bin("orchestra").expect("compile bin");
+  let mut start = Command::cargo_bin("agency").expect("compile bin");
   start
-    .env("ORCHESTRA_SOCKET", sock.as_os_str())
+    .env("AGENCY_SOCKET", sock.as_os_str())
     .current_dir(&root)
     .args(["start", "feat-e2e"])
     .assert()
     .success();
 
   // attach interactively; send echo and then Ctrl-Q (0x11)
-  let mut attach = Command::cargo_bin("orchestra").expect("compile bin");
+  let mut attach = Command::cargo_bin("agency").expect("compile bin");
   attach
-    .env("ORCHESTRA_SOCKET", sock.as_os_str())
+    .env("AGENCY_SOCKET", sock.as_os_str())
     .current_dir(&root)
-    .args(["attach", "feat-e2e"]) // uses ORCHESTRA_SOCKET
+    .args(["attach", "feat-e2e"]) // uses AGENCY_SOCKET
     .stdin(Stdio::piped())
     .stdout(Stdio::piped())
     .stderr(Stdio::piped());

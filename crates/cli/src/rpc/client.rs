@@ -4,7 +4,7 @@ use http_body_util::{BodyExt, Full};
 use hyper::{Method, Request, body::Bytes};
 use hyper_util::client::legacy::{Client, Error as LegacyClientError};
 use hyperlocal::UnixClientExt;
-use orchestra_core::rpc::{
+use agency_core::rpc::{
   DaemonStatus,
   PtyAttachParams, PtyAttachResult, PtyReadParams, PtyReadResult, PtyInputParams, PtyResizeParams, PtyDetachParams,
   TaskRef, TaskNewParams, TaskInfo, TaskListParams, TaskListResponse, TaskStartParams, TaskStartResult,

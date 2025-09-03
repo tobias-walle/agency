@@ -15,7 +15,7 @@ use crate::domain::task::{Agent, Status};
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub struct TaskNewParams {
-  /// Absolute path to the project root containing the .git and .orchestra folders
+  /// Absolute path to the project root containing the .git and .agency folders
   pub project_root: String,
   /// New task slug, used in filename
   pub slug: String,

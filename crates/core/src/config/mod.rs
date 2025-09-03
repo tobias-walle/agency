@@ -106,14 +106,14 @@ pub enum ConfigError {
 
 pub type Result<T> = std::result::Result<T, ConfigError>;
 
-/// Location of the global config file (~/.config/orchestra/config.toml)
+/// Location of the global config file (~/.config/agency/config.toml)
 pub fn global_config_path() -> Option<PathBuf> {
-  dirs::config_dir().map(|p| p.join("orchestra").join("config.toml"))
+  dirs::config_dir().map(|p| p.join("agency").join("config.toml"))
 }
 
-/// Location of the project config file (./.orchestra/config.toml)
+/// Location of the project config file (./.agency/config.toml)
 pub fn project_config_path(project_root: &Path) -> PathBuf {
-  project_root.join(".orchestra").join("config.toml")
+  project_root.join(".agency").join("config.toml")
 }
 
 /// Write a default project config if it does not exist yet.
@@ -184,16 +184,16 @@ pub(crate) fn load_from_paths(global: Option<&Path>, project: Option<&Path>) -> 
   Ok(cfg)
 }
 
-/// Resolve the socket path using ORCHESTRA_SOCKET or platform defaults.
+/// Resolve the socket path using AGENCY_SOCKET or platform defaults.
 pub fn resolve_socket_path() -> Result<PathBuf> {
-  let env_socket = env::var("ORCHESTRA_SOCKET").ok().map(PathBuf::from);
+  let env_socket = env::var("AGENCY_SOCKET").ok().map(PathBuf::from);
   // Prefer runtime_dir for ephemeral sockets; fall back to data_dir
   let base_dir = runtime_dir().or(data_dir());
   if let Some(val) = env_socket {
     return Ok(val);
   }
   if let Some(dir) = base_dir {
-    return Ok(dir.join("orchestra.sock"));
+    return Ok(dir.join("agency.sock"));
   }
   Err(ConfigError::UnsupportedPlatform)
 }
@@ -261,22 +261,22 @@ detach_keys = "ctrl-q"
     let td = tempfile::tempdir().unwrap();
     let p = td.path().join("sock");
     // Set the environment variable and check resolve_socket_path
-    unsafe { std::env::set_var("ORCHESTRA_SOCKET", &p) };
+    unsafe { std::env::set_var("AGENCY_SOCKET", &p) };
     let got = resolve_socket_path().unwrap();
     assert_eq!(got, p);
-    unsafe { std::env::remove_var("ORCHESTRA_SOCKET") };
+    unsafe { std::env::remove_var("AGENCY_SOCKET") };
   }
 
   #[test]
   fn socket_platform_fallback() {
     // Unset the environment variable to test fallback
-    unsafe { std::env::remove_var("ORCHESTRA_SOCKET") };
+    unsafe { std::env::remove_var("AGENCY_SOCKET") };
     let got = resolve_socket_path().unwrap();
 
     let expected = if let Some(r) = dirs::runtime_dir() {
-      r.join("orchestra.sock")
+      r.join("agency.sock")
     } else if let Some(d) = dirs::data_dir() {
-      d.join("orchestra.sock")
+      d.join("agency.sock")
     } else {
       panic!("No runtime_dir() or data_dir() available on this platform for test");
     };

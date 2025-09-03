@@ -1,4 +1,4 @@
-# PLAN-1: Orchestra MVP Implementation Plan (v1)
+# PLAN-1: Agency MVP Implementation Plan (v1)
 
 This plan breaks the MVP into small, self-contained phases that compile and run after each step, emphasizing fast feedback and early automated testing.
 
@@ -7,7 +7,7 @@ This plan breaks the MVP into small, self-contained phases that compile and run 
 For each phase do the following
 
 - Read the relevant documents to understand the context of this PRD and the architecture:
-  - [PRD-1-orchestra-v1.md](../prd/PRD-1-orchestra-v1.md)
+  - [PRD-1-agency-v1.md](../prd/PRD-1-agency-v1.md)
   - [ADR-1-mvp.md](../adr/ADR-1-mvp.md)
 - Implement the phase. Make heavy use of the `api-docs-expert` to get up to date info on libraries.
 - Make sure `just check` is not failing and all tests pass
@@ -19,18 +19,18 @@ For each phase do the following
 
 ## [x] Phase 1: Bootstrap workspace and binary entrypoint
 
-- What to do: Convert to ADR workspace layout with `crates/core`, `crates/cli`, `crates/mcp`, and `apps/orchestra`. Keep all crates compiling with minimal code paths. Route `apps/orchestra/src/main.rs` to call into `cli::run()`.
-- Testing strategy: Add CI-friendly smoke test in `apps/orchestra` that runs `--help` and asserts non-error exit. Create `just check` and `just test` cadence. Minimal unit test in `cli` to verify argument parsing.
+- What to do: Convert to ADR workspace layout with `crates/core`, `crates/cli`, `crates/mcp`, and `apps/agency`. Keep all crates compiling with minimal code paths. Route `apps/agency/src/main.rs` to call into `cli::run()`.
+- Testing strategy: Add CI-friendly smoke test in `apps/agency` that runs `--help` and asserts non-error exit. Create `just check` and `just test` cadence. Minimal unit test in `cli` to verify argument parsing.
 - Feedback loop: `just start` prints help banner; `just check` passes.
 
 Notes:
 
-- Problems: Binary discovery in smoke test failed due to `CARGO_BIN_EXE_orchestra` not being set when invoking `cargo test -p orchestra`. Resolved by using `assert_cmd::Command::cargo_bin("orchestra")` which compiles and locates the binary under test.
-- Derivations: Renamed `core` crate to `orchestra-core` to avoid collision with Rust's standard library name.
+- Problems: Binary discovery in smoke test failed due to `CARGO_BIN_EXE_agency` not being set when invoking `cargo test -p agency`. Resolved by using `assert_cmd::Command::cargo_bin("agency")` which compiles and locates the binary under test.
+- Derivations: Renamed `core` crate to `agency-core` to avoid collision with Rust's standard library name.
 
 ## [x] Phase 2: Establish test infrastructure early
 
-- What to do: Set up workspace-level testing scaffolding. Add a Git repo temp utility for tests, a snapshot testing baseline for CLI, and a temp `.orchestra` folder helper. Introduce fake filesystem/log helpers.
+- What to do: Set up workspace-level testing scaffolding. Add a Git repo temp utility for tests, a snapshot testing baseline for CLI, and a temp `.agency` folder helper. Introduce fake filesystem/log helpers.
 - Testing strategy: Introduce `tests/common` module with helpers available via `dev-dependencies`. Add one golden snapshot for `daemon status` placeholder and one for `cli --help`. Configure test-only env vars for deterministic output.
 - Feedback loop: `cargo test` runs at workspace and crate levels; snapshots pass.
 
@@ -53,8 +53,8 @@ Notes:
 
 ## [x] Phase 4: Config and filesystem layout utilities
 
-- What to do: Implement `Config` merge (global + project), platform socket defaults, `.orchestra` paths (logs, tasks, worktrees). No daemon yet.
-- Testing strategy: Unit tests for default values and merge precedence; tests for platform path derivation guarded with cfgs; tempdir-based tests for `.orchestra` layout.
+- What to do: Implement `Config` merge (global + project), platform socket defaults, `.agency` paths (logs, tasks, worktrees). No daemon yet.
+- Testing strategy: Unit tests for default values and merge precedence; tests for platform path derivation guarded with cfgs; tempdir-based tests for `.agency` layout.
 - Feedback loop: `cargo test -p core` green.
 
 Notes:
@@ -65,21 +65,21 @@ Notes:
 
 ## [x] Phase 5: Structured logging plumbing
 
-- What to do: Wire `tracing` JSON logs to `./.orchestra/logs.jsonl`. Provide `logging::init(&Config)` and attach `task_id`, `session_id` spans when available.
+- What to do: Wire `tracing` JSON logs to `./.agency/logs.jsonl`. Provide `logging::init(&Config)` and attach `task_id`, `session_id` spans when available.
 - Testing strategy: Tempdir tests that initialize logging and assert a JSON line is written with expected fields; use deterministic time via injected clock trait if needed.
 - Feedback loop: Running any command appends structured logs.
 
 Notes:
 
 - Problems: `ChronoUtc::rfc3339()` API mismatch; corrected to `ChronoUtc::rfc_3339()` using Context7 docs.
-- Derivations: Persisted `WorkerGuard` in a `OnceLock` to ensure non-blocking appender flushes at process end; wired logging init in `apps/orchestra/main.rs` before CLI dispatch.
+- Derivations: Persisted `WorkerGuard` in a `OnceLock` to ensure non-blocking appender flushes at process end; wired logging init in `apps/agency/main.rs` before CLI dispatch.
 
 ## [x] Phase 6: JSON-RPC transport skeleton (daemon)
 
 - What to do: Start a minimal daemon using `hyper` + `hyperlocal` + `jsonrpsee`. Expose `daemon.status` returning version/pid/socket path.
 - Testing strategy: Integration test that starts daemon bound to a temp UDS path, sends JSON-RPC call, asserts response and logs written.
   NOTE: Make sure to save the socket in a tmp folder during testing to not impact the global system. Add a config if necessary.
-- Feedback loop: `orchestra daemon start` then `orchestra daemon status` works. (Cleanup afterwards)
+- Feedback loop: `agency daemon start` then `agency daemon status` works. (Cleanup afterwards)
 
 Notes:
 
@@ -101,7 +101,7 @@ Notes:
 ## [x] Phase 7: CLI RPC client + basic UX
 
 - What to do: Add `jsonrpsee` UDS client, `clap` args, and simple styling for `daemon status`. Friendly error mapping.
-- Testing strategy: Snapshot tests for `orchestra daemon status` output; unit tests for error mapping and arg parsing.
+- Testing strategy: Snapshot tests for `agency daemon status` output; unit tests for error mapping and arg parsing.
 - Feedback loop: Nice colored output for `daemon status`.
 
 Notes:
@@ -121,9 +121,9 @@ Notes:
 
 ## [x] Phase 8: Git adapter (worktrees/branches) and init scaffolding
 
-- What to do: Implement `git2` helpers for base branch checks and worktree creation. Add `orchestra init` to scaffold `.orchestra` and default configs.
+- What to do: Implement `git2` helpers for base branch checks and worktree creation. Add `agency init` to scaffold `.agency` and default configs.
 - Testing strategy: Temp repo integration tests that run `init` and inspect created files; unit tests for branch naming and worktree path logic.
-- Feedback loop: `orchestra init` prepares the project reliably.
+- Feedback loop: `agency init` prepares the project reliably.
 
 Notes:
 
@@ -145,19 +145,19 @@ Notes:
 
 Note: For completion details and defaults, see PLAN-2 (Phase 10 – PTY backend completion).
 
-- What to do: Add `portable-pty` adapter and `pty.attach/input/resize` RPCs with single active attachment. Implement detach sequence handling in the CLI attach path: default `Ctrl-p, Ctrl-q` (Docker-style), configurable via `--detach-keys` and config `pty.detach_keys`/env `ORCHESTRA_DETACH_KEYS`. Print hint on attach and do not override `Ctrl-C` by default.
+- What to do: Add `portable-pty` adapter and `pty.attach/input/resize` RPCs with single active attachment. Implement detach sequence handling in the CLI attach path: default `Ctrl-p, Ctrl-q` (Docker-style), configurable via `--detach-keys` and config `pty.detach_keys`/env `AGENCY_DETACH_KEYS`. Print hint on attach and do not override `Ctrl-C` by default.
 - Testing strategy: Integration test that attaches, sends input, receives expected output; resize event recorded. Add tests for detach handling (simulate key sequence not forwarded to PTY, local detach occurs, session keeps running) and for custom detach sequences. Snapshot test includes hint line.
-- Feedback loop: `orchestra attach <task>` shows live PTY output; pressing default or configured detach sequence cleanly detaches without stopping the agent.
+- Feedback loop: `agency attach <task>` shows live PTY output; pressing default or configured detach sequence cleanly detaches without stopping the agent.
 
 ## [ ] Phase 11: Idle detection with dwell and signaling
 
-- What to do: Implement idle transitions (10s threshold, 2s dwell). Any PTY output resumes `running`. Add `orchestra idle <id|slug>` to manually toggle.
+- What to do: Implement idle transitions (10s threshold, 2s dwell). Any PTY output resumes `running`. Add `agency idle <id|slug>` to manually toggle.
 - Testing strategy: Time-controlled tests using a mock clock or short thresholds in test config; assert transitions and debouncing.
 - Feedback loop: Logs show stable `idle ↔ running` without flapping.
 
 ## [ ] Phase 12: Fake agent adapter for deterministic tests
 
-- What to do: Provide a `fake` adapter configured via `.orchestra/agents/fake.toml` that prints deterministic content and supports resume.
+- What to do: Provide a `fake` adapter configured via `.agency/agents/fake.toml` that prints deterministic content and supports resume.
 - Testing strategy: E2E tests in temp repo drive `new/start/attach/idle` with fake agent; snapshots for PTY output.
 - Feedback loop: Fully deterministic agent-driven flows.
 
@@ -169,13 +169,13 @@ Note: For completion details and defaults, see PLAN-2 (Phase 10 – PTY backend 
 
 ## [ ] Phase 14: GC, path, and shell-hook QoL
 
-- What to do: Add `orchestra gc`, `orchestra path <task>`, and `orchestra shell-hook` outputs; confirm destructive prompts unless `-y`.
+- What to do: Add `agency gc`, `agency path <task>`, and `agency shell-hook` outputs; confirm destructive prompts unless `-y`.
 - Testing strategy: CLI tests verifying printed paths and shell hook content; GC dry-run snapshot, then `-y` execution assertions.
 - Feedback loop: Cleanups and navigations are smooth.
 
 ## [ ] Phase 15: MCP bridge and `mcp` subcommand
 
-- What to do: Implement MCP server in `mcp` crate using Rust SDK, forwarding to daemon RPCs. Add `orchestra mcp` subcommand.
+- What to do: Implement MCP server in `mcp` crate using Rust SDK, forwarding to daemon RPCs. Add `agency mcp` subcommand.
 - Testing strategy: Start MCP server in test, call minimal handlers against daemon, assert correct bridging.
 - Feedback loop: External MCP clients can list tasks and attach PTY via MCP.
 

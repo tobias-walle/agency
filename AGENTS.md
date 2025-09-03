@@ -1,6 +1,6 @@
-# Orchestra
+# Agency
 
-The Orchestra tool orchestrates parallel-running AI CLI agents in isolated Git worktrees.
+The Agency tool orchestrates parallel-running AI CLI agents in isolated Git worktrees.
 
 ## Tech Stack
 
@@ -20,7 +20,7 @@ All common scripts should be kept in the `./justfile` for easy access. Update th
 Available recipes:
 
 - `just check` # Check for compiler or linting error
-- `just orchestra *ARGS` # Start the app with the given args
+- `just agency *ARGS` # Start the app with the given args
 - `just test *ARGS` # Run the tests (alias to cargo test)
 
 ## Context7 Library IDs

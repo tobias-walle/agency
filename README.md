@@ -1,8 +1,8 @@
-# Orchestra
+# Agency
 
-Orchestra lets you run multiple AI CLI agents in parallel, each in its own isolated Git worktree.
+Agency lets you run multiple AI CLI agents in parallel, each in its own isolated Git worktree.
 It uses a single Rust daemon with JSON-RPC and MCP interfaces to manage everything.
-Orchestra is designed for predictable task management, easy TUI attach/detach, and minimal overhead.
+Agency is designed for predictable task management, easy TUI attach/detach, and minimal overhead.
 
 ## Features
 
@@ -38,44 +38,44 @@ Basic CLI usage:
 
 ```bash
 # Initialize project scaffolding and config
-orchestra init
+agency init
 
 # Daemon lifecycle (macOS launch agent is optional)
-orchestra daemon install
-orchestra daemon start
-orchestra daemon status
-# orchestra daemon stop
+agency daemon install
+agency daemon start
+agency daemon status
+# agency daemon stop
 
 # Create and manage tasks
-orchestra new <slug>
-orchestra edit <id|slug>
-orchestra start <id|slug>
-orchestra stop <id|slug>
-orchestra attach <id|slug>
-orchestra idle <id|slug>
-orchestra complete <id|slug>
-orchestra fail <id|slug>
-orchestra reviewed <id|slug>
-orchestra status
+agency new <slug>
+agency edit <id|slug>
+agency start <id|slug>
+agency stop <id|slug>
+agency attach <id|slug>
+agency idle <id|slug>
+agency complete <id|slug>
+agency fail <id|slug>
+agency reviewed <id|slug>
+agency status
 
 # Merge workflow
-gorchestra merge <id|slug> [--into <branch>]
+agency merge <id|slug> [--into <branch>]
 
 # Cleanup merged tasks
-gorchestra gc
+agency gc
 
 # Utilities
-gorchestra path <id|slug>
-orchestra shell-hook
-orchestra session set <id|slug> <session_id>
+agency path <id|slug>
+agency shell-hook
+agency session set <id|slug> <session_id>
 ```
 
 Helpful commands:
 
 ```bash
 # Show help / version
-orchestra --help
-orchestra --version
+agency --help
+agency --version
 
 # Run tests / checks
 just test
@@ -84,14 +84,14 @@ just check
 
 ## Configuration
 
-- Global: `~/.config/orchestra/config.toml`
-- Project: `./.orchestra/config.toml`
-- Socket: `ORCHESTRA_SOCKET` controls the Unix socket path
+- Global: `~/.config/agency/config.toml`
+- Project: `./.agency/config.toml`
+- Socket: `AGENCY_SOCKET` controls the Unix socket path
 - Selected settings: log level (off|warn|info|debug|trace), idle timeout, concurrency limits, confirmation defaults
 
 ## Logging
 
-- Structured JSON logs are written to `./.orchestra/logs.jsonl`
+- Structured JSON logs are written to `./.agency/logs.jsonl`
 - Each entry includes timestamp, level, task id/slug (when applicable), and event context
 
 ## License

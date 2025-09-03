@@ -2,12 +2,12 @@ use std::path::{Path, PathBuf};
 
 use crate::adapters::fs;
 
-/// Compute the branch name for a task: `orchestra/{id}-{slug}`
+/// Compute the branch name for a task: `agency/{id}-{slug}`
 pub fn task_branch_name(id: u64, slug: &str) -> String {
-  format!("orchestra/{}-{}", id, slug)
+  format!("agency/{}-{}", id, slug)
 }
 
-/// Compute the worktree path under `.orchestra/worktrees/{id}-{slug}`
+/// Compute the worktree path under `.agency/worktrees/{id}-{slug}`
 pub fn task_worktree_path(project_root: &Path, id: u64, slug: &str) -> PathBuf {
   fs::worktrees_dir(project_root).join(format!("{}-{}", id, slug))
 }
@@ -43,10 +43,10 @@ mod tests {
   fn naming_helpers() {
     let td = tempfile::tempdir().unwrap();
     let root = td.path();
-    assert_eq!(task_branch_name(42, "feat-x"), "orchestra/42-feat-x");
+    assert_eq!(task_branch_name(42, "feat-x"), "agency/42-feat-x");
     assert_eq!(
       task_worktree_path(root, 42, "feat-x"),
-      root.join(".orchestra/worktrees/42-feat-x")
+      root.join(".agency/worktrees/42-feat-x")
     );
   }
 }

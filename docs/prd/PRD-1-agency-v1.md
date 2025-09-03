@@ -1,6 +1,6 @@
-# Orchestra PRD (v1)
+# Agency PRD (v1)
 
-The Orchestra tool orchestrates parallel-running AI CLI agents in isolated Git worktrees, with a single Rust daemon, a JSON-RPC API, an MCP interface, and a thin CLI. The design optimizes for deterministic task lifecycles, ergonomic TUI attach/detach, and low overhead.
+The Agency tool orchestrates parallel-running AI CLI agents in isolated Git worktrees, with a single Rust daemon, a JSON-RPC API, an MCP interface, and a thin CLI. The design optimizes for deterministic task lifecycles, ergonomic TUI attach/detach, and low overhead.
 
 ## Goals
 
@@ -21,7 +21,7 @@ The Orchestra tool orchestrates parallel-running AI CLI agents in isolated Git w
 
 ### Tasks
 
-- Task files live at `./.orchestra/tasks/{id}-{slug}.md`
+- Task files live at `./.agency/tasks/{id}-{slug}.md`
 - `id` (numeric, autoincrement) and `slug` (string) are parsed from the filename
 - YAML header is the only persisted metadata; do not duplicate computable or ephemeral fields
 
@@ -43,8 +43,8 @@ session_id: <string|null> # set initially; updated if the tool starts a new sess
 
 Derived (not stored):
 
-- worktree path: `./.orchestra/worktrees/{id}-{slug}`
-- branch name: `orchestra/{id}-{slug}`
+- worktree path: `./.agency/worktrees/{id}-{slug}`
+- branch name: `agency/{id}-{slug}`
 - Base branch head SHA is captured when the task is started and recorded in the central event log as `base_sha` (not persisted in YAML). This value is used for diff computation and merge validation.
 
 ### Status Lifecycle
@@ -59,7 +59,7 @@ Transitions:
 
 - new task: `draft`
 - start: allocate worktree/branch, run setup, spawn agent in PTY, set `running`
-- idle detection: if no PTY output for 10s (configurable), set `idle`; any output or user keystroke flips back to `running` (with 2s dwell to avoid flapping). The idle state can also be triggered via the CLI `orchestra idle <session-id|id|slug>` (via adapter hooks)
+- idle detection: if no PTY output for 10s (configurable), set `idle`; any output or user keystroke flips back to `running` (with 2s dwell to avoid flapping). The idle state can also be triggered via the CLI `agency idle <session-id|id|slug>` (via adapter hooks)
 - complete/reviewed/fail: explicit user or adapter/agent signals
 - merge: allowed only from `completed` or `reviewed`; on success set `merged` (cleanup needs to be triggered via gc)
 
@@ -69,12 +69,12 @@ Transitions:
 
 - Single user-level daemon written in Rust
 - Exposes JSON-RPC 2.0 over a Unix domain socket
-- Socket path controlled by `ORCHESTRA_SOCKET`
-  - Linux default: `$XDG_RUNTIME_DIR/orchestra.sock` or fallback `/var/run/orchestra.sock`
-  - macOS default: `$XDG_RUNTIME_DIR/orchestra.sock` or fallback `/Library/Application Support/orchestra/orchestra.sock`
+- Socket path controlled by `AGENCY_SOCKET`
+  - Linux default: `$XDG_RUNTIME_DIR/agency.sock` or fallback `/var/run/agency.sock`
+  - macOS default: `$XDG_RUNTIME_DIR/agency.sock` or fallback `/Library/Application Support/agency/agency.sock`
   - Windows: Not supported (return error)
 - PID and in-memory state (process handles, PTY sessions) managed internally; only one instance runs (file lock on socket path)
-- `orchestra daemon install` optionally sets up a launchd agent (macOS) with user confirmation
+- `agency daemon install` optionally sets up a launchd agent (macOS) with user confirmation
 
 ### PTY Backend
 
@@ -82,40 +82,40 @@ Transitions:
 - Supports TUIs (Opencode, Neovim) reliably
 - Propagate terminal size on attach and handle resize events
 - Single active attachment at a time (v1)
-- Detach: default Ctrl-q; configurable via config `pty.detach_keys` or env `ORCHESTRA_DETACH_KEYS` (no CLI flag)
+- Detach: default Ctrl-q; configurable via config `pty.detach_keys` or env `AGENCY_DETACH_KEYS` (no CLI flag)
 - Do not override Ctrl-C by default; pass through to the PTY app
 - On successful attach, print hint: "Attached. Detach: Ctrl-q (configurable)"
 
 ### Git Integration
 
 - Use `git2` for worktrees/branches
-- Worktree: `./.orchestra/worktrees/{id}-{slug}`
-- Branch: `orchestra/{id}-{slug}`
+- Worktree: `./.agency/worktrees/{id}-{slug}`
+- Branch: `agency/{id}-{slug}`
 - On start: ensure `base_branch` exists and is up to date; record base tip SHA in events/in-memory
 - After merge: remove worktree and optionally delete local task branch; mark task `merged`
 
 ### Interfaces
 
 - CLI (via `clap`) acts as a JSON-RPC client to the daemon
-- MCP server exposed by `orchestra mcp` subcommand, bridging to the daemon task API (uses <https://github.com/modelcontextprotocol/rust-sdk>)
+- MCP server exposed by `agency mcp` subcommand, bridging to the daemon task API (uses <https://github.com/modelcontextprotocol/rust-sdk>)
 
 ### Configuration
 
-- Global: `~/.config/orchestra/config.toml`
-- Project: `./.orchestra/config.toml`
+- Global: `~/.config/agency/config.toml`
+- Project: `./.agency/config.toml`
 - Settings include: log level (off|warn|info|debug|trace), idle timeout (default 10s), dwell (2s), PTY detach keys (`pty.detach_keys`, default `ctrl-q`), concurrency limits, confirmation policy defaults
-- Env override: `ORCHESTRA_DETACH_KEYS` to override detach sequence per-session
+- Env override: `AGENCY_DETACH_KEYS` to override detach sequence per-session
 - Global and local config are merged
 
 ### Setup Script
 
 - Optional per-project `setup` script executed in the new worktree before agent start
-- Receives env: `ORCHESTRA_TASK_ID`, `ORCHESTRA_TASK_SLUG`, `ORCHESTRA_WORKTREE_PATH`, `ORCHESTRA_BASE_BRANCH`, `ORCHESTRA_BRANCH_NAME`, `ORCHESTRA_AGENT`
+- Receives env: `AGENCY_TASK_ID`, `AGENCY_TASK_SLUG`, `AGENCY_WORKTREE_PATH`, `AGENCY_BASE_BRANCH`, `AGENCY_BRANCH_NAME`, `AGENCY_AGENT`
 - Non-zero exit marks task `failed` and logs output
 
 ## Logging and Observability
 
-- Structured JSON logs via `tracing` written to `./.orchestra/logs.jsonl`
+- Structured JSON logs via `tracing` written to `./.agency/logs.jsonl`
 - Each log entry includes timestamp, level, task id/slug (when applicable), and event context
 - Log level configured globally or per project; verbose logging opt-in
 - Event timeline per task appended to the central log stream (no per-task files in v1)
@@ -123,40 +123,40 @@ Transitions:
 ## Agents and Adapters
 
 - Initial Adapters: `opencode`, `claude-code`, and `fake` for testing
-- Adapters are configured via `.orchestra/agents/*.toml`.
+- Adapters are configured via `.agency/agents/*.toml`.
   Each adapter defines how to spawn the agent or resume the session.
 
-  **Example (`.orchestra/agents/fake.toml`):**
+  **Example (`.agency/agents/fake.toml`):**
 
   ```toml
   [adapter]
   name = "fake"
-  cmd = "orchestra-fake-agent"
-  cmd_resume = "orchestra-fake-agent --resume $ORCHESTRA_SESSION_ID"
+  cmd = "agency-fake-agent"
+  cmd_resume = "agency-fake-agent --resume $AGENCY_SESSION_ID"
   ```
 
 - Include a `fake` adapter for tests.
 
 ## CLI Commands
 
-- `orchestra init` # create project scaffolding and config
-- `orchestra daemon install` # interactive setup of launch agent (macOS)
-- `orchestra daemon start|status|stop`
-- `orchestra new [slug]` # creates task file, opens $EDITOR to set title/body
-- `orchestra edit <id|slug>`
-- `orchestra start <id|slug>`
-- `orchestra stop <id|slug>` # confirm unless `-y`
-- `orchestra attach <id|slug>` # hint shown on attach; detach configurable via config/env
-- `orchestra idle <id|slug>` # manually set idle state (optional)
-- `orchestra complete <id|slug>`
-- `orchestra fail <id|slug>`
-- `orchestra reviewed <id|slug>`
-- `orchestra status`
-- `orchestra merge <id|slug> [--into <branch>]`
-- `orchestra gc` # deletes tasks in `merged` state (list all tasks to delete and confirm unless `-y`)
-- `orchestra path <id|slug>` # prints worktree path
-- `orchestra shell-hook` # prints shell function to `cd` into worktree (zsh/bash/fish/nushell)
-- `orchestra session set <id|slug> <session_id>`
+- `agency init` # create project scaffolding and config
+- `agency daemon install` # interactive setup of launch agent (macOS)
+- `agency daemon start|status|stop`
+- `agency new [slug]` # creates task file, opens $EDITOR to set title/body
+- `agency edit <id|slug>`
+- `agency start <id|slug>`
+- `agency stop <id|slug>` # confirm unless `-y`
+- `agency attach <id|slug>` # hint shown on attach; detach configurable via config/env
+- `agency idle <id|slug>` # manually set idle state (optional)
+- `agency complete <id|slug>`
+- `agency fail <id|slug>`
+- `agency reviewed <id|slug>`
+- `agency status`
+- `agency merge <id|slug> [--into <branch>]`
+- `agency gc` # deletes tasks in `merged` state (list all tasks to delete and confirm unless `-y`)
+- `agency path <id|slug>` # prints worktree path
+- `agency shell-hook` # prints shell function to `cd` into worktree (zsh/bash/fish/nushell)
+- `agency session set <id|slug> <session_id>`
 
 All destructive commands prompt for confirmation by default; `-y` overrides. Defaults configurable. The default answer is "No" (`confirm_by_default = false`) for safety; users can opt-in to auto-confirm via config or flags.
 

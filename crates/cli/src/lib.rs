@@ -51,14 +51,14 @@ pub fn run() {
   }
 }
 
-fn parse_task_ref(s: &str) -> orchestra_core::rpc::TaskRef {
+fn parse_task_ref(s: &str) -> agency_core::rpc::TaskRef {
   if let Ok(id) = s.parse::<u64>() {
-    orchestra_core::rpc::TaskRef {
+    agency_core::rpc::TaskRef {
       id: Some(id),
       slug: None,
     }
   } else {
-    orchestra_core::rpc::TaskRef {
+    agency_core::rpc::TaskRef {
       id: None,
       slug: Some(s.to_string()),
     }
@@ -88,7 +88,7 @@ fn parse_detach_keys(s: &str) -> Vec<u8> {
 fn render_rpc_failure(action: &str, sock: &std::path::Path, err: &rpc::client::Error) -> String {
   match err {
     rpc::client::Error::Client(_) | rpc::client::Error::Http(_) => format!(
-      "{} failed: daemon not reachable at {}. Start it with `orchestra daemon start` or set ORCHESTRA_SOCKET to a valid path.",
+      "{} failed: daemon not reachable at {}. Start it with `agency daemon start` or set AGENCY_SOCKET to a valid path.",
       action,
       sock.display()
     ),
@@ -96,11 +96,11 @@ fn render_rpc_failure(action: &str, sock: &std::path::Path, err: &rpc::client::E
   }
 }
 
-fn agent_arg_to_core(a: args::AgentArg) -> orchestra_core::domain::task::Agent {
+fn agent_arg_to_core(a: args::AgentArg) -> agency_core::domain::task::Agent {
   match a {
-    args::AgentArg::Opencode => orchestra_core::domain::task::Agent::Opencode,
-    args::AgentArg::ClaudeCode => orchestra_core::domain::task::Agent::ClaudeCode,
-    args::AgentArg::Fake => orchestra_core::domain::task::Agent::Fake,
+    args::AgentArg::Opencode => agency_core::domain::task::Agent::Opencode,
+    args::AgentArg::ClaudeCode => agency_core::domain::task::Agent::ClaudeCode,
+    args::AgentArg::Fake => agency_core::domain::task::Agent::Fake,
   }
 }
 
@@ -110,7 +110,7 @@ fn new_task(a: args::NewArgs) {
     std::process::exit(1);
   };
   let root = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
-  let params = orchestra_core::rpc::TaskNewParams {
+  let params = agency_core::rpc::TaskNewParams {
     project_root: root.display().to_string(),
     slug: a.slug,
     title: a.title,
@@ -174,13 +174,13 @@ fn list_status() {
       println!("ID   SLUG                 STATUS     TITLE");
       for t in list.tasks {
         let status = match t.status {
-          orchestra_core::domain::task::Status::Draft => "draft",
-          orchestra_core::domain::task::Status::Running => "running",
-          orchestra_core::domain::task::Status::Idle => "idle",
-          orchestra_core::domain::task::Status::Completed => "completed",
-          orchestra_core::domain::task::Status::Reviewed => "reviewed",
-          orchestra_core::domain::task::Status::Failed => "failed",
-          orchestra_core::domain::task::Status::Merged => "merged",
+          agency_core::domain::task::Status::Draft => "draft",
+          agency_core::domain::task::Status::Running => "running",
+          agency_core::domain::task::Status::Idle => "idle",
+          agency_core::domain::task::Status::Completed => "completed",
+          agency_core::domain::task::Status::Reviewed => "reviewed",
+          agency_core::domain::task::Status::Failed => "failed",
+          agency_core::domain::task::Status::Merged => "merged",
         };
         println!("{:<4} {:<20} {:<10} {}", t.id, t.slug, status, t.title);
       }
@@ -206,8 +206,8 @@ fn attach_interactive(args: args::AttachArgs) {
   let root = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
   let tref = parse_task_ref(&args.task);
   // Determine detach keys: env overrides config; default to ctrl-q
-  let cfg = orchestra_core::config::load(Some(&root)).unwrap_or_default();
-  let detach_cfg = std::env::var("ORCHESTRA_DETACH_KEYS")
+  let cfg = agency_core::config::load(Some(&root)).unwrap_or_default();
+  let detach_cfg = std::env::var("AGENCY_DETACH_KEYS")
     .ok()
     .or_else(|| cfg.pty.detach_keys.clone());
   let detach_seq = detach_cfg
@@ -331,22 +331,22 @@ fn attach_interactive(args: args::AttachArgs) {
 fn init_project() {
   let root = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
   // Ensure layout and default config
-  if let Err(e) = orchestra_core::adapters::fs::ensure_layout(&root) {
-    eprintln!("failed to create .orchestra layout: {e}");
+  if let Err(e) = agency_core::adapters::fs::ensure_layout(&root) {
+    eprintln!("failed to create .agency layout: {e}");
     std::process::exit(1);
   }
-  if let Err(e) = orchestra_core::config::write_default_project_config(&root) {
+  if let Err(e) = agency_core::config::write_default_project_config(&root) {
     eprintln!("failed to write config: {e}");
     std::process::exit(1);
   }
   println!(
-    "initialized .orchestra at {}",
-    root.join(".orchestra").display()
+    "initialized .agency at {}",
+    root.join(".agency").display()
   );
 }
 
 fn resolve_socket() -> Option<PathBuf> {
-  orchestra_core::config::resolve_socket_path().ok()
+  agency_core::config::resolve_socket_path().ok()
 }
 
 fn print_status() {
@@ -388,7 +388,7 @@ fn run_daemon_foreground() {
     .unwrap();
 
   rt.block_on(async move {
-    match orchestra_core::daemon::start(&sock).await {
+    match agency_core::daemon::start(&sock).await {
       Ok(handle) => {
         handle.wait().await;
       }
@@ -418,11 +418,11 @@ fn start_daemon() {
   }
 
   // Spawn background process to run the daemon
-  let exe = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("orchestra"));
+  let exe = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("agency"));
   let mut cmd = Command::new(exe);
   cmd.arg("daemon").arg("run");
   // Ensure child and parent agree on socket path
-  cmd.env("ORCHESTRA_SOCKET", &sock);
+  cmd.env("AGENCY_SOCKET", &sock);
   // Detach stdio
   cmd
     .stdin(Stdio::null())
@@ -498,13 +498,13 @@ mod tests {
   #[test]
   fn help_flag_triggers_displayhelp() {
     // Using try_parse_from to capture the help behavior without exiting the process.
-    let err = args::Cli::try_parse_from(["orchestra", "--help"]).unwrap_err();
+    let err = args::Cli::try_parse_from(["agency", "--help"]).unwrap_err();
     assert_eq!(err.kind(), ErrorKind::DisplayHelp);
   }
 
   #[test]
   fn version_flag_triggers_displayversion() {
-    let err = args::Cli::try_parse_from(["orchestra", "--version"]).unwrap_err();
+    let err = args::Cli::try_parse_from(["agency", "--version"]).unwrap_err();
     assert_eq!(err.kind(), ErrorKind::DisplayVersion);
   }
 

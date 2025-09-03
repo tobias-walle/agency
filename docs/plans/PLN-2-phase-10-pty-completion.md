@@ -4,7 +4,7 @@ Date: 2025-08-31
 
 ## Decisions (confirmed)
 
-- Default detach sequence: Ctrl-q (C-q). Configurable via config (`pty.detach_keys`) and env `ORCHESTRA_DETACH_KEYS`. No CLI flag required.
+- Default detach sequence: Ctrl-q (C-q). Configurable via config (`pty.detach_keys`) and env `AGENCY_DETACH_KEYS`. No CLI flag required.
 - `pty.attach` may be invoked when the task is not `running`, but the daemon must respond with a clear error describing the required state.
 - PTY shell: spawn plain `sh` (no `-l`) for deterministic output and stable tests.
 
@@ -12,7 +12,7 @@ Date: 2025-08-31
 
 Deliver a complete, test-backed PTY attach/detach implementation with a clear lifecycle and manual CLI flows:
 
-- Provide CLI commands to create and start tasks: `orchestra new`, `orchestra start`, `orchestra status`.
+- Provide CLI commands to create and start tasks: `agency new`, `agency start`, `agency status`.
 - Enforce lifecycle boundaries: PTY session created on `task.start`; `pty.attach` requires `running`.
 - Stable PTY behavior and bounded buffers; correct resize and single-attachment semantics.
 - Fill the test gaps at core (daemon) and CLI levels.
@@ -58,7 +58,7 @@ Deliver a complete, test-backed PTY attach/detach implementation with a clear li
     - `start`: accept `<id|slug>`, call RPC, print new status.
     - `status`: list tasks in a simple, deterministic table/text (suitable for tests).
   - `attach` flow:
-    - Determine detach sequence from `Config.pty.detach_keys` or env `ORCHESTRA_DETACH_KEYS`; default to `ctrl-q`.
+    - Determine detach sequence from `Config.pty.detach_keys` or env `AGENCY_DETACH_KEYS`; default to `ctrl-q`.
     - Keep raw-mode input, filtering detach bytes locally; poll `pty.read`; on detach, call `pty.detach` and exit with message "detached".
 
 - `src/rpc/client.rs`
@@ -72,11 +72,11 @@ Deliver a complete, test-backed PTY attach/detach implementation with a clear li
   - Resolve default detach sequence to Ctrl‑q (C‑q) and remove CLI flag reference.
   - Add `pty.read` to the `pty.*` method list, note it’s a polling MVP.
 
-- `docs/prd/PRD-1-orchestra-v1.md`
+- `docs/prd/PRD-1-agency-v1.md`
   - Align detach default (Ctrl‑q) and emphasize config/env override only.
   - Mention `pty.read` polling.
 
-- `docs/plans/PLN-1-orchestra-mvp.md`
+- `docs/plans/PLN-1-agency-mvp.md`
   - Keep Phase 10 unchecked; add a short note referencing this plan (PLAN-2) for completion steps.
 
 ## Testing strategy
@@ -94,7 +94,7 @@ Deliver a complete, test-backed PTY attach/detach implementation with a clear li
   - Spawn daemon via CLI (`daemon start`).
   - Run `init`, `new`, `start` using CLI commands; then `attach`.
   - Drive input to stdin programmatically: send `echo hi\n`, assert output contains `hi`, then send detach bytes for Ctrl‑q; assert process exits and prints "detached".
-  - Verify no CLI flag for detach; add a test that sets `ORCHESTRA_DETACH_KEYS=ctrl-p,ctrl-q` and validates detach behavior.
+  - Verify no CLI flag for detach; add a test that sets `AGENCY_DETACH_KEYS=ctrl-p,ctrl-q` and validates detach behavior.
 
 - Config tests (`crates/core/src/config/mod.rs`)
   - Validate `pty.detach_keys` loads/merges correctly; env override honored by CLI.
@@ -102,7 +102,7 @@ Deliver a complete, test-backed PTY attach/detach implementation with a clear li
 ## Acceptance criteria
 
 - `just check` passes; `just test` passes.
-- `orchestra` provides `new`, `start`, `status`, `attach` commands; manual flow is usable end‑to‑end in a temp git repo.
+- `agency` provides `new`, `start`, `status`, `attach` commands; manual flow is usable end‑to‑end in a temp git repo.
 - Attaching to non‑running tasks produces a clear error.
 - Default detach is Ctrl‑q; configurable via config/env; CLI has no `--detach-keys`.
 - PTY output is deterministic enough for stable tests (no login shell noise).

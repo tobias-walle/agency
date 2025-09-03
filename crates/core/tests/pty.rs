@@ -6,11 +6,11 @@ use hyper::body::Bytes;
 use hyper::{Method, Request};
 use hyper_util::client::legacy::Client;
 use hyperlocal::UnixClientExt;
-use orchestra_core::rpc::{
+use agency_core::rpc::{
   PtyAttachResult, PtyReadResult, TaskInfo, TaskNewParams,
   TaskRef, TaskStartParams, TaskStartResult,
 };
-use orchestra_core::{adapters::fs as fsutil, domain::task::Agent, domain::task::Status, logging};
+use agency_core::{adapters::fs as fsutil, domain::task::Agent, domain::task::Status, logging};
 use serde::de::DeserializeOwned;
 use serde_json::{json, Value};
 
@@ -18,7 +18,7 @@ struct TestEnv {
   _td: tempfile::TempDir,
   root: std::path::PathBuf,
   sock: std::path::PathBuf,
-  handle: orchestra_core::daemon::DaemonHandle,
+  handle: agency_core::daemon::DaemonHandle,
 }
 
 fn build_request(sock: &Path, body: Value) -> Request<Full<Bytes>> {
@@ -70,7 +70,7 @@ async fn start_test_env() -> TestEnv {
   let root = td.path().to_path_buf();
   // init logs once per test file
   let log = fsutil::logs_path(&root);
-  logging::init(&log, orchestra_core::config::LogLevel::Info);
+  logging::init(&log, agency_core::config::LogLevel::Info);
 
   // init git repo with an initial commit on main
   let repo = git2::Repository::init(&root).unwrap();
@@ -95,8 +95,8 @@ async fn start_test_env() -> TestEnv {
   // set HEAD to main
   repo.set_head("refs/heads/main").unwrap();
 
-  let sock = td.path().join("orchestra.sock");
-  let handle = orchestra_core::daemon::start(&sock)
+  let sock = td.path().join("agency.sock");
+  let handle = agency_core::daemon::start(&sock)
     .await
     .expect("start daemon");
   tokio::time::sleep(Duration::from_millis(150)).await;

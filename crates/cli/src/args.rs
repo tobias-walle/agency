@@ -1,7 +1,7 @@
 use clap::{Args as ClapArgs, CommandFactory, Parser, Subcommand, ValueEnum};
 
 #[derive(Debug, Parser)]
-#[command(author, version, about = "Orchestra CLI", long_about = None, bin_name = "orchestra")]
+#[command(author, version, about = "Agency CLI", long_about = None, bin_name = "agency")]
 pub struct Cli {
   #[command(subcommand)]
   pub command: Option<Commands>,

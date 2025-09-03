@@ -18,6 +18,47 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 
 [[package]]
+name = "agency"
+version = "0.1.0"
+dependencies = [
+ "agency-core",
+ "assert_cmd",
+ "cli",
+]
+
+[[package]]
+name = "agency-core"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bytes",
+ "chrono",
+ "dirs",
+ "git2",
+ "http-body-util",
+ "hyper",
+ "hyper-util",
+ "hyperlocal",
+ "jsonrpsee",
+ "nix 0.30.1",
+ "once_cell",
+ "portable-pty",
+ "proptest",
+ "regex",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "tempfile",
+ "thiserror 2.0.16",
+ "tokio",
+ "toml",
+ "tracing",
+ "tracing-appender",
+ "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
 name = "aho-corasick"
 version = "1.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -304,6 +345,7 @@ checksum = "b94f61472cee1439c0b966b47e3aca9ae07e45d070759512cd390ea2bebc6675"
 name = "cli"
 version = "0.1.0"
 dependencies = [
+ "agency-core",
  "assert_cmd",
  "clap",
  "crossterm",
@@ -312,7 +354,6 @@ dependencies = [
  "hyper",
  "hyper-util",
  "hyperlocal",
- "orchestra-core",
  "pretty_assertions",
  "serde",
  "serde_json",
@@ -1318,47 +1359,6 @@ name = "option-ext"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "04744f49eae99ab78e0d5c0b603ab218f515ea8cfe5a456d7629ad883a3b6e7d"
-
-[[package]]
-name = "orchestra"
-version = "0.1.0"
-dependencies = [
- "assert_cmd",
- "cli",
- "orchestra-core",
-]
-
-[[package]]
-name = "orchestra-core"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "bytes",
- "chrono",
- "dirs",
- "git2",
- "http-body-util",
- "hyper",
- "hyper-util",
- "hyperlocal",
- "jsonrpsee",
- "nix 0.30.1",
- "once_cell",
- "portable-pty",
- "proptest",
- "regex",
- "serde",
- "serde_json",
- "serde_yaml",
- "tempfile",
- "thiserror 2.0.16",
- "tokio",
- "toml",
- "tracing",
- "tracing-appender",
- "tracing-subscriber",
- "uuid",
-]
 
 [[package]]
 name = "parking_lot"

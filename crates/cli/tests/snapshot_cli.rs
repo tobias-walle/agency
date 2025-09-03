@@ -3,7 +3,7 @@ use std::process::Command;
 
 #[test]
 fn cli_help_output_is_stable() {
-  let mut cmd = Command::cargo_bin("orchestra").expect("compile bin");
+  let mut cmd = Command::cargo_bin("agency").expect("compile bin");
   let output = cmd
     .arg("--help")
     .assert()
@@ -12,9 +12,9 @@ fn cli_help_output_is_stable() {
     .stdout
     .clone();
   let text = String::from_utf8_lossy(&output);
-  let expected = r#"Orchestra CLI
+  let expected = r#"Agency CLI
 
-Usage: orchestra [COMMAND]
+Usage: agency [COMMAND]
 
 Commands:
   daemon  Daemon related commands
@@ -36,14 +36,14 @@ Options:
 fn daemon_start_status_stop_end_to_end() {
   // Unique socket path in tmp dir
   let mut sock = std::env::temp_dir();
-  sock.push(format!("orchestra-test-{}.sock", std::process::id()));
+  sock.push(format!("agency-test-{}.sock", std::process::id()));
   // Ensure parent exists
   std::fs::create_dir_all(sock.parent().unwrap()).unwrap();
 
   // Start
-  let mut start = Command::cargo_bin("orchestra").expect("compile bin");
+  let mut start = Command::cargo_bin("agency").expect("compile bin");
   let output = start
-    .env("ORCHESTRA_SOCKET", &sock)
+    .env("AGENCY_SOCKET", &sock)
     .args(["daemon", "start"])
     .assert()
     .success()
@@ -57,9 +57,9 @@ fn daemon_start_status_stop_end_to_end() {
   );
 
   // Status
-  let mut status = Command::cargo_bin("orchestra").expect("compile bin");
+  let mut status = Command::cargo_bin("agency").expect("compile bin");
   let out2 = status
-    .env("ORCHESTRA_SOCKET", &sock)
+    .env("AGENCY_SOCKET", &sock)
     .args(["daemon", "status"])
     .assert()
     .success()
@@ -73,9 +73,9 @@ fn daemon_start_status_stop_end_to_end() {
   );
 
   // Stop
-  let mut stop = Command::cargo_bin("orchestra").expect("compile bin");
+  let mut stop = Command::cargo_bin("agency").expect("compile bin");
   let out3 = stop
-    .env("ORCHESTRA_SOCKET", &sock)
+    .env("AGENCY_SOCKET", &sock)
     .args(["daemon", "stop"])
     .assert()
     .success()

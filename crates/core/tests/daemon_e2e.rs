@@ -7,7 +7,7 @@ use hyper::body::Bytes;
 use hyper::{Method, Request};
 use hyper_util::client::legacy::Client;
 use hyperlocal::UnixClientExt;
-use orchestra_core::{adapters::fs as fsutil, logging, rpc::DaemonStatus};
+use agency_core::{adapters::fs as fsutil, logging, rpc::DaemonStatus};
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 
@@ -16,7 +16,7 @@ struct TestEnv {
   _td: tempfile::TempDir,
   log_path: PathBuf,
   sock: PathBuf,
-  handle: orchestra_core::daemon::DaemonHandle,
+  handle: agency_core::daemon::DaemonHandle,
 }
 
 static LOG_DIR: OnceLock<tempfile::TempDir> = OnceLock::new();
@@ -29,7 +29,7 @@ fn ensure_logging_once() -> PathBuf {
   let td = tempfile::tempdir().unwrap();
   let root = td.path().to_path_buf();
   let log_path = fsutil::logs_path(&root);
-  logging::init(&log_path, orchestra_core::config::LogLevel::Info);
+  logging::init(&log_path, agency_core::config::LogLevel::Info);
   let _ = LOG_DIR.set(td); // keep tempdir alive for process lifetime
   let _ = LOG_PATH.set(log_path.clone());
   log_path
@@ -39,8 +39,8 @@ async fn start_test_env() -> TestEnv {
   let log_path = ensure_logging_once();
 
   let td = tempfile::tempdir().unwrap();
-  let sock = td.path().join("orchestra.sock");
-  let handle = orchestra_core::daemon::start(&sock)
+  let sock = td.path().join("agency.sock");
+  let handle = agency_core::daemon::start(&sock)
     .await
     .expect("start daemon");
 

@@ -1,11 +1,11 @@
 [package]
-name = "orchestra"
+name = "agency"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
 cli = { path = "../../crates/cli" }
-orchestra-core = { version = "0.1.0", path = "../../crates/core" }
+agency-core = { version = "0.1.0", path = "../../crates/core" }
 
 [dev-dependencies]
 assert_cmd = "2.0.17"
