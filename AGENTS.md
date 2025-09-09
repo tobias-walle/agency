@@ -66,3 +66,7 @@ If you add a new dependency, resolve its Context7 ID and append it [here](./AGEN
   - Lookup new APIs before you use them
   - Check correct API use then encountering an error
 - Never use single letter variable names if they span more than 3 lines
+- You MUST work with TDD. Especially then fixing bugs.
+  1. Write the tests first, make sure they fail
+  2. Implement the functionality
+  3. Make sure the tests pass

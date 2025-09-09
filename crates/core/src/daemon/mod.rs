@@ -274,10 +274,11 @@ pub async fn start(socket_path: &Path) -> io::Result<DaemonHandle> {
         ));
       }
       // Attach to existing session
-      let attach_id = crate::adapters::pty::attach(id)
+      let attach_id = crate::adapters::pty::attach(&root, id)
         .map_err(|e| ErrorObjectOwned::owned(-32010, e.to_string(), None::<()>))?;
       // Apply initial size
       let _ = crate::adapters::pty::resize(&attach_id, p.rows, p.cols);
+      tracing::info!(event = "pty_attach", task_id = id, attachment_id = %attach_id, rows = p.rows, cols = p.cols, "pty attached");
       let res = PtyAttachResult { attachment_id: attach_id };
       Ok(serde_json::to_value(res).unwrap())
     })
@@ -287,13 +288,33 @@ pub async fn start(socket_path: &Path) -> io::Result<DaemonHandle> {
   module
     .register_method("pty.read", |params, _ctx: &PathBuf, _ext| -> RpcResult<serde_json::Value> {
       let p: PtyReadParams = params.parse()?;
-      let (data, eof) = crate::adapters::pty::read(&p.attachment_id, p.max_bytes)
+      let (data, eof) = crate::adapters::pty::read(&p.attachment_id, p.max_bytes, p.wait_ms)
         .map_err(|e| ErrorObjectOwned::owned(-32011, e.to_string(), None::<()>))?;
       let text = String::from_utf8_lossy(&data).to_string();
       let res = PtyReadResult { data: text, eof };
       Ok(serde_json::to_value(res).unwrap())
     })
     .expect("register pty.read");
+
+  // ---- pty.tick ----
+  module
+    .register_method("pty.tick", |params, _ctx: &PathBuf, _ext| -> RpcResult<serde_json::Value> {
+      let p: crate::rpc::PtyTickParams = params.parse()?;
+      if let Some(ref input) = p.input {
+        crate::adapters::pty::input(&p.attachment_id, input.as_bytes())
+          .map_err(|e| ErrorObjectOwned::owned(-32012, e.to_string(), None::<()>))?;
+      }
+      if let Some((rows, cols)) = p.resize {
+        crate::adapters::pty::resize(&p.attachment_id, rows, cols)
+          .map_err(|e| ErrorObjectOwned::owned(-32013, e.to_string(), None::<()>))?;
+      }
+      let (data, eof) = crate::adapters::pty::read(&p.attachment_id, p.max_bytes, p.wait_ms)
+        .map_err(|e| ErrorObjectOwned::owned(-32011, e.to_string(), None::<()>))?;
+      let text = String::from_utf8_lossy(&data).to_string();
+      let res = PtyReadResult { data: text, eof };
+      Ok(serde_json::to_value(res).unwrap())
+    })
+    .expect("register pty.tick");
 
   // ---- pty.input ----
   module
@@ -311,6 +332,7 @@ pub async fn start(socket_path: &Path) -> io::Result<DaemonHandle> {
       let p: PtyResizeParams = params.parse()?;
       crate::adapters::pty::resize(&p.attachment_id, p.rows, p.cols)
         .map_err(|e| ErrorObjectOwned::owned(-32013, e.to_string(), None::<()>))?;
+      tracing::info!(event = "pty_resize", attachment_id = %p.attachment_id, rows = p.rows, cols = p.cols, "pty resized");
       Ok(serde_json::json!(true))
     })
     .expect("register pty.resize");
@@ -321,6 +343,7 @@ pub async fn start(socket_path: &Path) -> io::Result<DaemonHandle> {
       let p: PtyDetachParams = params.parse()?;
       crate::adapters::pty::detach(&p.attachment_id)
         .map_err(|e| ErrorObjectOwned::owned(-32014, e.to_string(), None::<()>))?;
+      tracing::info!(event = "pty_detach", attachment_id = %p.attachment_id, "pty detached");
       Ok(serde_json::json!(true))
     })
     .expect("register pty.detach");

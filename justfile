@@ -5,7 +5,7 @@ _list:
 
 # Start the app
 agency *ARGS:
-  cargo run -p agency {{ARGS}}
+  cargo run -p agency -- {{ARGS}}
 
 # Run the tests
 test *ARGS:

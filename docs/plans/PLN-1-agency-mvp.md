@@ -141,13 +141,16 @@ Notes:
 - Problems: Core config tests failed on macOS tmp paths when resolving socket fallback; fixed by preferring `dirs::runtime_dir()` over `data_dir()` in `resolve_socket_path()`. Also kept `confirm_by_default` default to `false` for security (default answer is "No").
 - Derivations: Kept `task.start` as a pure stub (no PTY/worktree yet); it validates `base_branch` via `git2`, logs `base_sha`, and updates YAML status to `running`.
 
-## [ ] Phase 10: PTY backend and attach/detach
+## [x] Phase 10: PTY backend and attach/detach
 
-Note: For completion details and defaults, see PLAN-2 (Phase 10 – PTY backend completion).
+Note: For completion details and finalized defaults, see PLAN-2 (Phase 10 – PTY backend completion).
 
-- What to do: Add `portable-pty` adapter and `pty.attach/input/resize` RPCs with single active attachment. Implement detach sequence handling in the CLI attach path: default `Ctrl-p, Ctrl-q` (Docker-style), configurable via `--detach-keys` and config `pty.detach_keys`/env `AGENCY_DETACH_KEYS`. Print hint on attach and do not override `Ctrl-C` by default.
+- What to do: Add `portable-pty` adapter and `pty.attach/read/input/resize/detach` RPCs with single active attachment. Implement detach sequence handling in the CLI attach path: default `Ctrl-q`, configurable via config `pty.detach_keys` and env `AGENCY_DETACH_KEYS` (no CLI flag). Print hint on attach and do not override `Ctrl-C` by default. Propagate terminal size changes during attach.
 - Testing strategy: Integration test that attaches, sends input, receives expected output; resize event recorded. Add tests for detach handling (simulate key sequence not forwarded to PTY, local detach occurs, session keeps running) and for custom detach sequences. Snapshot test includes hint line.
-- Feedback loop: `agency attach <task>` shows live PTY output; pressing default or configured detach sequence cleanly detaches without stopping the agent.
+- Feedback loop: `agency attach <task>` shows live PTY output; pressing default or configured detach sequence cleanly detaches without stopping the agent; window resizes are communicated.
+
+Notes:
+- Deviates from the initial Docker-style default and CLI flag: default is `Ctrl-q` and configuration is via config/env only, per ADR and PLAN-2.
 
 ## [ ] Phase 11: Idle detection with dwell and signaling
 

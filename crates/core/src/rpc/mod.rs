@@ -101,6 +101,8 @@ pub struct PtyReadParams {
   pub attachment_id: String,
   #[serde(default)]
   pub max_bytes: Option<usize>,
+  #[serde(default)]
+  pub wait_ms: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -129,4 +131,19 @@ pub struct PtyResizeParams {
 #[serde(rename_all = "snake_case")]
 pub struct PtyDetachParams {
   pub attachment_id: String,
+}
+
+// ---- Extended tick DTOs ----
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct PtyTickParams {
+  pub attachment_id: String,
+  #[serde(default)]
+  pub input: Option<String>,
+  #[serde(default)]
+  pub resize: Option<(u16, u16)>, // (rows, cols)
+  #[serde(default)]
+  pub max_bytes: Option<usize>,
+  #[serde(default)]
+  pub wait_ms: Option<u64>,
 }

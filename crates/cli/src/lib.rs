@@ -4,6 +4,7 @@ pub mod rpc;
 use clap::Parser;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
+use std::time::{Duration, Instant};
 
 pub fn run() {
   // If no additional args, show help and exit 0
@@ -287,13 +288,62 @@ fn attach_interactive(args: args::AttachArgs) {
     }
   });
 
-  // output polling loop
+  // output polling loop + resize handling with improved input batching and session reuse
   let mut stdout = std::io::stdout();
   let mut detached = false;
+
+  // spawn a thread to emit resize events into an mpsc channel using crossterm
+  let (tx_resize, rx_resize) = mpsc::channel::<(u16, u16)>();
+  std::thread::spawn(move || {
+    use crossterm::event::{self, Event};
+    loop {
+      if event::poll(std::time::Duration::from_millis(100)).unwrap_or(false)
+        && let Ok(Event::Resize(cols, rows)) = event::read()
+      {
+        // note: crossterm provides cols, rows order
+        let _ = tx_resize.send((rows, cols));
+      }
+    }
+  });
+
+  // Use session for efficient RPC calls
+  let session = rpc::client::PtySession::new();
+
   rt.block_on(async {
     loop {
-      // drain output first
-      match rpc::client::pty_read(&sock, &attachment_id, Some(8192)).await {
+      let start = Instant::now();
+      // Drain all pending input first (batch processing)
+      let mut input_batch = Vec::new();
+      let mut want_detach = false;
+      while let Ok(msg) = rx.try_recv() {
+        match msg {
+          Msg::Data(d) => input_batch.extend(d),
+          Msg::Detach => {
+            want_detach = true;
+          }
+        }
+      }
+
+      // Send batched input if any
+      if !input_batch.is_empty() {
+        let _ = rpc::client::pty_input(&sock, &attachment_id, &input_batch).await;
+      }
+
+      // Handle resize events (non-blocking)
+      while let Ok((rows, cols)) = rx_resize.try_recv() {
+        let _ = rpc::client::pty_resize(&sock, &attachment_id, rows, cols).await;
+      }
+
+      // Read output
+      let rr = rpc::client::session::pty_read_wait(
+        &session,
+        &sock,
+        &attachment_id,
+        Some(8192),
+        Some(if input_batch.is_empty() { 40 } else { 8 }),
+      )
+      .await;
+      match rr {
         Ok(r) => {
           if !r.data.is_empty() {
             let _ = stdout.write_all(r.data.as_bytes());
@@ -305,17 +355,15 @@ fn attach_interactive(args: args::AttachArgs) {
         }
         Err(_) => break,
       }
-      // handle input
-      match rx.recv_timeout(std::time::Duration::from_millis(20)) {
-        Ok(Msg::Data(d)) => {
-          let _ = rpc::client::pty_input(&sock, &attachment_id, &d).await;
-        }
-        Ok(Msg::Detach) => {
-          detached = true;
-          break;
-        }
-        Err(mpsc::RecvTimeoutError::Timeout) => {}
-        Err(_) => break,
+
+      if want_detach {
+        detached = true;
+        break;
+      }
+
+      // Add a small delay to prevent CPU spinning
+      if start.elapsed() < Duration::from_millis(1) {
+        tokio::time::sleep(Duration::from_millis(1)).await;
       }
     }
   });
@@ -339,10 +387,7 @@ fn init_project() {
     eprintln!("failed to write config: {e}");
     std::process::exit(1);
   }
-  println!(
-    "initialized .agency at {}",
-    root.join(".agency").display()
-  );
+  println!("initialized .agency at {}", root.join(".agency").display());
 }
 
 fn resolve_socket() -> Option<PathBuf> {
