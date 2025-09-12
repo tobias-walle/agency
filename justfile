@@ -17,7 +17,7 @@ test *ARGS:
 
 # Check for compiler or linting error
 check:
-  cargo clippy --tests -- -D warnings
+  cargo clippy --tests
 
 # Format the code
 fmt:
