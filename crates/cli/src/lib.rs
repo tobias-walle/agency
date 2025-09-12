@@ -50,11 +50,66 @@ pub fn run() {
     Some(args::Commands::Attach(a)) => {
       attach_interactive(a);
     }
+    Some(args::Commands::Path(a)) => {
+      print_worktree_path(a);
+    }
+    Some(args::Commands::ShellHook) => {
+      print_shell_hook();
+    }
     None => {
       // No subcommand provided; show help
       args::Cli::print_help_and_exit();
     }
   }
+}
+
+fn print_worktree_path(a: args::PathArgs) {
+  let root = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+  let tref = parse_task_ref(&a.task);
+  // Resolve by scanning .agency/tasks without daemon
+  let tasks_dir = agency_core::adapters::fs::tasks_dir(&root);
+  let mut found: Option<(u64, String)> = None;
+  if let Ok(rd) = std::fs::read_dir(&tasks_dir) {
+    for entry in rd.flatten() {
+      let name = entry.file_name();
+      let name = name.to_string_lossy().to_string();
+      if let Ok((tid, slug)) = agency_core::domain::task::Task::parse_filename(&name) {
+        let mut ok = false;
+        if let Some(id) = tref.id {
+          ok = tid.0 == id;
+        }
+        if !ok && let Some(ref s) = tref.slug {
+          ok = &slug == s;
+        }
+        if ok {
+          found = Some((tid.0, slug));
+          break;
+        }
+      }
+    }
+  }
+  let (id, slug) = match found {
+    Some(x) => x,
+    None => {
+      eprintln!("task not found");
+      std::process::exit(1);
+    }
+  };
+  let path = agency_core::adapters::fs::worktree_path(&root, id, &slug);
+  println!("{}", path.display());
+}
+
+fn print_shell_hook() {
+  let hook = r#"# Agency shell hook: cd into a task worktree by id or slug
+agcd() {
+  if [ -z "$1" ]; then
+    echo "usage: agcd <id|slug>" 1>&2
+    return 1
+  fi
+  cd "$(agency path "$1")" || return 1
+}
+"#;
+  println!("{}", hook);
 }
 
 fn parse_task_ref(s: &str) -> agency_core::rpc::TaskRef {

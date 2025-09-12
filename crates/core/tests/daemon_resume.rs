@@ -6,7 +6,7 @@ use agency_core::rpc::{
 };
 use agency_core::{adapters::fs as fsutil, domain::task::Agent, logging};
 use serde_json::{Value, json};
-use test_support::{init_repo_with_initial_commit, poll_until, RpcResp, UnixRpcClient};
+use test_support::{RpcResp, UnixRpcClient, init_repo_with_initial_commit, poll_until};
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn resumes_running_task_on_boot() {
@@ -53,10 +53,16 @@ async fn resumes_running_task_on_boot() {
 
   let start_params = TaskStartParams {
     project_root: root.display().to_string(),
-    task: TaskRef { id: Some(info.id), slug: None },
+    task: TaskRef {
+      id: Some(info.id),
+      slug: None,
+    },
   };
   let s: RpcResp<TaskStartResult> = client
-    .call("task.start", Some(serde_json::to_value(&start_params).unwrap()))
+    .call(
+      "task.start",
+      Some(serde_json::to_value(&start_params).unwrap()),
+    )
     .await;
   assert!(s.error.is_none());
 

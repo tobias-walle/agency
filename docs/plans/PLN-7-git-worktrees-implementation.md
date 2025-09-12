@@ -65,3 +65,31 @@ We must implement real worktree lifecycle linked to the current repository.
 3. Add CLI `path` and `shell-hook` commands.
 4. Add tests for worktree creation, idempotency, and non-git error.
 5. Follow-ups: cleanup on merge and enhanced resume validation.
+
+## Progress (2025-09-12)
+
+We implemented the worktree lifecycle with TDD and made the tests pass.
+Core tests for worktrees were already in place and now validate the behavior end-to-end.
+
+- Implemented: `adapters/git.rs::ensure_task_worktree`.
+  Resolves base tip, creates the task branch `agency/{id}-{slug}` if missing, adds a real Git worktree under `.agency/worktrees/{id}-{slug}` tied to that branch, opens the worktree repo, sets `HEAD` to the task branch, and force-checks out files.
+  If the worktree directory exists, validates it is a Git repo and on the expected branch, otherwise returns a clear, actionable error.
+
+- Wired into: `daemon::task.start`.
+  Opens the repository and maps failures to a clear "not a git repository" error message.
+  Validates base branch tip, ensures the worktree via the adapter, persists status transition to `running`, and spawns the PTY with `cwd` set to the worktree path.
+
+- Tests: `crates/core/tests/git_worktrees.rs` are green.
+  Confirms creation on start, idempotent reuse of consistent state, and expected error outside a Git repo.
+
+- CLI: `agency path` and `agency shell-hook` are implemented and the help snapshot remains stable.
+
+- Still pending: `adapters/git.rs::remove_task_worktree` and additional inconsistent state tests beyond branch mismatch (e.g., existing dir that is not a Git worktree).
+
+## Next Session Plan
+
+- Implement `remove_task_worktree(repo, root, id, slug)` with safe removal semantics and optional branch deletion when appropriate.
+
+- Add tests to cover inconsistent state scenarios (existing non-repo directory, detached HEAD in worktree) and the removal lifecycle.
+
+- Consider follow-ups: cleanup on merge and enhanced resume validation when resuming running tasks.

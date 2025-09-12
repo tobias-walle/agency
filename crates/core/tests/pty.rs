@@ -6,7 +6,7 @@ use agency_core::rpc::{
 };
 use agency_core::{adapters::fs as fsutil, domain::task::Agent, domain::task::Status, logging};
 use serde_json::{Value, json};
-use test_support::{init_repo_with_initial_commit, poll_until, RpcResp, UnixRpcClient};
+use test_support::{RpcResp, UnixRpcClient, init_repo_with_initial_commit, poll_until};
 
 struct TestEnv {
   _td: tempfile::TempDir,
@@ -41,7 +41,12 @@ async fn start_test_env() -> TestEnv {
   .await;
   assert!(ok, "daemon did not become ready in time");
 
-  TestEnv { _td: td, root, sock, handle }
+  TestEnv {
+    _td: td,
+    root,
+    sock,
+    handle,
+  }
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -72,16 +77,26 @@ async fn pty_basic_flow_and_errors() {
     "rows": 24u16,
     "cols": 80u16
   });
-  let att_draft: RpcResp<PtyAttachResult> = client.call("pty.attach", Some(attach_params_draft)).await;
-  assert!(att_draft.error.is_some(), "expected error when attaching draft");
+  let att_draft: RpcResp<PtyAttachResult> =
+    client.call("pty.attach", Some(attach_params_draft)).await;
+  assert!(
+    att_draft.error.is_some(),
+    "expected error when attaching draft"
+  );
 
   // Start the task
   let start_params = TaskStartParams {
     project_root: env.root.display().to_string(),
-    task: TaskRef { id: Some(info.id), slug: None },
+    task: TaskRef {
+      id: Some(info.id),
+      slug: None,
+    },
   };
   let s: RpcResp<TaskStartResult> = client
-    .call("task.start", Some(serde_json::to_value(&start_params).unwrap()))
+    .call(
+      "task.start",
+      Some(serde_json::to_value(&start_params).unwrap()),
+    )
     .await;
   assert!(s.error.is_none(), "start error: {:?}", s.error);
   let sr = s.result.unwrap();
@@ -154,7 +169,10 @@ async fn pty_basic_flow_and_errors() {
 
   // Detach
   let _det: RpcResp<Value> = client
-    .call("pty.detach", Some(json!({ "attachment_id": attachment_id })))
+    .call(
+      "pty.detach",
+      Some(json!({ "attachment_id": attachment_id })),
+    )
     .await;
 
   // After detach, read should error
@@ -191,10 +209,16 @@ async fn pty_reattach_replays_scrollback_tail() {
 
   let start_params = TaskStartParams {
     project_root: env.root.display().to_string(),
-    task: TaskRef { id: Some(info.id), slug: None },
+    task: TaskRef {
+      id: Some(info.id),
+      slug: None,
+    },
   };
   let s: RpcResp<TaskStartResult> = client
-    .call("task.start", Some(serde_json::to_value(&start_params).unwrap()))
+    .call(
+      "task.start",
+      Some(serde_json::to_value(&start_params).unwrap()),
+    )
     .await;
   assert!(s.error.is_none());
 
@@ -243,7 +267,10 @@ async fn pty_reattach_replays_scrollback_tail() {
 
   // Detach
   let _: RpcResp<Value> = client
-    .call("pty.detach", Some(json!({ "attachment_id": attachment_id })))
+    .call(
+      "pty.detach",
+      Some(json!({ "attachment_id": attachment_id })),
+    )
     .await;
 
   // Re-attach
@@ -260,11 +287,18 @@ async fn pty_reattach_replays_scrollback_tail() {
     .await;
   assert!(r2.error.is_none());
   let replayed = r2.result.unwrap().data;
-  assert!(replayed.contains("line3"), "Expected replay of scrollback, got: {}", replayed);
+  assert!(
+    replayed.contains("line3"),
+    "Expected replay of scrollback, got: {}",
+    replayed
+  );
 
   // Detach again
   let _: RpcResp<Value> = client
-    .call("pty.detach", Some(json!({ "attachment_id": attachment_id2 })))
+    .call(
+      "pty.detach",
+      Some(json!({ "attachment_id": attachment_id2 })),
+    )
     .await;
 
   env.handle.stop();
@@ -292,10 +326,16 @@ async fn pty_read_wait_ms_returns_on_data() {
 
   let start_params = TaskStartParams {
     project_root: env.root.display().to_string(),
-    task: TaskRef { id: Some(info.id), slug: None },
+    task: TaskRef {
+      id: Some(info.id),
+      slug: None,
+    },
   };
   let s: RpcResp<TaskStartResult> = client
-    .call("task.start", Some(serde_json::to_value(&start_params).unwrap()))
+    .call(
+      "task.start",
+      Some(serde_json::to_value(&start_params).unwrap()),
+    )
     .await;
   assert!(s.error.is_none());
 
@@ -343,12 +383,18 @@ async fn pty_read_wait_ms_returns_on_data() {
   assert!(r.error.is_none(), "read error: {:?}", r.error);
   let data = r.result.unwrap().data;
   assert!(!data.is_empty(), "expected some output to wake long-poll");
-  assert!(elapsed < Duration::from_millis(200), "long-poll should return before timeout (elapsed {:?})", elapsed);
+  assert!(
+    elapsed < Duration::from_millis(200),
+    "long-poll should return before timeout (elapsed {:?})",
+    elapsed
+  );
 
   // Now read until we observe the echoed 'ping'
   let mut seen = data.contains("ping");
   for _ in 0..10 {
-    if seen { break; }
+    if seen {
+      break;
+    }
     let r2: RpcResp<PtyReadResult> = client
       .call(
         "pty.read",
@@ -361,7 +407,10 @@ async fn pty_read_wait_ms_returns_on_data() {
       .await;
     assert!(r2.error.is_none());
     let d2 = r2.result.unwrap().data;
-    if d2.contains("ping") { seen = true; break; }
+    if d2.contains("ping") {
+      seen = true;
+      break;
+    }
   }
   assert!(seen, "expected echoed 'ping' within subsequent reads");
 

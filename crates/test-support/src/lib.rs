@@ -1,14 +1,13 @@
-use std::path::{Path, PathBuf};
-use std::time::Duration;
 use http_body_util::BodyExt;
 use hyperlocal::UnixClientExt;
+use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 /// Temporary workspace root for tests.
 /// Provides convenience helpers for common layout and git initialization.
 pub struct TempAgency {
   pub root: tempfile::TempDir,
 }
-
 
 impl Default for TempAgency {
   fn default() -> Self {
@@ -77,7 +76,7 @@ where
   F: FnMut() -> Fut,
   Fut: std::future::Future<Output = bool>,
 {
-  use tokio::time::{sleep, Instant};
+  use tokio::time::{Instant, sleep};
   let start = Instant::now();
   loop {
     if check().await {
@@ -113,10 +112,15 @@ pub struct UnixRpcClient {
 
 impl UnixRpcClient {
   pub fn new<P: AsRef<Path>>(sock: P) -> Self {
-    Self { sock: sock.as_ref().to_path_buf() }
+    Self {
+      sock: sock.as_ref().to_path_buf(),
+    }
   }
 
-  fn build_request(&self, body: serde_json::Value) -> hyper::Request<http_body_util::Full<hyper::body::Bytes>> {
+  fn build_request(
+    &self,
+    body: serde_json::Value,
+  ) -> hyper::Request<http_body_util::Full<hyper::body::Bytes>> {
     let url = hyperlocal::Uri::new(&self.sock, "/");
     hyper::Request::builder()
       .method(hyper::Method::POST)

@@ -4,8 +4,8 @@ use std::time::Duration;
 
 use agency_core::{adapters::fs as fsutil, logging, rpc::DaemonStatus};
 use hyperlocal::UnixClientExt;
-use serde_json::{Value, json};
-use test_support::{poll_until, RpcResp, UnixRpcClient};
+use serde_json::Value;
+use test_support::{RpcResp, UnixRpcClient, poll_until};
 
 struct TestEnv {
   _td: tempfile::TempDir,
@@ -51,7 +51,12 @@ async fn start_test_env() -> TestEnv {
   .await;
   assert!(ok, "daemon did not become ready in time");
 
-  TestEnv { _td: td, log_path, sock, handle }
+  TestEnv {
+    _td: td,
+    log_path,
+    sock,
+    handle,
+  }
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -69,14 +74,14 @@ async fn daemon_status_roundtrip() {
 
   // Best-effort: allow logs to flush and check we logged the event if this test owns the logger.
   tokio::time::sleep(Duration::from_millis(100)).await;
-  if let Ok(log_text) = std::fs::read_to_string(&env.log_path) {
-    if !log_text.is_empty() {
-      assert!(
-        log_text.contains("daemon_status"),
-        "missing daemon_status log entry; logs: {}",
-        log_text
-      );
-    }
+  if let Ok(log_text) = std::fs::read_to_string(&env.log_path)
+    && !log_text.is_empty()
+  {
+    assert!(
+      log_text.contains("daemon_status"),
+      "missing daemon_status log entry; logs: {}",
+      log_text
+    );
   }
 
   env.handle.stop();

@@ -11,9 +11,9 @@ setup:
 agency *ARGS:
   cargo run -p agency -- {{ARGS}}
 
-# Run the tests
+# Run the tests with nextest
 test *ARGS:
-  cargo test {{ARGS}}
+  cargo nextest run {{ARGS}}
 
 # Check for compiler or linting error
 check:

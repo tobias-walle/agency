@@ -17,13 +17,15 @@ fn cli_help_output_is_stable() {
 Usage: agency [COMMAND]
 
 Commands:
-  daemon  Daemon related commands
-  init    Create project scaffolding and config
-  new     Create a new task
-  start   Start a task
-  status  Show task status list
-  attach  Attach to a task's PTY session
-  help    Print this message or the help of the given subcommand(s)
+  daemon      Daemon related commands
+  init        Create project scaffolding and config
+  new         Create a new task
+  start       Start a task
+  status      Show task status list
+  attach      Attach to a task's PTY session
+  path        Print the task worktree path
+  shell-hook  Print a shell hook function to cd into a task's worktree
+  help        Print this message or the help of the given subcommand(s)
 
 Options:
   -h, --help     Print help

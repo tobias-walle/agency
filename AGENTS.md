@@ -21,7 +21,7 @@ Available recipes:
 
 - `just check` # Check for compiler or linting error
 - `just agency *ARGS` # Start the app with the given args
-- `just test *ARGS` # Run the tests (alias to cargo test)
+- `just test *ARGS` # Run the tests (alias to cargo nextest run)
 
 ## Context7 Library IDs
 

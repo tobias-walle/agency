@@ -21,6 +21,10 @@ pub enum Commands {
   Status,
   /// Attach to a task's PTY session
   Attach(AttachArgs),
+  /// Print the task worktree path
+  Path(PathArgs),
+  /// Print a shell hook function to cd into a task's worktree
+  ShellHook,
 }
 
 #[derive(Debug, ClapArgs)]
@@ -39,6 +43,12 @@ pub struct NewArgs {
   /// Create task without starting it
   #[arg(long)]
   pub draft: bool,
+}
+
+#[derive(Debug, ClapArgs)]
+pub struct PathArgs {
+  /// Task reference: numeric id or slug
+  pub task: String,
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]

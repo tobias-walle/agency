@@ -249,24 +249,32 @@ pub async fn start(socket_path: &Path) -> io::Result<DaemonHandle> {
     )
     .expect("register task.status");
 
-  // ---- task.start (stub + PTY spawn) ----
+  // ---- task.start (ensure git worktree + PTY spawn) ----
   module
     .register_method("task.start", |params, _ctx: &PathBuf, _ext| -> RpcResult<serde_json::Value> {
       let p: TaskStartParams = params.parse()?;
       let root = PathBuf::from(&p.project_root);
       let (path, id, slug) = find_task_path_by_ref(&root, &p.task).map_err(|e| ErrorObjectOwned::owned(-32001, e.to_string(), None::<()>))?;
-      // Validate base branch tip and log base_sha
+      // Load task and open repo with clear error if not a git repo
       let s = fs::read_to_string(&path).map_err(|e| ErrorObjectOwned::owned(-32000, e.to_string(), None::<()>))?;
       let mut task = Task::from_markdown(TaskId(id), slug.clone(), &s).map_err(|e| ErrorObjectOwned::owned(-32000, e.to_string(), None::<()>))?;
-      let repo = git2::Repository::open(&root).map_err(|e| ErrorObjectOwned::owned(-32002, e.to_string(), None::<()>))?;
+      let repo = match git2::Repository::open(&root) {
+        Ok(r) => r,
+        Err(_) => {
+          return Err(ErrorObjectOwned::owned(-32002, "not a git repository", None::<()>));
+        }
+      };
+      // Validate base branch tip and ensure worktree exists on the task branch
       let base_sha = gitutil::resolve_base_branch_tip(&repo, &task.front_matter.base_branch).map_err(|e| ErrorObjectOwned::owned(-32003, e.to_string(), None::<()>))?;
       info!(event = "task_start_validated", id, slug = %slug, base_branch = %task.front_matter.base_branch, base_sha = %base_sha.to_string(), "validated git base");
+      // Ensure real git worktree and set PTY cwd to it
+      let wt = gitutil::ensure_task_worktree(&repo, &root, id, &slug, &task.front_matter.base_branch)
+        .map_err(|e| ErrorObjectOwned::owned(-32005, e.to_string(), None::<()>))?;
+      // Transition to running and persist
       task.transition_to(Status::Running).map_err(|e| ErrorObjectOwned::owned(-32004, e.to_string(), None::<()>))?;
       let md = task.to_markdown().map_err(|e| ErrorObjectOwned::owned(-32000, e.to_string(), None::<()>))?;
       fs::write(&path, md).map_err(|e| ErrorObjectOwned::owned(-32000, e.to_string(), None::<()>))?;
-      // Ensure worktree directory exists and spawn PTY session for this task
-      let wt = crate::adapters::fs::worktree_path(&root, id, &slug);
-      if let Err(e) = fs::create_dir_all(&wt) { return Err(ErrorObjectOwned::owned(-32000, e.to_string(), None::<()>)); }
+      // Spawn PTY session for this task in the worktree
       { let _ = crate::adapters::pty::ensure_spawn(&root, id, &wt); }
       let res = TaskStartResult { id, slug, status: Status::Running };
       Ok(serde_json::to_value(res).unwrap())
