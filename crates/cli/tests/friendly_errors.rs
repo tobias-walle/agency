@@ -12,7 +12,7 @@ fn new_task_shows_actionable_daemon_not_reachable_message() {
   let mut cmd = Command::cargo_bin("agency").expect("compile bin");
   let output = cmd
     .env("AGENCY_SOCKET", &sock)
-    .args(["new", "test-slug", "--title", "Test Title"])
+    .args(["new", "test-slug"])
     .assert()
     .failure()
     .get_output()

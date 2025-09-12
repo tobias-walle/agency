@@ -29,7 +29,6 @@ YAML fields:
 
 ```markdown
 ---
-title: <string>
 base_branch: <string> # e.g. main
 status: <enum> # draft | running | idle | completed | reviewed | failed | merged
 labels: [<string>]
@@ -142,7 +141,7 @@ Transitions:
 - `agency init` # create project scaffolding and config
 - `agency daemon install` # interactive setup of launch agent (macOS)
 - `agency daemon start|status|stop`
-- `agency new [slug]` # creates task file, opens $EDITOR to set title/body
+- `agency new [slug]` # creates task file, opens $EDITOR to set body
 - `agency edit <id|slug>`
 - `agency start <id|slug>`
 - `agency stop <id|slug>` # confirm unless `-y`

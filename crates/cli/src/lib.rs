@@ -113,11 +113,15 @@ fn new_task(a: args::NewArgs) {
     std::process::exit(1);
   };
   let root = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+
+  // If user did not override the default and the repo uses a different default branch
+  // (e.g., "master"), prefer the current HEAD branch to make start flows robust.
+  let base_branch = resolve_base_branch_default(&root, &a.base_branch);
+
   let params = agency_core::rpc::TaskNewParams {
     project_root: root.display().to_string(),
     slug: a.slug,
-    title: a.title,
-    base_branch: a.base_branch,
+    base_branch,
     labels: a.labels,
     agent: agent_arg_to_core(a.agent),
     body: None,
@@ -129,13 +133,33 @@ fn new_task(a: args::NewArgs) {
   let res = rt.block_on(async { rpc::client::task_new(&sock, params).await });
   match res {
     Ok(info) => {
-      println!("{} {} {}", info.id, info.slug, info.title);
+      println!("{} {}", info.id, info.slug);
     }
     Err(e) => {
       eprintln!("{}", render_rpc_failure("new", &sock, &e));
       std::process::exit(1);
     }
   }
+}
+
+fn resolve_base_branch_default(root: &std::path::Path, provided: &str) -> String {
+  // Only override the built-in default "main" when HEAD is on another branch.
+  if provided != "main" {
+    return provided.to_string();
+  }
+  if let Ok(repo) = git2::Repository::open(root) {
+    if let Ok(head) = repo.head() {
+      if head.is_branch() {
+        if let Some(name) = head.shorthand() {
+          // Avoid empty shorthand and preserve if already "main"
+          if !name.is_empty() && name != "main" {
+            return name.to_string();
+          }
+        }
+      }
+    }
+  }
+  provided.to_string()
 }
 
 fn start_task(a: args::StartArgs) {
@@ -174,7 +198,7 @@ fn list_status() {
   let res = rt.block_on(async { rpc::client::task_status(&sock, &root).await });
   match res {
     Ok(list) => {
-      println!("ID   SLUG                 STATUS     TITLE");
+      println!("ID   SLUG                 STATUS");
       for t in list.tasks {
         let status = match t.status {
           agency_core::domain::task::Status::Draft => "draft",
@@ -185,7 +209,7 @@ fn list_status() {
           agency_core::domain::task::Status::Failed => "failed",
           agency_core::domain::task::Status::Merged => "merged",
         };
-        println!("{:<4} {:<20} {:<10} {}", t.id, t.slug, status, t.title);
+        println!("{:<4} {:<20} {:<10}", t.id, t.slug, status);
       }
     }
     Err(e) => {

@@ -68,7 +68,6 @@ fn read_task_info(path: &Path, id: u64, slug: String) -> io::Result<TaskInfo> {
   Ok(TaskInfo {
     id,
     slug,
-    title: t.front_matter.title,
     status: t.front_matter.status,
   })
 }
@@ -158,9 +157,7 @@ pub async fn start(socket_path: &Path) -> io::Result<DaemonHandle> {
         let id = next_task_id(&tasks_dir)
           .map_err(|e| ErrorObjectOwned::owned(-32000, e.to_string(), None::<()>))?;
         let slug = p.slug;
-        let title = p.title;
         let fm = TaskFrontMatter {
-          title: title.clone(),
           base_branch: p.base_branch,
           status: Status::Draft,
           labels: p.labels,
@@ -184,7 +181,6 @@ pub async fn start(socket_path: &Path) -> io::Result<DaemonHandle> {
         let info = TaskInfo {
           id,
           slug,
-          title,
           status: Status::Draft,
         };
         Ok(serde_json::to_value(info).unwrap())

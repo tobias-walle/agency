@@ -117,7 +117,6 @@ async fn pty_basic_flow_and_errors() {
   let params = TaskNewParams {
     project_root: env.root.display().to_string(),
     slug: "feat-pty".into(),
-    title: "PTY Test".into(),
     base_branch: "main".into(),
     labels: vec![],
     agent: Agent::Fake,
@@ -271,7 +270,6 @@ async fn pty_reattach_replays_scrollback_tail() {
   let params = TaskNewParams {
     project_root: env.root.display().to_string(),
     slug: "feat-scrollback".into(),
-    title: "Scrollback Test".into(),
     base_branch: "main".into(),
     labels: vec![],
     agent: Agent::Fake,
@@ -404,7 +402,6 @@ async fn pty_read_wait_ms_returns_on_data() {
   let params = TaskNewParams {
     project_root: env.root.display().to_string(),
     slug: "feat-longpoll".into(),
-    title: "LongPoll Test".into(),
     base_branch: "main".into(),
     labels: vec![],
     agent: Agent::Fake,
@@ -524,7 +521,6 @@ async fn pty_tick_applies_input_and_returns_output() {
   let params = TaskNewParams {
     project_root: env.root.display().to_string(),
     slug: "feat-tick".into(),
-    title: "Tick Test".into(),
     base_branch: "main".into(),
     labels: vec![],
     agent: Agent::Fake,

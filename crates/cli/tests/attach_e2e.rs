@@ -83,7 +83,7 @@ fn attach_roundtrip_default_detach_ctrl_q() {
   newc
     .env("AGENCY_SOCKET", sock.as_os_str())
     .current_dir(&root)
-    .args(["new", "feat-e2e", "--title", "E2E Task"])
+    .args(["new", "feat-e2e"])
     .assert()
     .success();
 
@@ -167,7 +167,7 @@ fn attach_roundtrip_custom_detach_env_ctrl_p_ctrl_q() {
   newc
     .env("AGENCY_SOCKET", sock.as_os_str())
     .current_dir(&root)
-    .args(["new", "feat-e2e", "--title", "E2E Task"])
+    .args(["new", "feat-e2e"])
     .assert()
     .success();
 

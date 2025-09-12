@@ -36,7 +36,6 @@ pub enum Agent {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TaskFrontMatter {
-  pub title: String,
   pub base_branch: String,
   pub status: Status,
   #[serde(default)]
@@ -168,7 +167,6 @@ mod tests {
 
   fn sample_front_matter() -> TaskFrontMatter {
     TaskFrontMatter {
-      title: "Sample Task".to_string(),
       base_branch: "main".to_string(),
       status: Status::Draft,
       labels: vec!["a".into(), "b".into()],
@@ -188,7 +186,6 @@ mod tests {
     };
     let md = task.to_markdown().expect("serialize");
     let parsed = Task::from_markdown(task.id, task.slug.clone(), &md).expect("parse");
-    assert_eq!(parsed.front_matter.title, task.front_matter.title);
     assert_eq!(
       parsed.front_matter.base_branch,
       task.front_matter.base_branch

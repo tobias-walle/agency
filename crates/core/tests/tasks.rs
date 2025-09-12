@@ -121,7 +121,6 @@ async fn task_new_and_list_and_start_flow() {
   let params = TaskNewParams {
     project_root: env.root.display().to_string(),
     slug: "feat-x".into(),
-    title: "My Feature".into(),
     base_branch: "main".into(),
     labels: vec!["a".into()],
     agent: Agent::Fake,
@@ -136,7 +135,6 @@ async fn task_new_and_list_and_start_flow() {
   assert!(v.error.is_none(), "unexpected error: {:?}", v.error);
   let info = v.result.unwrap();
   assert_eq!(info.slug, "feat-x");
-  assert_eq!(info.title, "My Feature");
   assert_eq!(info.status, Status::Draft);
   assert!(info.id > 0);
 

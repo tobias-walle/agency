@@ -1,7 +1,7 @@
 use clap::{Args as ClapArgs, CommandFactory, Parser, Subcommand, ValueEnum};
 
 #[derive(Debug, Parser)]
-#[command(author, version, about = "Agency CLI", long_about = None, bin_name = "agency")]
+#[command(version, about = "Agency CLI", long_about = None, bin_name = "agency")]
 pub struct Cli {
   #[command(subcommand)]
   pub command: Option<Commands>,
@@ -27,9 +27,6 @@ pub enum Commands {
 pub struct NewArgs {
   /// Task slug (kebab-case)
   pub slug: String,
-  /// Task title
-  #[arg(long)]
-  pub title: String,
   /// Base branch to branch from
   #[arg(long, default_value = "main")]
   pub base_branch: String,

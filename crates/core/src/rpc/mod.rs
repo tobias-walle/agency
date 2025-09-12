@@ -19,8 +19,6 @@ pub struct TaskNewParams {
   pub project_root: String,
   /// New task slug, used in filename
   pub slug: String,
-  /// Title written into YAML front matter
-  pub title: String,
   /// Base branch to branch from, e.g. "main"
   pub base_branch: String,
   /// Optional labels
@@ -38,7 +36,6 @@ pub struct TaskNewParams {
 pub struct TaskInfo {
   pub id: u64,
   pub slug: String,
-  pub title: String,
   pub status: Status,
 }
 

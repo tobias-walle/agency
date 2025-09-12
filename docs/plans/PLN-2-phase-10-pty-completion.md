@@ -54,7 +54,7 @@ Deliver a complete, test-backed PTY attach/detach implementation with a clear li
 
 - `src/lib.rs`
   - Implement handlers for `new`, `start`, `status`:
-    - `new`: construct `TaskNewParams` (accept `--title`, `--base-branch`, optional `--label` repeats, `--agent` enum with default `fake` for tests), call RPC, print created id/slug/title.
+    - `new`: construct `TaskNewParams` (accept `--base-branch`, optional `--label` repeats, `--agent` enum with default `fake` for tests), call RPC, print created id/slug.
     - `start`: accept `<id|slug>`, call RPC, print new status.
     - `status`: list tasks in a simple, deterministic table/text (suitable for tests).
   - `attach` flow:
