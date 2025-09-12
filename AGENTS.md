@@ -70,3 +70,14 @@ If you add a new dependency, resolve its Context7 ID and append it [here](./AGEN
   1. Write the tests first, make sure they fail
   2. Implement the functionality
   3. Make sure the tests pass
+
+## Testing
+
+- Keep tests readable and focused on behavior.
+- Centralize setup in `crates/test-support` helpers to avoid duplication (daemon, RPC, CLI, git, PTY).
+- Prefer polling with bounded timeouts over fixed sleeps to reduce flakiness.
+- Use `git2` for local repositories instead of shelling out to `git`.
+- Avoid global env mutations; prefer per-command `.env()` or scoped guards.
+- Use consistent file names (feature-oriented) and `subject_action_expected` test names.
+- Follow TDD for new behavior: write failing test, implement, then pass.
+
