@@ -13,7 +13,6 @@ test *ARGS:
 
 # Check for compiler or linting error
 check:
-  cargo check --tests
   cargo clippy --tests -- -D warnings
 
 # Format the code

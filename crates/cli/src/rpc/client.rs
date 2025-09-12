@@ -6,7 +6,7 @@ use hyper_util::client::legacy::{Client, Error as LegacyClientError};
 use hyperlocal::UnixClientExt;
 use agency_core::rpc::{
   DaemonStatus,
-  PtyAttachParams, PtyAttachResult, PtyReadParams, PtyReadResult, PtyInputParams, PtyResizeParams, PtyDetachParams,
+  PtyAttachParams, PtyAttachResult, PtyReadResult, PtyInputParams, PtyResizeParams, PtyDetachParams,
   TaskRef, TaskNewParams, TaskInfo, TaskListParams, TaskListResponse, TaskStartParams, TaskStartResult,
 };
 use serde_json::json;
@@ -62,6 +62,12 @@ impl PtySession {
       .cloned()
       .ok_or_else(|| Error::Rpc { code: -32000, message: "missing result".to_string(), data: None })?;
     Ok(result)
+  }
+}
+
+impl Default for PtySession {
+  fn default() -> Self {
+    Self::new()
   }
 }
 
@@ -159,11 +165,11 @@ pub async fn pty_attach(sock: &Path, project_root: &Path, task: TaskRef, rows: u
 }
 
 pub async fn pty_read(sock: &Path, attachment_id: &str, max_bytes: Option<usize>) -> Result<PtyReadResult> {
-  let params = serde_json::to_value(PtyReadParams {
-    attachment_id: attachment_id.to_string(),
-    max_bytes,
-    wait_ms: None,
-  })?;
+  let params = serde_json::json!({
+    "attachment_id": attachment_id,
+    "max_bytes": max_bytes,
+    "wait_ms": serde_json::Value::Null,
+  });
   let v = rpc_call(sock, "pty.read", Some(params)).await?;
   let res: PtyReadResult = serde_json::from_value(v)?;
   Ok(res)
@@ -201,11 +207,11 @@ pub mod session {
   use super::*;
 
   pub async fn pty_read(session: &PtySession, sock: &Path, attachment_id: &str, max_bytes: Option<usize>) -> Result<PtyReadResult> {
-    let params = serde_json::to_value(PtyReadParams {
-      attachment_id: attachment_id.to_string(),
-      max_bytes,
-      wait_ms: None,
-    })?;
+    let params = serde_json::json!({
+      "attachment_id": attachment_id,
+      "max_bytes": max_bytes,
+      "wait_ms": serde_json::Value::Null,
+    });
     let v = session.rpc_call(sock, "pty.read", Some(params)).await?;
     let res: PtyReadResult = serde_json::from_value(v)?;
     Ok(res)
@@ -218,11 +224,11 @@ pub mod session {
     max_bytes: Option<usize>,
     wait_ms: Option<u64>,
   ) -> Result<PtyReadResult> {
-    let params = serde_json::to_value(PtyReadParams {
-      attachment_id: attachment_id.to_string(),
-      max_bytes,
-      wait_ms,
-    })?;
+    let params = serde_json::json!({
+      "attachment_id": attachment_id,
+      "max_bytes": max_bytes,
+      "wait_ms": wait_ms,
+    });
     let v = session.rpc_call(sock, "pty.read", Some(params)).await?;
     let res: PtyReadResult = serde_json::from_value(v)?;
     Ok(res)

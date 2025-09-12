@@ -1,5 +1,6 @@
 pub mod args;
 pub mod rpc;
+pub mod stdin_handler;
 
 use clap::Parser;
 use std::path::PathBuf;
@@ -240,53 +241,10 @@ fn attach_interactive(args: args::AttachArgs) {
 
   enable_raw_mode().ok();
 
-  enum Msg {
-    Data(Vec<u8>),
-    Detach,
-  }
-  let (tx, rx) = mpsc::channel::<Msg>();
-  // stdin reader thread
-  let tx_in = tx.clone();
-  let detach_seq_clone = detach_seq.clone();
-  thread::spawn(move || {
-    let mut stdin = std::io::stdin();
-    let mut buf = [0u8; 1024];
-    let mut det_idx = 0usize;
-    loop {
-      match stdin.read(&mut buf) {
-        Ok(0) => break,
-        Ok(n) => {
-          let mut out: Vec<u8> = Vec::with_capacity(n);
-          let mut pending_detach = false;
-          for &b in &buf[..n] {
-            if det_idx < detach_seq_clone.len() && b == detach_seq_clone[det_idx] {
-              det_idx += 1;
-              if det_idx == detach_seq_clone.len() {
-                pending_detach = true;
-                det_idx = 0;
-              }
-              // don't forward matched bytes yet
-              continue;
-            } else {
-              // flush any partial matches before this byte
-              if det_idx > 0 {
-                out.extend_from_slice(&detach_seq_clone[..det_idx]);
-                det_idx = 0;
-              }
-              out.push(b);
-            }
-          }
-          if !out.is_empty() {
-            let _ = tx_in.send(Msg::Data(out));
-          }
-          if pending_detach {
-            let _ = tx_in.send(Msg::Detach);
-          }
-        }
-        Err(_) => break,
-      }
-    }
-  });
+  let (tx, rx) = mpsc::channel::<stdin_handler::Msg>();
+  // stdin reader thread using modular handler
+  let binding = stdin_handler::KeyBinding { id: "detach".to_string(), bytes: detach_seq.clone(), consume: true };
+  let _reader = stdin_handler::spawn_stdin_reader(vec![binding], tx.clone());
 
   // output polling loop + resize handling with improved input batching and session reuse
   let mut stdout = std::io::stdout();
@@ -317,12 +275,14 @@ fn attach_interactive(args: args::AttachArgs) {
       let mut want_detach = false;
       while let Ok(msg) = rx.try_recv() {
         match msg {
-          Msg::Data(d) => input_batch.extend(d),
-          Msg::Detach => {
+          stdin_handler::Msg::Data(d) => input_batch.extend(d),
+          stdin_handler::Msg::Binding(id) if id == "detach" => {
             want_detach = true;
           }
+          _ => {}
         }
       }
+
 
       // Send batched input if any
       if !input_batch.is_empty() {
