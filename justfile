@@ -3,6 +3,10 @@
 _list:
   @just --list
 
+# Setup the development environment
+setup:
+  cargo check
+
 # Start the app
 agency *ARGS:
   cargo run -p agency -- {{ARGS}}
