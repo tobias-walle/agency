@@ -8,14 +8,14 @@ use jsonrpsee::types::ErrorObjectOwned;
 use tokio::net::UnixListener;
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
-use tracing::{error, info};
+use tracing::{debug, error, info};
 
 use crate::adapters::{fs as fsutil, git as gitutil};
 use crate::domain::task::{Status, Task, TaskFrontMatter, TaskId};
 use crate::rpc::{
-  DaemonStatus, TaskInfo, TaskListParams, TaskListResponse, TaskNewParams, TaskRef,
-  TaskStartParams, TaskStartResult, PtyAttachParams, PtyAttachResult, PtyReadParams, PtyReadResult,
-  PtyInputParams, PtyResizeParams, PtyDetachParams,
+  DaemonStatus, PtyAttachParams, PtyAttachResult, PtyDetachParams, PtyInputParams, PtyReadParams,
+  PtyReadResult, PtyResizeParams, TaskInfo, TaskListParams, TaskListResponse, TaskNewParams,
+  TaskRef, TaskStartParams, TaskStartResult,
 };
 
 /// Handle to the running daemon server.
@@ -286,44 +286,57 @@ pub async fn start(socket_path: &Path) -> io::Result<DaemonHandle> {
 
   // ---- pty.read ----
   module
-    .register_method("pty.read", |params, _ctx: &PathBuf, _ext| -> RpcResult<serde_json::Value> {
-      let p: PtyReadParams = params.parse()?;
-      let (data, eof) = crate::adapters::pty::read(&p.attachment_id, p.max_bytes, p.wait_ms)
-        .map_err(|e| ErrorObjectOwned::owned(-32011, e.to_string(), None::<()>))?;
-      let text = String::from_utf8_lossy(&data).to_string();
-      let res = PtyReadResult { data: text, eof };
-      Ok(serde_json::to_value(res).unwrap())
-    })
+    .register_method(
+      "pty.read",
+      |params, _ctx: &PathBuf, _ext| -> RpcResult<serde_json::Value> {
+        let p: PtyReadParams = params.parse()?;
+        let (data, eof) = crate::adapters::pty::read(&p.attachment_id, p.max_bytes, p.wait_ms)
+          .map_err(|e| ErrorObjectOwned::owned(-32011, e.to_string(), None::<()>))?;
+        let text = String::from_utf8_lossy(&data).to_string();
+        let res = PtyReadResult { data: text, eof };
+        Ok(serde_json::to_value(res).unwrap())
+      },
+    )
     .expect("register pty.read");
 
   // ---- pty.tick ----
   module
-    .register_method("pty.tick", |params, _ctx: &PathBuf, _ext| -> RpcResult<serde_json::Value> {
-      let p: crate::rpc::PtyTickParams = params.parse()?;
-      if let Some(ref input) = p.input {
-        crate::adapters::pty::input(&p.attachment_id, input.as_bytes())
-          .map_err(|e| ErrorObjectOwned::owned(-32012, e.to_string(), None::<()>))?;
-      }
-      if let Some((rows, cols)) = p.resize {
-        crate::adapters::pty::resize(&p.attachment_id, rows, cols)
-          .map_err(|e| ErrorObjectOwned::owned(-32013, e.to_string(), None::<()>))?;
-      }
-      let (data, eof) = crate::adapters::pty::read(&p.attachment_id, p.max_bytes, p.wait_ms)
-        .map_err(|e| ErrorObjectOwned::owned(-32011, e.to_string(), None::<()>))?;
-      let text = String::from_utf8_lossy(&data).to_string();
-      let res = PtyReadResult { data: text, eof };
-      Ok(serde_json::to_value(res).unwrap())
-    })
+    .register_method(
+      "pty.tick",
+      |params, _ctx: &PathBuf, _ext| -> RpcResult<serde_json::Value> {
+        let p: crate::rpc::PtyTickParams = params.parse()?;
+        if let Some(ref input) = p.input {
+          debug!(event = "daemon_pty_tick_input", attachment_id = %p.attachment_id, bytes = input.len());
+          crate::adapters::pty::input(&p.attachment_id, input.as_bytes())
+            .map_err(|e| ErrorObjectOwned::owned(-32012, e.to_string(), None::<()>))?;
+        }
+        if let Some((rows, cols)) = p.resize {
+          debug!(event = "daemon_pty_tick_resize", attachment_id = %p.attachment_id, rows, cols);
+          crate::adapters::pty::resize(&p.attachment_id, rows, cols)
+            .map_err(|e| ErrorObjectOwned::owned(-32013, e.to_string(), None::<()>))?;
+        }
+        let (data, eof) = crate::adapters::pty::read(&p.attachment_id, p.max_bytes, p.wait_ms)
+          .map_err(|e| ErrorObjectOwned::owned(-32011, e.to_string(), None::<()>))?;
+        debug!(event = "daemon_pty_tick_read", attachment_id = %p.attachment_id, bytes = data.len(), eof, wait_ms = p.wait_ms, max_bytes = ?p.max_bytes);
+        let text = String::from_utf8_lossy(&data).to_string();
+        let res = PtyReadResult { data: text, eof };
+        Ok(serde_json::to_value(res).unwrap())
+      },
+    )
     .expect("register pty.tick");
 
   // ---- pty.input ----
   module
-    .register_method("pty.input", |params, _ctx: &PathBuf, _ext| -> RpcResult<serde_json::Value> {
-      let p: PtyInputParams = params.parse()?;
-      crate::adapters::pty::input(&p.attachment_id, p.data.as_bytes())
-        .map_err(|e| ErrorObjectOwned::owned(-32012, e.to_string(), None::<()>))?;
-      Ok(serde_json::json!(true))
-    })
+    .register_method(
+      "pty.input",
+      |params, _ctx: &PathBuf, _ext| -> RpcResult<serde_json::Value> {
+        let p: PtyInputParams = params.parse()?;
+        debug!(event = "daemon_pty_input", attachment_id = %p.attachment_id, bytes = p.data.len());
+        crate::adapters::pty::input(&p.attachment_id, p.data.as_bytes())
+          .map_err(|e| ErrorObjectOwned::owned(-32012, e.to_string(), None::<()>))?;
+        Ok(serde_json::json!(true))
+      },
+    )
     .expect("register pty.input");
 
   // ---- pty.resize ----
@@ -339,13 +352,16 @@ pub async fn start(socket_path: &Path) -> io::Result<DaemonHandle> {
 
   // ---- pty.detach ----
   module
-    .register_method("pty.detach", |params, _ctx: &PathBuf, _ext| -> RpcResult<serde_json::Value> {
-      let p: PtyDetachParams = params.parse()?;
-      crate::adapters::pty::detach(&p.attachment_id)
-        .map_err(|e| ErrorObjectOwned::owned(-32014, e.to_string(), None::<()>))?;
-      tracing::info!(event = "pty_detach", attachment_id = %p.attachment_id, "pty detached");
-      Ok(serde_json::json!(true))
-    })
+    .register_method(
+      "pty.detach",
+      |params, _ctx: &PathBuf, _ext| -> RpcResult<serde_json::Value> {
+        let p: PtyDetachParams = params.parse()?;
+        crate::adapters::pty::detach(&p.attachment_id)
+          .map_err(|e| ErrorObjectOwned::owned(-32014, e.to_string(), None::<()>))?;
+        tracing::info!(event = "pty_detach", attachment_id = %p.attachment_id, "pty detached");
+        Ok(serde_json::json!(true))
+      },
+    )
     .expect("register pty.detach");
 
   let svc_builder = server::Server::builder().to_service_builder();

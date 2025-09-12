@@ -2,12 +2,12 @@ use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 use std::time::Duration;
 
+use agency_core::{adapters::fs as fsutil, logging, rpc::DaemonStatus};
 use http_body_util::{BodyExt, Full};
 use hyper::body::Bytes;
 use hyper::{Method, Request};
 use hyper_util::client::legacy::Client;
 use hyperlocal::UnixClientExt;
-use agency_core::{adapters::fs as fsutil, logging, rpc::DaemonStatus};
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 

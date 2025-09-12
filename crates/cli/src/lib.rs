@@ -6,6 +6,7 @@ use clap::Parser;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
+use tracing::debug;
 
 pub fn run() {
   // If no additional args, show help and exit 0
@@ -196,9 +197,8 @@ fn list_status() {
 
 fn attach_interactive(args: args::AttachArgs) {
   use crossterm::terminal::{disable_raw_mode, enable_raw_mode, size};
-  use std::io::{Read, Write};
+  use std::io::Write;
   use std::sync::mpsc;
-  use std::thread;
 
   let Some(sock) = resolve_socket() else {
     eprintln!("daemon not running");
@@ -235,15 +235,21 @@ fn attach_interactive(args: args::AttachArgs) {
       std::process::exit(1);
     }
   };
+  debug!(event = "cli_attach_ok", %attachment_id, rows, cols, "attached to PTY");
 
   let shown = detach_cfg.clone().unwrap_or_else(|| "ctrl-q".to_string());
+  debug!(event = "cli_detach_keys", shown = %shown, seq = ?detach_seq, "detach keys resolved");
   println!("Attached. Detach: {} (configurable via config/env)", shown);
 
   enable_raw_mode().ok();
 
   let (tx, rx) = mpsc::channel::<stdin_handler::Msg>();
   // stdin reader thread using modular handler
-  let binding = stdin_handler::KeyBinding { id: "detach".to_string(), bytes: detach_seq.clone(), consume: true };
+  let binding = stdin_handler::KeyBinding {
+    id: "detach".to_string(),
+    bytes: detach_seq.clone(),
+    consume: true,
+  };
   let _reader = stdin_handler::spawn_stdin_reader(vec![binding], tx.clone());
 
   // output polling loop + resize handling with improved input batching and session reuse
@@ -273,38 +279,53 @@ fn attach_interactive(args: args::AttachArgs) {
       // Drain all pending input first (batch processing)
       let mut input_batch = Vec::new();
       let mut want_detach = false;
+      let mut drained_msgs = 0usize;
+      let mut drained_bytes = 0usize;
+      let mut drained_bindings = 0usize;
       while let Ok(msg) = rx.try_recv() {
         match msg {
-          stdin_handler::Msg::Data(d) => input_batch.extend(d),
+          stdin_handler::Msg::Data(d) => {
+            let len = d.len();
+            input_batch.extend(d);
+            drained_msgs += 1;
+            drained_bytes += len;
+          }
           stdin_handler::Msg::Binding(id) if id == "detach" => {
             want_detach = true;
+            drained_bindings += 1;
           }
           _ => {}
         }
       }
-
+      if drained_msgs > 0 || drained_bindings > 0 {
+        debug!(event = "cli_stdin_drained", drained_msgs, drained_bytes, drained_bindings, batch_len = input_batch.len(), "drained stdin messages");
+      }
 
       // Send batched input if any
       if !input_batch.is_empty() {
+        debug!(event = "cli_pty_input_send", n = input_batch.len(), "sending input batch");
         let _ = rpc::client::pty_input(&sock, &attachment_id, &input_batch).await;
       }
 
       // Handle resize events (non-blocking)
       while let Ok((rows, cols)) = rx_resize.try_recv() {
+        debug!(event = "cli_pty_resize_send", rows, cols, "sending resize");
         let _ = rpc::client::pty_resize(&sock, &attachment_id, rows, cols).await;
       }
 
       // Read output
+      let wait_ms = if input_batch.is_empty() { 40 } else { 8 };
       let rr = rpc::client::session::pty_read_wait(
         &session,
         &sock,
         &attachment_id,
         Some(8192),
-        Some(if input_batch.is_empty() { 40 } else { 8 }),
+        Some(wait_ms),
       )
       .await;
       match rr {
         Ok(r) => {
+          debug!(event = "cli_pty_read_result", bytes = r.data.len(), eof = r.eof, wait_ms, "read from PTY");
           if !r.data.is_empty() {
             let _ = stdout.write_all(r.data.as_bytes());
             let _ = stdout.flush();
@@ -313,10 +334,14 @@ fn attach_interactive(args: args::AttachArgs) {
             break;
           }
         }
-        Err(_) => break,
+        Err(e) => {
+          debug!(event = "cli_pty_read_error", error = %e, "read error");
+          break;
+        }
       }
 
       if want_detach {
+        debug!(event = "cli_detach_requested", "detach binding triggered");
         detached = true;
         break;
       }
@@ -329,6 +354,7 @@ fn attach_interactive(args: args::AttachArgs) {
   });
 
   // cleanup
+  debug!(event = "cli_pty_detach_send", %attachment_id, "sending detach");
   let _ = rt.block_on(async { rpc::client::pty_detach(&sock, &attachment_id).await });
   let _ = disable_raw_mode();
   if detached {

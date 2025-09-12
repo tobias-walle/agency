@@ -2,14 +2,15 @@
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::path::Path;
-use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 use std::thread;
 
-use once_cell::sync::Lazy;
-use portable_pty::{native_pty_system, CommandBuilder, PtySize};
-use uuid::Uuid;
 use anyhow::Context;
+use once_cell::sync::Lazy;
+use portable_pty::{CommandBuilder, PtySize, native_pty_system};
+use uuid::Uuid;
+use tracing::debug;
 
 const MAX_BUFFER_BYTES: usize = 1024 * 1024; // ~1 MiB cap for history ring
 const ATTACH_REPLAY_BYTES: usize = 128 * 1024; // 128 KiB replay limit
@@ -68,11 +69,16 @@ pub fn clear_registry_for_tests() {
 /// Ensure a PTY session exists for the given task id; if not, spawn a default shell.
 pub fn ensure_spawn(project_root: &Path, task_id: u64, worktree_path: &Path) -> anyhow::Result<()> {
   let mut reg = REGISTRY.lock().unwrap();
-  let root_key = project_root.canonicalize().unwrap_or_else(|_| project_root.to_path_buf()).display().to_string();
+  let root_key = project_root
+    .canonicalize()
+    .unwrap_or_else(|_| project_root.to_path_buf())
+    .display()
+    .to_string();
   let key = (root_key, task_id);
   if reg.sessions.contains_key(&key) {
     return Ok(());
   }
+  debug!(event = "pty_ensure_spawn", task_id, worktree = %worktree_path.display(), "ensuring PTY spawn");
 
   let pty_system = native_pty_system();
   let pair = pty_system
@@ -83,6 +89,7 @@ pub fn ensure_spawn(project_root: &Path, task_id: u64, worktree_path: &Path) -> 
       pixel_height: 0,
     })
     .with_context(|| format!("openpty failed for task {}", task_id))?;
+  debug!(event = "pty_spawn_openpty", task_id, rows = 24u16, cols = 80u16, "opened PTY pair");
 
   // Spawn a plain POSIX sh (no -l) into the pty with cwd set to worktree
   let mut cmd = CommandBuilder::new("sh");
@@ -91,6 +98,7 @@ pub fn ensure_spawn(project_root: &Path, task_id: u64, worktree_path: &Path) -> 
     .slave
     .spawn_command(cmd)
     .with_context(|| format!("spawn 'sh' in {}", worktree_path.display()))?;
+  debug!(event = "pty_spawn_child", task_id, cwd = %worktree_path.display(), shell = "sh", "spawned child into PTY");
 
   let session = Arc::new(PtySession::new(task_id, pair.master, child));
 
@@ -107,9 +115,11 @@ pub fn ensure_spawn(project_root: &Path, task_id: u64, worktree_path: &Path) -> 
         match reader.read(&mut tmp) {
           Ok(0) => {
             sess_for_thread.eof.store(true, Ordering::SeqCst);
+            debug!(event = "pty_reader_eof", task_id = sess_for_thread.id, "PTY reader reached EOF");
             break;
           }
           Ok(n) => {
+            debug!(event = "pty_reader_read", task_id = sess_for_thread.id, bytes = n);
             let data = &tmp[..n];
             // Append to history ring (bounded)
             {
@@ -135,8 +145,9 @@ pub fn ensure_spawn(project_root: &Path, task_id: u64, worktree_path: &Path) -> 
               cv.notify_all();
             }
           }
-          Err(_) => {
+          Err(e) => {
             sess_for_thread.eof.store(true, Ordering::SeqCst);
+            debug!(event = "pty_reader_error", task_id = sess_for_thread.id, error = %e);
             let (ref changed_lock, ref cv) = sess_for_thread.cv;
             let mut changed = changed_lock.lock().unwrap();
             *changed = true;
@@ -150,7 +161,11 @@ pub fn ensure_spawn(project_root: &Path, task_id: u64, worktree_path: &Path) -> 
     }
   });
 
-  let root_key = project_root.canonicalize().unwrap_or_else(|_| project_root.to_path_buf()).display().to_string();
+  let root_key = project_root
+    .canonicalize()
+    .unwrap_or_else(|_| project_root.to_path_buf())
+    .display()
+    .to_string();
   let key = (root_key, task_id);
   reg.sessions.insert(key, session);
   Ok(())
@@ -159,7 +174,11 @@ pub fn ensure_spawn(project_root: &Path, task_id: u64, worktree_path: &Path) -> 
 /// Attach to a running PTY session for a task; returns an attachment id. Only one active attach.
 pub fn attach(project_root: &Path, task_id: u64) -> anyhow::Result<String> {
   let mut reg = REGISTRY.lock().unwrap();
-  let root_key = project_root.canonicalize().unwrap_or_else(|_| project_root.to_path_buf()).display().to_string();
+  let root_key = project_root
+    .canonicalize()
+    .unwrap_or_else(|_| project_root.to_path_buf())
+    .display()
+    .to_string();
   let key = (root_key, task_id);
   let sess = reg
     .sessions
@@ -174,6 +193,7 @@ pub fn attach(project_root: &Path, task_id: u64) -> anyhow::Result<String> {
     let id = Uuid::new_v4().to_string();
     *active = Some(id.clone());
     reg.attachments.insert(id.clone(), sess.clone());
+    debug!(event = "pty_attach_new", task_id = sess.id, attachment_id = %id);
 
     // Prefill outbox with tail of history ring for replay
     {
@@ -184,6 +204,7 @@ pub fn attach(project_root: &Path, task_id: u64) -> anyhow::Result<String> {
         0
       };
       let replay_data = ring[tail_start..].to_vec();
+      debug!(event = "pty_attach_replay_prefill", task_id = sess.id, replay_bytes = replay_data.len());
       let mut outbox = sess.outbox.lock().unwrap();
       *outbox = Some(replay_data);
     }
@@ -199,9 +220,12 @@ pub fn attach(project_root: &Path, task_id: u64) -> anyhow::Result<String> {
   }
 }
 
-
 /// Read and drain available output for an attachment.
-pub fn read(attachment_id: &str, max_bytes: Option<usize>, wait_ms: Option<u64>) -> anyhow::Result<(Vec<u8>, bool)> {
+pub fn read(
+  attachment_id: &str,
+  max_bytes: Option<usize>,
+  wait_ms: Option<u64>,
+) -> anyhow::Result<(Vec<u8>, bool)> {
   let reg = REGISTRY.lock().unwrap();
   let sess = reg
     .attachments
@@ -224,9 +248,13 @@ pub fn read(attachment_id: &str, max_bytes: Option<usize>, wait_ms: Option<u64>)
           true
         }
       };
-      if has_data || sess.eof.load(Ordering::SeqCst) { break; }
+      if has_data || sess.eof.load(Ordering::SeqCst) {
+        break;
+      }
       let now = std::time::Instant::now();
-      if now >= deadline { break; }
+      if now >= deadline {
+        break;
+      }
       let remaining = deadline - now;
       let (ref changed_lock, ref cv) = sess.cv;
       let guard = changed_lock.lock().unwrap();
@@ -236,11 +264,16 @@ pub fn read(attachment_id: &str, max_bytes: Option<usize>, wait_ms: Option<u64>)
   }
 
   let mut outbox_opt = sess.outbox.lock().unwrap();
-  let outbox = outbox_opt.as_mut().ok_or_else(|| anyhow::anyhow!("no outbox for attachment"))?;
+  let outbox = outbox_opt
+    .as_mut()
+    .ok_or_else(|| anyhow::anyhow!("no outbox for attachment"))?;
+  let pre_len = outbox.len();
   let take = max_bytes.unwrap_or(outbox.len());
   let n = take.min(outbox.len());
   let data = outbox.drain(..n).collect::<Vec<u8>>();
+  let post_len = outbox.len();
   let eof = sess.eof.load(Ordering::SeqCst);
+  debug!(event = "pty_read_drain", attachment_id, pre_len, drained = n, post_len, eof, wait_ms = ?wait_ms, max_bytes = ?max_bytes);
   Ok((data, eof))
 }
 
@@ -254,12 +287,14 @@ pub fn input(attachment_id: &str, data: &[u8]) -> anyhow::Result<()> {
     .ok_or_else(|| anyhow::anyhow!("invalid attachment"))?;
   drop(reg);
 
-    let mut opt_writer = sess.writer.lock().unwrap();
+  let mut opt_writer = sess.writer.lock().unwrap();
   if opt_writer.is_none() {
     let master = sess.master.lock().unwrap();
     *opt_writer = Some(master.take_writer()?);
+    debug!(event = "pty_writer_init", task_id = sess.id, "initialized writer for session");
   }
   let w = opt_writer.as_mut().unwrap();
+  debug!(event = "pty_input_write", task_id = sess.id, bytes = data.len());
   w.write_all(data)?;
   // No explicit flush needed for PTY
   Ok(())
@@ -290,6 +325,7 @@ pub fn detach(attachment_id: &str) -> anyhow::Result<()> {
   if let Some(sess) = reg.attachments.remove(attachment_id) {
     let mut active = sess.active_attach.lock().unwrap();
     *active = None;
+    debug!(event = "pty_detach_clear", task_id = sess.id, attachment_id = %attachment_id);
     // Clear the outbox on detach
     let mut outbox = sess.outbox.lock().unwrap();
     *outbox = None;

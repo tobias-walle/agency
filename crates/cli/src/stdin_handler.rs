@@ -21,7 +21,11 @@ pub struct StdinHandler {
 impl StdinHandler {
   pub fn new(bindings: Vec<KeyBinding>) -> Self {
     let max_seq_len = bindings.iter().map(|b| b.bytes.len()).max().unwrap_or(0);
-    Self { bindings, max_seq_len, pending: VecDeque::new() }
+    Self {
+      bindings,
+      max_seq_len,
+      pending: VecDeque::new(),
+    }
   }
 
   fn pending_as_slice(&self) -> Vec<u8> {
@@ -36,11 +40,9 @@ impl StdinHandler {
       if bl == 0 || bl > window.len() {
         continue;
       }
-      if window[window.len() - bl..] == b.bytes[..] {
-        if bl > best_len {
-          best_len = bl;
-          best_idx = Some(idx);
-        }
+      if window[window.len() - bl..] == b.bytes[..] && bl > best_len {
+        best_len = bl;
+        best_idx = Some(idx);
       }
     }
     if let Some(idx) = best_idx {
@@ -52,7 +54,10 @@ impl StdinHandler {
         .iter()
         .any(|b| b.bytes.len() > matched_len && b.bytes.starts_with(matched_suffix));
       if longer_exists {
-        trace!(defer_len = matched_len, "defer_short_match_for_longer_prefix");
+        trace!(
+          defer_len = matched_len,
+          "defer_short_match_for_longer_prefix"
+        );
         return None;
       }
       return Some(idx);
@@ -82,7 +87,11 @@ impl StdinHandler {
 
     for &byte in chunk {
       self.pending.push_back(byte);
-      trace!(byte = byte as u32, pending_len = self.pending.len(), "push_byte");
+      trace!(
+        byte = byte as u32,
+        pending_len = self.pending.len(),
+        "push_byte"
+      );
 
       loop {
         let win = self.pending_as_slice();
@@ -133,7 +142,13 @@ impl StdinHandler {
         flushed += 1;
       }
     }
-    debug!(out_len = out.len(), events = events.len(), flushed, keep, "stdin_chunk_processed");
+    debug!(
+      out_len = out.len(),
+      events = events.len(),
+      flushed,
+      keep,
+      "stdin_chunk_processed"
+    );
     (out, events)
   }
 
@@ -152,7 +167,10 @@ pub enum Msg {
   Binding(String),
 }
 
-pub fn spawn_stdin_reader(bindings: Vec<KeyBinding>, tx: mpsc::Sender<Msg>) -> thread::JoinHandle<()> {
+pub fn spawn_stdin_reader(
+  bindings: Vec<KeyBinding>,
+  tx: mpsc::Sender<Msg>,
+) -> thread::JoinHandle<()> {
   thread::spawn(move || {
     let mut stdin = std::io::stdin();
     let mut buf = [0u8; 1024];
@@ -190,7 +208,11 @@ mod tests {
   use super::*;
 
   fn kb(id: &str, bytes: &[u8], consume: bool) -> KeyBinding {
-    KeyBinding { id: id.to_string(), bytes: bytes.to_vec(), consume }
+    KeyBinding {
+      id: id.to_string(),
+      bytes: bytes.to_vec(),
+      consume,
+    }
   }
 
   #[test]
@@ -202,7 +224,10 @@ mod tests {
 
     let (p2, e2) = h.process_chunk(&[0x11]);
     assert!(p2.is_empty(), "should have consumed detach");
-    assert!(e2.contains(&"detach".to_string()), "should emit detach event");
+    assert!(
+      e2.contains(&"detach".to_string()),
+      "should emit detach event"
+    );
   }
 
   #[test]
@@ -229,16 +254,16 @@ mod tests {
 
   #[test]
   fn partial_end_of_chunk_flush() {
-    let mut h = StdinHandler::new(vec![kb("x", &[b'a', b'b'], true)]);
-    let (p1, _e1) = h.process_chunk(&[b'a', b'c']);
+    let mut h = StdinHandler::new(vec![kb("x", b"ab", true)]);
+    let (p1, _e1) = h.process_chunk(b"ac");
     // 'a' should be flushed because 'ac' does not prefix any binding
     assert_eq!(String::from_utf8_lossy(&p1), "ac");
   }
 
   #[test]
   fn eof_flush_returns_remaining_pending() {
-    let mut h = StdinHandler::new(vec![kb("x", &[b'a', b'b'], true)]);
-    let (_p, _e) = h.process_chunk(&[b'a']);
+    let mut h = StdinHandler::new(vec![kb("x", b"ab", true)]);
+    let (_p, _e) = h.process_chunk(b"a");
     let f = h.flush_pending();
     assert_eq!(f, vec![b'a']);
   }

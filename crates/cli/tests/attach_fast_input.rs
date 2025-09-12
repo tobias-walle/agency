@@ -34,34 +34,49 @@ fn attach_handles_fast_small_chunks_and_final_detach() {
   let sock = td.path().join("agency.sock");
 
   // Init git repo
-  std::process::Command::new("git").arg("init").current_dir(&root).output().unwrap();
+  std::process::Command::new("git")
+    .arg("init")
+    .current_dir(&root)
+    .output()
+    .unwrap();
   std::fs::write(root.join("README.md"), "# E2E Test\n").unwrap();
-  std::process::Command::new("git").args(["add", "."]).current_dir(&root).output().unwrap();
-  std::process::Command::new("git").args(["commit", "-m", "Initial commit"]).current_dir(&root).output().unwrap();
+  std::process::Command::new("git")
+    .args(["add", "."])
+    .current_dir(&root)
+    .output()
+    .unwrap();
+  std::process::Command::new("git")
+    .args(["commit", "-m", "Initial commit"])
+    .current_dir(&root)
+    .output()
+    .unwrap();
 
   start_daemon(&sock);
 
   // init project
-  Command::cargo_bin("agency").unwrap()
+  Command::cargo_bin("agency")
+    .unwrap()
     .env("AGENCY_SOCKET", sock.as_os_str())
     .current_dir(&root)
-    .args(["init"]) 
+    .args(["init"])
     .assert()
     .success();
 
   // new task
-  Command::cargo_bin("agency").unwrap()
+  Command::cargo_bin("agency")
+    .unwrap()
     .env("AGENCY_SOCKET", sock.as_os_str())
     .current_dir(&root)
-    .args(["new", "feat-fast", "--title", "Fast Input Task"]) 
+    .args(["new", "feat-fast", "--title", "Fast Input Task"])
     .assert()
     .success();
 
   // start task
-  Command::cargo_bin("agency").unwrap()
+  Command::cargo_bin("agency")
+    .unwrap()
     .env("AGENCY_SOCKET", sock.as_os_str())
     .current_dir(&root)
-    .args(["start", "feat-fast"]) 
+    .args(["start", "feat-fast"])
     .assert()
     .success();
 
@@ -71,7 +86,7 @@ fn attach_handles_fast_small_chunks_and_final_detach() {
     .env("AGENCY_SOCKET", sock.as_os_str())
     .env("AGENCY_DETACH_KEYS", "ctrl-p,ctrl-q")
     .current_dir(&root)
-    .args(["attach", "feat-fast"]) 
+    .args(["attach", "feat-fast"])
     .stdin(Stdio::piped())
     .stdout(Stdio::piped())
     .stderr(Stdio::piped());
@@ -102,7 +117,11 @@ fn attach_handles_fast_small_chunks_and_final_detach() {
   let stdout = String::from_utf8_lossy(&out.stdout);
   let stderr = String::from_utf8_lossy(&out.stderr);
   assert!(stdout.contains("Attached. Detach:"), "stdout: {}", stdout);
-  assert!(stdout.to_lowercase().contains("hello"), "stdout: {}", stdout);
+  assert!(
+    stdout.to_lowercase().contains("hello"),
+    "stdout: {}",
+    stdout
+  );
   assert!(stderr.contains("detached"), "stderr: {}", stderr);
 
   stop_daemon(&sock);

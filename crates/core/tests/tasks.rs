@@ -1,11 +1,6 @@
 use std::path::Path;
 use std::time::Duration;
 
-use http_body_util::{BodyExt, Full};
-use hyper::body::Bytes;
-use hyper::{Method, Request};
-use hyper_util::client::legacy::Client;
-use hyperlocal::UnixClientExt;
 use agency_core::{
   adapters::fs as fsutil,
   domain::task::{Agent, Status},
@@ -15,6 +10,11 @@ use agency_core::{
     TaskStartResult,
   },
 };
+use http_body_util::{BodyExt, Full};
+use hyper::body::Bytes;
+use hyper::{Method, Request};
+use hyper_util::client::legacy::Client;
+use hyperlocal::UnixClientExt;
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 
