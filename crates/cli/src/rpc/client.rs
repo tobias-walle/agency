@@ -120,7 +120,11 @@ pub async fn pty_tick(
   debug!(event = "rpc_pty_tick_call", wait_ms, input_len = input.map(|s| s.len()), resize = ?resize, max_bytes);
   let v = rpc_call(sock, "pty.tick", Some(params)).await?;
   let res: PtyReadResult = serde_json::from_value(v)?;
-  debug!(event = "rpc_pty_tick_resp", data_len = res.data.len(), eof = res.eof);
+  debug!(
+    event = "rpc_pty_tick_resp",
+    data_len = res.data.len(),
+    eof = res.eof
+  );
   Ok(res)
 }
 
@@ -208,7 +212,11 @@ pub async fn pty_read(
   debug!(event = "rpc_pty_read_call", max_bytes);
   let v = rpc_call(sock, "pty.read", Some(params)).await?;
   let res: PtyReadResult = serde_json::from_value(v)?;
-  debug!(event = "rpc_pty_read_resp", data_len = res.data.len(), eof = res.eof);
+  debug!(
+    event = "rpc_pty_read_resp",
+    data_len = res.data.len(),
+    eof = res.eof
+  );
   Ok(res)
 }
 

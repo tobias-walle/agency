@@ -256,17 +256,21 @@ fn attach_interactive(args: args::AttachArgs) {
   let mut stdout = std::io::stdout();
   let mut detached = false;
 
-  // spawn a thread to emit resize events into an mpsc channel using crossterm
+  // spawn a thread to poll terminal size without consuming stdin events
   let (tx_resize, rx_resize) = mpsc::channel::<(u16, u16)>();
   std::thread::spawn(move || {
-    use crossterm::event::{self, Event};
+    use crossterm::terminal::size;
+    let mut last_rows: u16 = 0;
+    let mut last_cols: u16 = 0;
     loop {
-      if event::poll(std::time::Duration::from_millis(100)).unwrap_or(false)
-        && let Ok(Event::Resize(cols, rows)) = event::read()
+      if let Ok((cols, rows)) = size()
+        && (rows != last_rows || cols != last_cols)
       {
-        // note: crossterm provides cols, rows order
+        last_rows = rows;
+        last_cols = cols;
         let _ = tx_resize.send((rows, cols));
       }
+      std::thread::sleep(std::time::Duration::from_millis(200));
     }
   });
 
@@ -298,12 +302,23 @@ fn attach_interactive(args: args::AttachArgs) {
         }
       }
       if drained_msgs > 0 || drained_bindings > 0 {
-        debug!(event = "cli_stdin_drained", drained_msgs, drained_bytes, drained_bindings, batch_len = input_batch.len(), "drained stdin messages");
+        debug!(
+          event = "cli_stdin_drained",
+          drained_msgs,
+          drained_bytes,
+          drained_bindings,
+          batch_len = input_batch.len(),
+          "drained stdin messages"
+        );
       }
 
       // Send batched input if any
       if !input_batch.is_empty() {
-        debug!(event = "cli_pty_input_send", n = input_batch.len(), "sending input batch");
+        debug!(
+          event = "cli_pty_input_send",
+          n = input_batch.len(),
+          "sending input batch"
+        );
         let _ = rpc::client::pty_input(&sock, &attachment_id, &input_batch).await;
       }
 
@@ -325,7 +340,13 @@ fn attach_interactive(args: args::AttachArgs) {
       .await;
       match rr {
         Ok(r) => {
-          debug!(event = "cli_pty_read_result", bytes = r.data.len(), eof = r.eof, wait_ms, "read from PTY");
+          debug!(
+            event = "cli_pty_read_result",
+            bytes = r.data.len(),
+            eof = r.eof,
+            wait_ms,
+            "read from PTY"
+          );
           if !r.data.is_empty() {
             let _ = stdout.write_all(r.data.as_bytes());
             let _ = stdout.flush();

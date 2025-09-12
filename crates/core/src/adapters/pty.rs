@@ -9,8 +9,8 @@ use std::thread;
 use anyhow::Context;
 use once_cell::sync::Lazy;
 use portable_pty::{CommandBuilder, PtySize, native_pty_system};
-use uuid::Uuid;
 use tracing::debug;
+use uuid::Uuid;
 
 const MAX_BUFFER_BYTES: usize = 1024 * 1024; // ~1 MiB cap for history ring
 const ATTACH_REPLAY_BYTES: usize = 128 * 1024; // 128 KiB replay limit
@@ -89,7 +89,13 @@ pub fn ensure_spawn(project_root: &Path, task_id: u64, worktree_path: &Path) -> 
       pixel_height: 0,
     })
     .with_context(|| format!("openpty failed for task {}", task_id))?;
-  debug!(event = "pty_spawn_openpty", task_id, rows = 24u16, cols = 80u16, "opened PTY pair");
+  debug!(
+    event = "pty_spawn_openpty",
+    task_id,
+    rows = 24u16,
+    cols = 80u16,
+    "opened PTY pair"
+  );
 
   // Spawn a plain POSIX sh (no -l) into the pty with cwd set to worktree
   let mut cmd = CommandBuilder::new("sh");
@@ -115,11 +121,19 @@ pub fn ensure_spawn(project_root: &Path, task_id: u64, worktree_path: &Path) -> 
         match reader.read(&mut tmp) {
           Ok(0) => {
             sess_for_thread.eof.store(true, Ordering::SeqCst);
-            debug!(event = "pty_reader_eof", task_id = sess_for_thread.id, "PTY reader reached EOF");
+            debug!(
+              event = "pty_reader_eof",
+              task_id = sess_for_thread.id,
+              "PTY reader reached EOF"
+            );
             break;
           }
           Ok(n) => {
-            debug!(event = "pty_reader_read", task_id = sess_for_thread.id, bytes = n);
+            debug!(
+              event = "pty_reader_read",
+              task_id = sess_for_thread.id,
+              bytes = n
+            );
             let data = &tmp[..n];
             // Append to history ring (bounded)
             {
@@ -204,7 +218,11 @@ pub fn attach(project_root: &Path, task_id: u64) -> anyhow::Result<String> {
         0
       };
       let replay_data = ring[tail_start..].to_vec();
-      debug!(event = "pty_attach_replay_prefill", task_id = sess.id, replay_bytes = replay_data.len());
+      debug!(
+        event = "pty_attach_replay_prefill",
+        task_id = sess.id,
+        replay_bytes = replay_data.len()
+      );
       let mut outbox = sess.outbox.lock().unwrap();
       *outbox = Some(replay_data);
     }
@@ -291,10 +309,18 @@ pub fn input(attachment_id: &str, data: &[u8]) -> anyhow::Result<()> {
   if opt_writer.is_none() {
     let master = sess.master.lock().unwrap();
     *opt_writer = Some(master.take_writer()?);
-    debug!(event = "pty_writer_init", task_id = sess.id, "initialized writer for session");
+    debug!(
+      event = "pty_writer_init",
+      task_id = sess.id,
+      "initialized writer for session"
+    );
   }
   let w = opt_writer.as_mut().unwrap();
-  debug!(event = "pty_input_write", task_id = sess.id, bytes = data.len());
+  debug!(
+    event = "pty_input_write",
+    task_id = sess.id,
+    bytes = data.len()
+  );
   w.write_all(data)?;
   // No explicit flush needed for PTY
   Ok(())
