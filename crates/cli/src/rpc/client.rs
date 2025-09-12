@@ -31,12 +31,7 @@ impl PtySession {
     params: Option<serde_json::Value>,
   ) -> Result<serde_json::Value> {
     let url = hyperlocal::Uri::new(sock, "/");
-    let req_body = json!({
-      "jsonrpc": "2.0",
-      "id": 1,
-      "method": method,
-      "params": params
-    });
+    let req_body = json!({ "jsonrpc": "2.0", "id": 1, "method": method, "params": params });
     let req = Request::builder()
       .method(Method::POST)
       .uri(url)
@@ -204,11 +199,7 @@ pub async fn pty_read(
   attachment_id: &str,
   max_bytes: Option<usize>,
 ) -> Result<PtyReadResult> {
-  let params = serde_json::json!({
-    "attachment_id": attachment_id,
-    "max_bytes": max_bytes,
-    "wait_ms": serde_json::Value::Null,
-  });
+  let params = serde_json::json!({ "attachment_id": attachment_id, "max_bytes": max_bytes, "wait_ms": serde_json::Value::Null });
   debug!(event = "rpc_pty_read_call", max_bytes);
   let v = rpc_call(sock, "pty.read", Some(params)).await?;
   let res: PtyReadResult = serde_json::from_value(v)?;
@@ -258,11 +249,7 @@ pub mod session {
     attachment_id: &str,
     max_bytes: Option<usize>,
   ) -> Result<PtyReadResult> {
-    let params = serde_json::json!({
-      "attachment_id": attachment_id,
-      "max_bytes": max_bytes,
-      "wait_ms": serde_json::Value::Null,
-    });
+    let params = serde_json::json!({ "attachment_id": attachment_id, "max_bytes": max_bytes, "wait_ms": serde_json::Value::Null });
     let v = session.rpc_call(sock, "pty.read", Some(params)).await?;
     let res: PtyReadResult = serde_json::from_value(v)?;
     Ok(res)
@@ -275,11 +262,7 @@ pub mod session {
     max_bytes: Option<usize>,
     wait_ms: Option<u64>,
   ) -> Result<PtyReadResult> {
-    let params = serde_json::json!({
-      "attachment_id": attachment_id,
-      "max_bytes": max_bytes,
-      "wait_ms": wait_ms,
-    });
+    let params = serde_json::json!({ "attachment_id": attachment_id, "max_bytes": max_bytes, "wait_ms": wait_ms });
     let v = session.rpc_call(sock, "pty.read", Some(params)).await?;
     let res: PtyReadResult = serde_json::from_value(v)?;
     Ok(res)

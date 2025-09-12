@@ -67,7 +67,7 @@ fn attach_handles_fast_small_chunks_and_final_detach() {
     .unwrap()
     .env("AGENCY_SOCKET", sock.as_os_str())
     .current_dir(&root)
-    .args(["new", "feat-fast"])
+    .args(["new", "--draft", "feat-fast"])
     .assert()
     .success();
 
@@ -167,7 +167,7 @@ fn attach_fast_burst_full_echo() {
     .unwrap()
     .env("AGENCY_SOCKET", sock.as_os_str())
     .current_dir(&root)
-    .args(["new", "feat-burst"])
+    .args(["new", "--draft", "feat-burst"])
     .assert()
     .success();
 

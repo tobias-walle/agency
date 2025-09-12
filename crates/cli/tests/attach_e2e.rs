@@ -2,29 +2,6 @@ use assert_cmd::prelude::*;
 use std::io::Write;
 use std::process::{Command, Stdio};
 
-fn start_daemon(sock: &std::path::Path) {
-  let mut cmd = Command::cargo_bin("agency").expect("compile bin");
-  let out = cmd
-    .env("AGENCY_SOCKET", sock.as_os_str())
-    .args(["daemon", "start"]) // starts background
-    .assert()
-    .success()
-    .get_output()
-    .stdout
-    .clone();
-  let text = String::from_utf8_lossy(&out);
-  assert!(text.contains("daemon: running"), "{text}");
-}
-
-fn stop_daemon(sock: &std::path::Path) {
-  let mut cmd = Command::cargo_bin("agency").expect("compile bin");
-  let _ = cmd
-    .env("AGENCY_SOCKET", sock.as_os_str())
-    .args(["daemon", "stop"]) // best-effort
-    .assert()
-    .success();
-}
-
 #[test]
 fn attach_help_has_no_detach_flag() {
   let mut cmd = Command::cargo_bin("agency").expect("compile bin");
@@ -67,9 +44,7 @@ fn attach_roundtrip_default_detach_ctrl_q() {
     .output()
     .expect("failed to git commit");
 
-  start_daemon(&sock);
-
-  // init project
+  // init project (does not require daemon)
   let mut init = Command::cargo_bin("agency").expect("compile bin");
   init
     .env("AGENCY_SOCKET", sock.as_os_str())
@@ -78,21 +53,12 @@ fn attach_roundtrip_default_detach_ctrl_q() {
     .assert()
     .success();
 
-  // new task
+  // new task (autostarts daemon; starts running by default)
   let mut newc = Command::cargo_bin("agency").expect("compile bin");
   newc
     .env("AGENCY_SOCKET", sock.as_os_str())
     .current_dir(&root)
     .args(["new", "feat-e2e"])
-    .assert()
-    .success();
-
-  // start task
-  let mut start = Command::cargo_bin("agency").expect("compile bin");
-  start
-    .env("AGENCY_SOCKET", sock.as_os_str())
-    .current_dir(&root)
-    .args(["start", "feat-e2e"])
     .assert()
     .success();
 
@@ -123,8 +89,6 @@ fn attach_roundtrip_default_detach_ctrl_q() {
   assert!(stdout.contains("Attached. Detach:"), "stdout: {}", stdout);
   assert!(stdout.contains("hi"), "stdout: {}", stdout);
   assert!(stderr.contains("detached"), "stderr: {}", stderr);
-
-  stop_daemon(&sock);
 }
 
 #[test]
@@ -151,8 +115,6 @@ fn attach_roundtrip_custom_detach_env_ctrl_p_ctrl_q() {
     .output()
     .expect("failed to git commit");
 
-  start_daemon(&sock);
-
   // init project
   let mut init = Command::cargo_bin("agency").expect("compile bin");
   init
@@ -162,21 +124,12 @@ fn attach_roundtrip_custom_detach_env_ctrl_p_ctrl_q() {
     .assert()
     .success();
 
-  // new task
+  // new task (autostarts and runs by default)
   let mut newc = Command::cargo_bin("agency").expect("compile bin");
   newc
     .env("AGENCY_SOCKET", sock.as_os_str())
     .current_dir(&root)
     .args(["new", "feat-e2e"])
-    .assert()
-    .success();
-
-  // start task
-  let mut start = Command::cargo_bin("agency").expect("compile bin");
-  start
-    .env("AGENCY_SOCKET", sock.as_os_str())
-    .current_dir(&root)
-    .args(["start", "feat-e2e"])
     .assert()
     .success();
 
@@ -209,6 +162,4 @@ fn attach_roundtrip_custom_detach_env_ctrl_p_ctrl_q() {
   assert!(stdout.contains("Attached. Detach:"), "stdout: {}", stdout);
   assert!(stdout.contains("hi"), "stdout: {}", stdout);
   assert!(stderr.contains("detached"), "stderr: {}", stderr);
-
-  stop_daemon(&sock);
 }

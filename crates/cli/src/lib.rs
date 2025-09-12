@@ -3,7 +3,7 @@ pub mod rpc;
 pub mod stdin_handler;
 
 use clap::Parser;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 use tracing::debug;
@@ -30,6 +30,9 @@ pub fn run() {
       }
       args::DaemonSubcommand::Run => {
         run_daemon_foreground();
+      }
+      args::DaemonSubcommand::Restart => {
+        restart_daemon();
       }
     },
     Some(args::Commands::Init) => {
@@ -91,7 +94,7 @@ fn parse_detach_keys(s: &str) -> Vec<u8> {
 fn render_rpc_failure(action: &str, sock: &std::path::Path, err: &rpc::client::Error) -> String {
   match err {
     rpc::client::Error::Client(_) | rpc::client::Error::Http(_) => format!(
-      "{} failed: daemon not reachable at {}. Start it with `agency daemon start` or set AGENCY_SOCKET to a valid path.",
+      "{} failed: daemon not reachable at {}.",
       action,
       sock.display()
     ),
@@ -107,11 +110,56 @@ fn agent_arg_to_core(a: args::AgentArg) -> agency_core::domain::task::Agent {
   }
 }
 
-fn new_task(a: args::NewArgs) {
-  let Some(sock) = resolve_socket() else {
-    eprintln!("daemon not running");
-    std::process::exit(1);
+fn ensure_daemon_running() -> PathBuf {
+  let sock = match resolve_socket() {
+    Some(p) => p,
+    None => {
+      eprintln!("could not resolve socket path");
+      std::process::exit(1);
+    }
   };
+
+  // Fast path: already running
+  let ok = tokio::runtime::Builder::new_current_thread()
+    .enable_io()
+    .enable_time()
+    .build()
+    .unwrap()
+    .block_on(async { rpc::client::daemon_status(&sock).await.is_ok() });
+  if ok {
+    return sock;
+  }
+
+  // Attempt background autostart silently
+  let resume_root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+  let _ = spawn_daemon_background(&sock, &resume_root);
+
+  // Wait up to ~2s
+  let running = tokio::runtime::Builder::new_current_thread()
+    .enable_io()
+    .enable_time()
+    .build()
+    .unwrap()
+    .block_on(async {
+      for _ in 0..20u8 {
+        // ~2s
+        if rpc::client::daemon_status(&sock).await.is_ok() {
+          return true;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+      }
+      false
+    });
+  if running {
+    sock
+  } else {
+    // Best-effort: return sock; callers will emit an actionable message
+    sock
+  }
+}
+
+fn new_task(a: args::NewArgs) {
+  let sock = ensure_daemon_running();
   let root = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
 
   // If user did not override the default and the repo uses a different default branch
@@ -133,7 +181,25 @@ fn new_task(a: args::NewArgs) {
   let res = rt.block_on(async { rpc::client::task_new(&sock, params).await });
   match res {
     Ok(info) => {
-      println!("{} {}", info.id, info.slug);
+      if a.draft {
+        println!("{} {} draft", info.id, info.slug);
+      } else {
+        // Immediately start the task
+        let tref = agency_core::rpc::TaskRef {
+          id: Some(info.id),
+          slug: None,
+        };
+        let start_res = rt.block_on(async { rpc::client::task_start(&sock, &root, tref).await });
+        match start_res {
+          Ok(sr) => {
+            println!("{} {} {:?}", sr.id, sr.slug, sr.status);
+          }
+          Err(e) => {
+            eprintln!("{}", render_rpc_failure("start", &sock, &e));
+            std::process::exit(1);
+          }
+        }
+      }
     }
     Err(e) => {
       eprintln!("{}", render_rpc_failure("new", &sock, &e));
@@ -147,26 +213,21 @@ fn resolve_base_branch_default(root: &std::path::Path, provided: &str) -> String
   if provided != "main" {
     return provided.to_string();
   }
-  if let Ok(repo) = git2::Repository::open(root) {
-    if let Ok(head) = repo.head() {
-      if head.is_branch() {
-        if let Some(name) = head.shorthand() {
-          // Avoid empty shorthand and preserve if already "main"
-          if !name.is_empty() && name != "main" {
-            return name.to_string();
-          }
-        }
-      }
+  if let Ok(repo) = git2::Repository::open(root)
+    && let Ok(head) = repo.head()
+    && head.is_branch()
+    && let Some(name) = head.shorthand()
+  {
+    // Avoid empty shorthand and preserve if already "main"
+    if !name.is_empty() && name != "main" {
+      return name.to_string();
     }
   }
   provided.to_string()
 }
 
 fn start_task(a: args::StartArgs) {
-  let Some(sock) = resolve_socket() else {
-    eprintln!("daemon not running");
-    std::process::exit(1);
-  };
+  let sock = ensure_daemon_running();
   let root = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
   let tref = parse_task_ref(&a.task);
   let rt = tokio::runtime::Builder::new_current_thread()
@@ -186,10 +247,7 @@ fn start_task(a: args::StartArgs) {
 }
 
 fn list_status() {
-  let Some(sock) = resolve_socket() else {
-    eprintln!("daemon not running");
-    std::process::exit(1);
-  };
+  let sock = ensure_daemon_running();
   let root = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
   let rt = tokio::runtime::Builder::new_current_thread()
     .enable_io()
@@ -224,10 +282,7 @@ fn attach_interactive(args: args::AttachArgs) {
   use std::io::Write;
   use std::sync::mpsc;
 
-  let Some(sock) = resolve_socket() else {
-    eprintln!("daemon not running");
-    std::process::exit(1);
-  };
+  let sock = ensure_daemon_running();
 
   let root = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
   let tref = parse_task_ref(&args.task);
@@ -476,6 +531,22 @@ fn run_daemon_foreground() {
   });
 }
 
+fn spawn_daemon_background(sock: &Path, resume_root: &Path) -> std::io::Result<()> {
+  let exe = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("agency"));
+  let mut cmd = Command::new(exe);
+  cmd.arg("daemon").arg("run");
+  // Ensure child and parent agree on socket path and resume root
+  cmd.env("AGENCY_SOCKET", sock);
+  cmd.env("AGENCY_RESUME_ROOT", resume_root);
+  // Detach stdio
+  cmd
+    .stdin(Stdio::null())
+    .stdout(Stdio::null())
+    .stderr(Stdio::null());
+  let _ = cmd.spawn()?;
+  Ok(())
+}
+
 fn start_daemon() {
   let Some(sock) = resolve_socket() else {
     println!("daemon: stopped");
@@ -494,42 +565,32 @@ fn start_daemon() {
   }
 
   // Spawn background process to run the daemon
-  let exe = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("agency"));
-  let mut cmd = Command::new(exe);
-  cmd.arg("daemon").arg("run");
-  // Ensure child and parent agree on socket path
-  cmd.env("AGENCY_SOCKET", &sock);
-  // Detach stdio
-  cmd
-    .stdin(Stdio::null())
-    .stdout(Stdio::null())
-    .stderr(Stdio::null());
+  let resume_root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+  if spawn_daemon_background(&sock, &resume_root).is_err() {
+    println!("daemon: stopped");
+    return;
+  }
 
-  match cmd.spawn() {
-    Ok(_child) => {
-      // Poll status for a short time
-      let rt = tokio::runtime::Builder::new_current_thread()
-        .enable_io()
-        .enable_time()
-        .build()
-        .unwrap();
-      let running = rt.block_on(async {
-        for _ in 0..20u8 {
-          // ~2s
-          if rpc::client::daemon_status(&sock).await.is_ok() {
-            return true;
-          }
-          tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-        }
-        false
-      });
-      if running {
-        print_status();
-      } else {
-        println!("daemon: stopped");
+  // Poll status for a short time
+  let rt = tokio::runtime::Builder::new_current_thread()
+    .enable_io()
+    .enable_time()
+    .build()
+    .unwrap();
+  let running = rt.block_on(async {
+    for _ in 0..20u8 {
+      // ~2s
+      if rpc::client::daemon_status(&sock).await.is_ok() {
+        return true;
       }
+      tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     }
-    Err(_) => println!("daemon: stopped"),
+    false
+  });
+  if running {
+    print_status();
+  } else {
+    println!("daemon: stopped");
   }
 }
 
@@ -564,6 +625,12 @@ fn stop_daemon() {
     // Best-effort: still report stopped if unreachable
     println!("daemon: stopped");
   }
+}
+
+fn restart_daemon() {
+  // Best-effort stop then start
+  stop_daemon();
+  start_daemon();
 }
 
 #[cfg(test)]

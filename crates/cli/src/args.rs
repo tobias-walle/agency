@@ -36,6 +36,9 @@ pub struct NewArgs {
   /// Agent to use (opencode|claude-code|fake)
   #[arg(long, value_enum, default_value = "fake")]
   pub agent: AgentArg,
+  /// Create task without starting it
+  #[arg(long)]
+  pub draft: bool,
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -76,6 +79,8 @@ pub enum DaemonSubcommand {
   Stop,
   /// Run the daemon (foreground)
   Run,
+  /// Restart the daemon
+  Restart,
 }
 
 impl Cli {
