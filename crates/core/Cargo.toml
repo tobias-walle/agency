@@ -33,3 +33,4 @@ uuid = { version = "1.18.0", features = ["v4"] }
 proptest = "1.7.0"
 serde_json = "1.0.143"
 tempfile = "3.21.0"
+test-support = { path = "../test-support" }

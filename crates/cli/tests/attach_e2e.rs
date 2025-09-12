@@ -1,6 +1,7 @@
 use assert_cmd::prelude::*;
 use std::io::Write;
 use std::process::{Command, Stdio};
+use test_support::init_repo_with_initial_commit;
 
 #[test]
 fn attach_help_has_no_detach_flag() {
@@ -27,22 +28,7 @@ fn attach_roundtrip_default_detach_ctrl_q() {
   let sock = td.path().join("agency.sock");
 
   // Initialize a git repository in the temp directory and make an initial commit
-  std::process::Command::new("git")
-    .arg("init")
-    .current_dir(&root)
-    .output()
-    .expect("failed to init git repo");
-  std::fs::write(root.join("README.md"), "# E2E Test\n").unwrap();
-  std::process::Command::new("git")
-    .args(["add", "."])
-    .current_dir(&root)
-    .output()
-    .expect("failed to git add");
-  std::process::Command::new("git")
-    .args(["commit", "-m", "Initial commit"])
-    .current_dir(&root)
-    .output()
-    .expect("failed to git commit");
+  let _repo = init_repo_with_initial_commit(&root);
 
   // init project (does not require daemon)
   let mut init = Command::cargo_bin("agency").expect("compile bin");
@@ -98,22 +84,7 @@ fn attach_roundtrip_custom_detach_env_ctrl_p_ctrl_q() {
   let sock = td.path().join("agency.sock");
 
   // Initialize git repo
-  std::process::Command::new("git")
-    .arg("init")
-    .current_dir(&root)
-    .output()
-    .expect("failed to init git repo");
-  std::fs::write(root.join("README.md"), "# E2E Test\n").unwrap();
-  std::process::Command::new("git")
-    .args(["add", "."])
-    .current_dir(&root)
-    .output()
-    .expect("failed to git add");
-  std::process::Command::new("git")
-    .args(["commit", "-m", "Initial commit"])
-    .current_dir(&root)
-    .output()
-    .expect("failed to git commit");
+  let _repo = init_repo_with_initial_commit(&root);
 
   // init project
   let mut init = Command::cargo_bin("agency").expect("compile bin");

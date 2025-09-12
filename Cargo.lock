@@ -49,6 +49,7 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "tempfile",
+ "test-support",
  "thiserror 2.0.16",
  "tokio",
  "toml",
@@ -358,6 +359,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tempfile",
+ "test-support",
  "thiserror 2.0.16",
  "tokio",
  "tracing",
@@ -1977,7 +1979,14 @@ name = "test-support"
 version = "0.1.0"
 dependencies = [
  "git2",
+ "http-body-util",
+ "hyper",
+ "hyper-util",
+ "hyperlocal",
+ "serde",
+ "serde_json",
  "tempfile",
+ "tokio",
 ]
 
 [[package]]

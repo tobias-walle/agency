@@ -1,18 +1,13 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::OnceLock;
 use std::time::Duration;
 
 use agency_core::{adapters::fs as fsutil, logging, rpc::DaemonStatus};
-use http_body_util::{BodyExt, Full};
-use hyper::body::Bytes;
-use hyper::{Method, Request};
-use hyper_util::client::legacy::Client;
 use hyperlocal::UnixClientExt;
-use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
+use test_support::{poll_until, RpcResp, UnixRpcClient};
 
 struct TestEnv {
-  // Keep the socket tempdir alive for test duration
   _td: tempfile::TempDir,
   log_path: PathBuf,
   sock: PathBuf,
@@ -30,7 +25,7 @@ fn ensure_logging_once() -> PathBuf {
   let root = td.path().to_path_buf();
   let log_path = fsutil::logs_path(&root);
   logging::init(&log_path, agency_core::config::LogLevel::Info);
-  let _ = LOG_DIR.set(td); // keep tempdir alive for process lifetime
+  let _ = LOG_DIR.set(td);
   let _ = LOG_PATH.set(log_path.clone());
   log_path
 }
@@ -44,68 +39,27 @@ async fn start_test_env() -> TestEnv {
     .await
     .expect("start daemon");
 
-  // small delay to ensure server is listening
-  tokio::time::sleep(Duration::from_millis(200)).await;
+  // Poll until daemon answers status instead of fixed sleep
+  let client = UnixRpcClient::new(&sock);
+  let ok = poll_until(Duration::from_secs(2), Duration::from_millis(50), || {
+    let c = &client;
+    async move {
+      let r: RpcResp<DaemonStatus> = c.call("daemon.status", None).await;
+      r.error.is_none()
+    }
+  })
+  .await;
+  assert!(ok, "daemon did not become ready in time");
 
-  TestEnv {
-    _td: td,
-    log_path,
-    sock,
-    handle,
-  }
-}
-
-fn build_request(sock: &Path, body: Value) -> Request<Full<Bytes>> {
-  let url = hyperlocal::Uri::new(sock, "/");
-  Request::builder()
-    .method(Method::POST)
-    .uri(url)
-    .header(hyper::header::CONTENT_TYPE, "application/json")
-    .body(Full::<Bytes>::from(serde_json::to_vec(&body).unwrap()))
-    .unwrap()
-}
-
-#[derive(Debug, serde::Deserialize)]
-struct RpcError {
-  code: i32,
-  message: String,
-  #[allow(dead_code)]
-  data: Option<Value>,
-}
-
-#[derive(serde::Deserialize)]
-struct RpcResp<T> {
-  jsonrpc: String,
-  #[allow(dead_code)]
-  id: Value,
-  result: Option<T>,
-  error: Option<RpcError>,
-}
-
-async fn rpc_call<T: DeserializeOwned>(
-  sock: &Path,
-  method: &str,
-  params: Option<Value>,
-) -> RpcResp<T> {
-  let req_body = json!({
-    "jsonrpc": "2.0",
-    "id": 1,
-    "method": method,
-    "params": params
-  });
-  let req = build_request(sock, req_body);
-  let client = Client::unix();
-  let resp = client.request(req).await.expect("request ok");
-  assert!(resp.status().is_success());
-  let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-  serde_json::from_slice(&bytes).expect("valid json")
+  TestEnv { _td: td, log_path, sock, handle }
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn daemon_status_roundtrip() {
   let env = start_test_env().await;
+  let client = UnixRpcClient::new(&env.sock);
 
-  let v: RpcResp<DaemonStatus> = rpc_call(&env.sock, "daemon.status", None).await;
+  let v: RpcResp<DaemonStatus> = client.call("daemon.status", None).await;
   assert_eq!(v.jsonrpc, "2.0");
   assert!(v.error.is_none(), "unexpected error: {:?}", v.error);
   let status = v.result.expect("has result");
@@ -115,29 +69,28 @@ async fn daemon_status_roundtrip() {
 
   // Best-effort: allow logs to flush and check we logged the event if this test owns the logger.
   tokio::time::sleep(Duration::from_millis(100)).await;
-  if let Ok(log_text) = std::fs::read_to_string(&env.log_path)
-    && !log_text.is_empty()
-  {
-    assert!(
-      log_text.contains("daemon_status"),
-      "missing daemon_status log entry; logs: {}",
-      log_text
-    );
+  if let Ok(log_text) = std::fs::read_to_string(&env.log_path) {
+    if !log_text.is_empty() {
+      assert!(
+        log_text.contains("daemon_status"),
+        "missing daemon_status log entry; logs: {}",
+        log_text
+      );
+    }
   }
 
-  // Cleanup
   env.handle.stop();
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn unknown_method_returns_error() {
   let env = start_test_env().await;
+  let client = UnixRpcClient::new(&env.sock);
 
-  let v: RpcResp<Value> = rpc_call(&env.sock, "daemon.nope", None).await;
+  let v: RpcResp<Value> = client.call("daemon.nope", None).await;
   assert_eq!(v.jsonrpc, "2.0");
   assert!(v.result.is_none());
   let err = v.error.expect("should have error");
-  // jsonrpsee uses standard JSON-RPC codes; -32601 is Method not found
   assert_eq!(err.code, -32601);
   assert!(err.message.to_lowercase().contains("method"));
 
@@ -147,12 +100,11 @@ async fn unknown_method_returns_error() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn handles_multiple_connections() {
   let env = start_test_env().await;
+  let client = UnixRpcClient::new(&env.sock);
 
-  // Fire a few concurrent calls
-  let t1 = rpc_call::<DaemonStatus>(&env.sock, "daemon.status", None);
-  let t2 = rpc_call::<DaemonStatus>(&env.sock, "daemon.status", None);
-  let t3 = rpc_call::<DaemonStatus>(&env.sock, "daemon.status", None);
-
+  let t1 = client.call::<DaemonStatus>("daemon.status", None);
+  let t2 = client.call::<DaemonStatus>("daemon.status", None);
+  let t3 = client.call::<DaemonStatus>("daemon.status", None);
   let (r1, r2, r3) = tokio::join!(t1, t2, t3);
 
   for r in [r1, r2, r3] {
@@ -169,26 +121,29 @@ async fn handles_multiple_connections() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn shutdown_via_rpc_stops_server() {
   let env = start_test_env().await;
+  let client = UnixRpcClient::new(&env.sock);
 
-  // Request shutdown
-  let v: RpcResp<serde_json::Value> = rpc_call(&env.sock, "daemon.shutdown", None).await;
+  let v: RpcResp<serde_json::Value> = client.call("daemon.shutdown", None).await;
   assert!(v.error.is_none());
   assert!(v.result.is_some());
 
-  // Wait a moment for shutdown to take effect
-  tokio::time::sleep(Duration::from_millis(200)).await;
-
-  // Subsequent call should fail at HTTP layer or return JSON-RPC error; emulate by trying to connect
-  let req = build_request(
-    &env.sock,
-    json!({
-      "jsonrpc": "2.0",
-      "id": 1,
-      "method": "daemon.status",
-      "params": null
-    }),
-  );
-  let client = Client::unix();
-  let res = client.request(req).await;
+  // Subsequent call should fail at HTTP layer; perform a raw HTTP request
+  let url = hyperlocal::Uri::new(&env.sock, "/");
+  let req = hyper::Request::builder()
+    .method(hyper::Method::POST)
+    .uri(url)
+    .header(hyper::header::CONTENT_TYPE, "application/json")
+    .body(http_body_util::Full::<hyper::body::Bytes>::from(
+      serde_json::to_vec(&serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "daemon.status",
+        "params": null
+      }))
+      .unwrap(),
+    ))
+    .unwrap();
+  let raw_client = hyper_util::client::legacy::Client::unix();
+  let res = raw_client.request(req).await;
   assert!(res.is_err(), "server should be down");
 }
