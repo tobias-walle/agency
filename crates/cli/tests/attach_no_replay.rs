@@ -26,7 +26,7 @@ fn attach_no_replay_suppresses_history() {
   newc
     .env("AGENCY_SOCKET", sock.as_os_str())
     .current_dir(&root)
-    .args(["new", "feat-no-replay"])
+    .args(["new", "--agent", "fake", "--no-attach", "feat-no-replay"])
     .assert()
     .success();
 

@@ -39,6 +39,9 @@ pub struct Config {
   pub concurrency: Option<usize>,
   /// Default answer for confirmation prompts for destructive commands; false = default "No"
   pub confirm_by_default: bool,
+  /// Default agent to use for new tasks (opencode | claude-code | fake)
+  #[serde(default)]
+  pub default_agent: Option<crate::domain::task::Agent>,
   /// PTY configuration
   pub pty: PtyConfig,
 }
@@ -51,6 +54,7 @@ impl Default for Config {
       dwell_secs: 2,
       concurrency: None,
       confirm_by_default: false,
+      default_agent: None,
       pty: PtyConfig::default(),
     }
   }
@@ -78,6 +82,7 @@ struct PartialConfig {
   pub dwell_secs: Option<u64>,
   pub concurrency: Option<Option<usize>>, // Some(None) means explicit null, None means not provided
   pub confirm_by_default: Option<bool>,
+  pub default_agent: Option<crate::domain::task::Agent>,
   pub pty: Option<PartialPtyConfig>,
 }
 
@@ -89,6 +94,7 @@ impl PartialConfig {
       dwell_secs: self.dwell_secs.unwrap_or(base.dwell_secs),
       concurrency: self.concurrency.unwrap_or(base.concurrency),
       confirm_by_default: self.confirm_by_default.unwrap_or(base.confirm_by_default),
+      default_agent: self.default_agent.or(base.default_agent),
       pty: self.pty.unwrap_or_default().merge_over(base.pty),
     }
   }
@@ -128,7 +134,7 @@ pub fn write_default_project_config(project_root: &Path) -> std::io::Result<()> 
     // Ensure a [pty] section is present with a commented example for detach_keys.
     // We avoid setting a value to keep default None semantics.
     s.push_str(
-      "\n[pty]\n# Detach key sequence for attach. Comma-separated control keys.\n# Leave unset to use the default Ctrl-Q. Examples:\n# detach_keys = \"ctrl-q\"\n# detach_keys = \"ctrl-p,ctrl-q\"\n",
+      "\n# Default agent for `agency new` when --agent is not provided.\n# default_agent = \"opencode\" # or \"claude-code\" or \"fake\"\n\n[pty]\n# Detach key sequence for attach. Comma-separated control keys.\n# Leave unset to use the default Ctrl-Q. Examples:\n# detach_keys = \"ctrl-q\"\n# detach_keys = \"ctrl-p,ctrl-q\"\n",
     );
     std::fs::write(&path, s)?;
   }
@@ -211,6 +217,7 @@ mod tests {
     assert_eq!(cfg.dwell_secs, 2);
     assert_eq!(cfg.concurrency, None);
     assert!(!cfg.confirm_by_default);
+    assert_eq!(cfg.default_agent, None);
     assert_eq!(cfg.pty.detach_keys, None);
   }
 
@@ -226,6 +233,7 @@ mod tests {
 log_level = "warn"
 idle_timeout_secs = 5
 confirm_by_default = false
+default_agent = "opencode"
 [pty]
 detach_keys = "ctrl-p"
 "#,
@@ -237,6 +245,7 @@ detach_keys = "ctrl-p"
       r#"
 log_level = "debug"
 dwell_secs = 3
+default_agent = "fake"
 [pty]
 detach_keys = "ctrl-q"
 "#,
@@ -252,6 +261,8 @@ detach_keys = "ctrl-q"
     assert_eq!(cfg.dwell_secs, 3);
     // global changed default
     assert!(!cfg.confirm_by_default);
+    // default_agent precedence: project overrides global
+    assert_eq!(cfg.default_agent, Some(crate::domain::task::Agent::Fake));
     // pty precedence
     assert_eq!(cfg.pty.detach_keys.as_deref(), Some("ctrl-q"));
   }

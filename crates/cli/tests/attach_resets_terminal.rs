@@ -26,7 +26,7 @@ fn attach_emits_reset_footer_on_detach() {
   newc
     .env("AGENCY_SOCKET", sock.as_os_str())
     .current_dir(&root)
-    .args(["new", "feat-reset-footer"])
+    .args(["new", "--agent", "fake", "--no-attach", "feat-reset-footer"])
     .assert()
     .success();
 

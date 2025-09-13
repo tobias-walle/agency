@@ -10,6 +10,96 @@ use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 use tracing::debug;
 
+fn edit_text(initial: &str) -> std::io::Result<String> {
+  // Resolve editor from $EDITOR or fallback to vi
+  let editor = std::env::var("EDITOR").unwrap_or_else(|_| "vi".to_string());
+  tracing::debug!(event = "cli_editor_resolved", editor = %editor, "resolved editor");
+
+  // Create a temp file path in the system temp dir
+  let mut path = std::env::temp_dir();
+  let fname = format!(
+    "agency-edit-{}-{}.md",
+    std::process::id(),
+    std::time::SystemTime::now()
+      .duration_since(std::time::UNIX_EPOCH)
+      .unwrap_or_default()
+      .as_millis()
+  );
+  path.push(fname);
+  std::fs::write(&path, initial)?;
+
+  // Launch editor inheriting stdio and env
+  tracing::debug!(event = "cli_editor_launch", path = %path.display(), "launching editor");
+  let status = Command::new(&editor)
+    .arg(&path)
+    .status()
+    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("failed to launch editor '{}': {}", editor, e)))?;
+  if !status.success() {
+    return Err(std::io::Error::new(std::io::ErrorKind::Other, format!("editor exited with status: {}", status)));
+  }
+
+  // Read edited content and cleanup
+  let body = std::fs::read_to_string(&path)?;
+  let _ = std::fs::remove_file(&path);
+  tracing::debug!(event = "cli_task_body_ready", len = body.len(), "editor produced body");
+  Ok(body)
+}
+
+fn build_opencode_injection(prompt: &str) -> Vec<u8> {
+  // Build a one-shot command that passes a here-doc to opencode via command substitution
+  // Do not log the prompt content; only lengths
+  let mut s = String::new();
+  s.push_str("opencode --agent plan -p \"$(cat <<'EOF'\n");
+  s.push_str(prompt);
+  s.push_str("\nEOF\n)\"\n");
+  tracing::debug!(event = "cli_new_agent_inject", bytes = s.len(), "constructed opencode injection");
+  s.into_bytes()
+}
+
+#[allow(dead_code)]
+fn attach_and_maybe_inject(
+  sock: &Path,
+  project_root: &Path,
+  task: agency_core::rpc::TaskRef,
+  no_replay: bool,
+  initial_input: Option<&[u8]>,
+) -> std::io::Result<()> {
+  use crossterm::terminal::size;
+
+  // Determine terminal size for initial attach; default to 80x24 if unavailable
+  let (cols, rows) = size().unwrap_or((80, 24));
+  let rt = tokio::runtime::Builder::new_current_thread()
+    .enable_io()
+    .enable_time()
+    .build()
+    .unwrap();
+
+  let attach_res = rt.block_on(async {
+    rpc::client::pty_attach_with_replay(sock, project_root, task, rows, cols, !no_replay).await
+  });
+  let attachment_id = match attach_res {
+    Ok(r) => r.attachment_id,
+    Err(e) => {
+      return Err(std::io::Error::new(std::io::ErrorKind::Other, render_rpc_failure("attach", sock, &e)));
+    }
+  };
+  tracing::debug!(event = "cli_attach_ok", %attachment_id, rows, cols, "attached for injection");
+
+  if let Some(bytes) = initial_input {
+    let _ = rt.block_on(async { rpc::client::pty_input(sock, &attachment_id, bytes).await });
+    // Give the child a brief moment to produce output and capture a small chunk
+    let session = rpc::client::PtySession::new();
+    let _ = rt.block_on(async {
+      let _ = rpc::client::session::pty_read_wait(&session, sock, &attachment_id, Some(8192), Some(200)).await;
+    });
+  }
+
+  // For now, do not enter the interactive loop here to keep behavior unchanged during rollout.
+  // Immediately detach after optional injection.
+  let _ = rt.block_on(async { rpc::client::pty_detach(sock, &attachment_id).await });
+  Ok(())
+}
+
 pub fn run() {
   // If no additional args, show help and exit 0
   if std::env::args_os().len() == 1 {
@@ -167,6 +257,10 @@ fn agent_arg_to_core(a: args::AgentArg) -> agency_core::domain::task::Agent {
   }
 }
 
+fn agent_opt_to_core(a: Option<args::AgentArg>) -> Option<agency_core::domain::task::Agent> {
+  a.map(agent_arg_to_core)
+}
+
 fn ensure_daemon_running() -> PathBuf {
   let sock = match resolve_socket() {
     Some(p) => p,
@@ -219,17 +313,41 @@ fn new_task(a: args::NewArgs) {
   let sock = ensure_daemon_running();
   let root = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
 
-  // If user did not override the default and the repo uses a different default branch
-  // (e.g., "master"), prefer the current HEAD branch to make start flows robust.
+  // If user did not override the built-in default and the repo uses a different default branch,
+  // prefer the current HEAD branch to make start flows robust.
   let base_branch = resolve_base_branch_default(&root, &a.base_branch);
+
+  // Resolve agent: CLI flag overrides config; else error
+  let cfg = agency_core::config::load(Some(&root)).unwrap_or_default();
+  let resolved_agent = agent_opt_to_core(a.agent).or(cfg.default_agent);
+  if resolved_agent.is_none() {
+    eprintln!("new failed: no agent specified. Provide --agent or set default_agent in config.");
+    std::process::exit(2);
+  }
+  let agent = resolved_agent.unwrap();
+  tracing::debug!(event = "cli_agent_resolved", agent = ?agent, "resolved agent for new task");
+
+  // Collect body: use --message if provided; otherwise open editor when interactive
+  let mut body_opt = a.message.clone();
+  if body_opt.is_none() && std::io::stdout().is_terminal() {
+    match edit_text("") {
+      Ok(s) => body_opt = Some(s),
+      Err(e) => {
+        eprintln!("failed to capture description via editor: {}", e);
+      }
+    }
+  }
+  if let Some(ref s) = body_opt {
+    tracing::debug!(event = "cli_task_body_ready", len = s.len(), "message provided");
+  }
 
   let params = agency_core::rpc::TaskNewParams {
     project_root: root.display().to_string(),
     slug: a.slug,
     base_branch,
     labels: a.labels,
-    agent: agent_arg_to_core(a.agent),
-    body: None,
+    agent: agent.clone(),
+    body: body_opt.clone(),
   };
   let rt = tokio::runtime::Builder::new_current_thread()
     .enable_io()
@@ -240,21 +358,40 @@ fn new_task(a: args::NewArgs) {
     Ok(info) => {
       if a.draft {
         println!("{} {} draft", info.id, info.slug);
-      } else {
-        // Immediately start the task
-        let tref = agency_core::rpc::TaskRef {
-          id: Some(info.id),
-          slug: None,
-        };
-        let start_res = rt.block_on(async { rpc::client::task_start(&sock, &root, tref).await });
-        match start_res {
-          Ok(sr) => {
-            println!("{} {} {:?}", sr.id, sr.slug, sr.status);
+        return;
+      }
+      // Immediately start the task
+      let tref = agency_core::rpc::TaskRef {
+        id: Some(info.id),
+        slug: None,
+      };
+      let start_res = rt.block_on(async { rpc::client::task_start(&sock, &root, tref).await });
+      match start_res {
+        Ok(sr) => {
+          println!("{} {} {:?}", sr.id, sr.slug, sr.status);
+          // Auto-attach unless --no-attach
+          if a.no_attach {
+            tracing::debug!(event = "cli_new_autostart_attach", attach = false, "skipping auto-attach by flag");
+            return;
           }
-          Err(e) => {
-            eprintln!("{}", render_rpc_failure("start", &sock, &e));
-            std::process::exit(1);
+          // Compute initial injection for opencode, if applicable
+          let initial_bytes = if matches!(agent, agency_core::domain::task::Agent::Opencode) {
+            let body_text = body_opt.as_deref().unwrap_or("");
+            let prompt = format!("# Task: {}\n\n{}", sr.slug, body_text);
+            Some(build_opencode_injection(&prompt))
+          } else {
+            None
+          };
+          tracing::debug!(event = "cli_new_autostart_attach", attach = true, "auto-attach for new task");
+          let tref2 = agency_core::rpc::TaskRef { id: Some(sr.id), slug: None };
+          let inj_bytes_ref = initial_bytes.as_deref();
+          if let Err(e) = attach_and_maybe_inject(&sock, &root, tref2, false, inj_bytes_ref) {
+            eprintln!("attach failed: {}", e);
           }
+        }
+        Err(e) => {
+          eprintln!("{}", render_rpc_failure("start", &sock, &e));
+          std::process::exit(1);
         }
       }
     }

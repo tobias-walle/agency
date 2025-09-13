@@ -37,12 +37,18 @@ pub struct NewArgs {
   /// Optional label (repeatable)
   #[arg(long = "label")]
   pub labels: Vec<String>,
-  /// Agent to use (opencode|claude-code|fake)
-  #[arg(long, value_enum, default_value = "fake")]
-  pub agent: AgentArg,
+  /// Agent to use (opencode|claude-code|fake). Optional if configured via default_agent.
+  #[arg(long, value_enum)]
+  pub agent: Option<AgentArg>,
   /// Create task without starting it
   #[arg(long)]
   pub draft: bool,
+  /// Do not auto-attach after creation/start
+  #[arg(long = "no-attach")]
+  pub no_attach: bool,
+  /// Message/description body to store; if omitted, opens $EDITOR
+  #[arg(short = 'm', long = "message")]
+  pub message: Option<String>,
 }
 
 #[derive(Debug, ClapArgs)]
