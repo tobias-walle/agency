@@ -1,8 +1,10 @@
 pub mod args;
 pub mod rpc;
 pub mod stdin_handler;
+mod term_reset;
 
 use clap::Parser;
+use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
@@ -513,6 +515,12 @@ fn attach_interactive(args: args::AttachArgs) {
   debug!(event = "cli_pty_detach_send", %attachment_id, "sending detach");
   let _ = rt.block_on(async { rpc::client::pty_detach(&sock, &attachment_id).await });
   let _ = disable_raw_mode();
+  // Emit terminal reset footer if stdout is a TTY (or test override)
+  let force = std::env::var("AGENCY_FORCE_TTY_RESET").ok().is_some();
+  if force || std::io::stdout().is_terminal() {
+    let mut out = std::io::stdout();
+    let _ = term_reset::write_reset_footer(&mut out);
+  }
   if detached {
     eprintln!("detached");
   }

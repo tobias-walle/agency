@@ -5,7 +5,7 @@ Detaching from an attached TUI can leave the local terminal in a modified state 
 Currently the CLI exits raw mode and prints a message, but does not proactively restore terminal state, so the cursor color and other settings may remain changed after detach.
 
 ## Goal
-Emit a small, safe, idempotent “terminal reset footer” to stdout when leaving `agency attach`, to restore common terminal modes and dynamic colors (including cursor color) to the terminal’s defaults.
+Emit a small, safe, idempotent "terminal reset footer" to stdout when leaving `agency attach`, to restore common terminal modes and dynamic colors (including cursor color) to the terminal's defaults.
 
 - Restore cursor color to default (addresses the reported issue) using `OSC 112`.
 - Leave alternate screen, show the cursor, reset SGR, disable bracketed paste and common mouse modes.
@@ -44,6 +44,19 @@ Implement a terminal reset footer emitted by the CLI on exit from interactive at
 
 Use ST as the OSC terminator (ESC `\\`), which is standard and avoids edge cases; BEL is also accepted but not preferred here.
 
+## Status & Progress
+- [x] Implement `crates/cli/src/term_reset.rs` with named constants and `write_reset_footer()` in the documented order using `ST` terminators for `OSC 110/111/112`.
+- [x] Wire footer emission into `attach_interactive` on explicit detach and on EOF, guarded by TTY detection (with an env override used for tests).
+- [x] Add E2E test `crates/cli/tests/attach_resets_terminal.rs` asserting `OSC 112 ST`, `DECSTR`, and `?1049l` appear in stdout on detach.
+- [ ] Optional docs note (see below) remains to be added.
+
+### Acceptance Criteria (tracked)
+- [x] On explicit detach and on EOF, when stdout is a TTY, the CLI writes the reset footer to stdout.
+- [x] The E2E test detects at least `OSC 112 ST`, `DECSTR`, and `?1049l` in stdout on detach.
+- [x] When stdout is not a TTY, no reset sequences are written (guard implemented). A negative test is optional and not currently added.
+- [x] Implementation uses named constants with comments in `crates/cli/src/term_reset.rs` and a helper function for emission.
+- [x] Changes are minimal, isolated to the CLI; no unrelated code is altered.
+
 ## Implementation Plan
 
 ### 1) New module with documented constants
@@ -61,6 +74,8 @@ Suggested constants:
 - Dynamic color resets: `OSC_RESET_FG` (110 ST), `OSC_RESET_BG` (111 ST), `OSC_RESET_CURSOR` (112 ST)
 - Optional: `CURSOR_STYLE_DEFAULT` (`CSI 0 q`)
 
+Status: [x] Implemented as described.
+
 ### 2) Wire into CLI attach cleanup
 File: `crates/cli/src/lib.rs`
 
@@ -68,6 +83,8 @@ File: `crates/cli/src/lib.rs`
 - Also ensure the EOF path (when the PTY exits) triggers the same footer before leaving the loop.
 - Use a TTY guard to avoid emitting control sequences into pipelines:
   - Rust std: `use std::io::IsTerminal; if std::io::stdout().is_terminal() { ... }`
+
+Status: [x] Implemented, including EOF path. Also added `AGENCY_FORCE_TTY_RESET` for tests.
 
 ### 3) Tests (TDD)
 File: `crates/cli/tests/attach_resets_terminal.rs`
@@ -81,21 +98,39 @@ File: `crates/cli/tests/attach_resets_terminal.rs`
     - `\x1b[?1049l` (leave alt‑screen)
 - Keep assertions readable and focused; do not overfit to ordering beyond essentials if not required.
 
+Status: [x] Implemented; uses `AGENCY_FORCE_TTY_RESET=1` to force emission when stdout is piped.
+
 ### 4) Docs (optional)
 - Add a short note to `docs/plans/PLN-2-phase-10-pty-completion.md` or a new brief entry that the CLI now emits a reset footer on detach and that cursor color is restored via `OSC 112`.
 
-## Acceptance Criteria
-- On explicit detach and on EOF, when stdout is a TTY, the CLI writes the reset footer to stdout.
-- The E2E test detects at least `OSC 112 ST`, `DECSTR`, and `?1049l` in stdout on detach.
-- When stdout is not a TTY, no reset sequences are written (add a negative test if desired).
-- Implementation uses named constants with comments in `crates/cli/src/term_reset.rs` and a helper function for emission.
-- Changes are minimal, isolated to the CLI; no unrelated code is altered.
+Status: [ ] Not yet added.
 
 ## Files
 - New: `crates/cli/src/term_reset.rs`
 - Update: `crates/cli/src/lib.rs` (in `attach_interactive`)
 - New test: `crates/cli/tests/attach_resets_terminal.rs`
 - Optional doc note: `docs/plans/PLN-2-phase-10-pty-completion.md`
+
+## Notes for Future Developers
+- Added `AGENCY_FORCE_TTY_RESET=1` as a test-only override to force the reset footer even when stdout is not a TTY (piped). This keeps runtime behavior clean for real users while allowing stable E2E assertions. Consider documenting this in testing conventions if reused elsewhere.
+- Unused introducer constants (`ESC`, `CSI`, `OSC`) are present for clarity but not used directly and can trigger `dead_code` warnings. Options:
+  - Prefix with underscores, or add `#[allow(dead_code)]` on those constants; or remove them if not desired.
+- Raw mode enabling is currently `enable_raw_mode().ok()` in the CLI. If raw mode fails to enable, detach key handling (e.g., `Ctrl‑Q`) can be intercepted by the terminal (XON/XOFF) and not reach the process. Not part of this plan, but worth considering a stricter error path or a user-facing warning.
+- A negative test for "when stdout is not a TTY, no reset sequences are written" is not included. The guard exists and behavior is correct; add a test if this regresses.
+- We intentionally avoid `ESC c` (hard reset) to prevent disruptive behavior across terminals.
+- OSC sequences use `ST` (ESC `\\`) terminator for robustness; BEL would also be accepted by many terminals but is avoided here.
+
+## Detailed Plan Updates
+- Add explicit mention of the `AGENCY_FORCE_TTY_RESET` override under the test step to standardize how to force footer emission under non-TTY capture in tests.
+- Optionally add a follow-up step to silence/clean `dead_code` warnings in `term_reset.rs` if the team prefers warning-free builds.
+- Optionally add a negative test case for non-TTY stdout to lock the behavior in.
+
+## Acceptance Criteria
+- On explicit detach and on EOF, when stdout is a TTY, the CLI writes the reset footer to stdout. [Met]
+- The E2E test detects at least `OSC 112 ST`, `DECSTR`, and `?1049l` in stdout on detach. [Met]
+- When stdout is not a TTY, no reset sequences are written (add a negative test if desired). [Guard implemented; test optional]
+- Implementation uses named constants with comments in `crates/cli/src/term_reset.rs` and a helper function for emission. [Met]
+- Changes are minimal, isolated to the CLI; no unrelated code is altered. [Met]
 
 ## Rollout & Risks
 - Sequences are idempotent and commonly supported; unknown ones are ignored.
