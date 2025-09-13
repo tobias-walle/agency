@@ -327,10 +327,16 @@ async fn pty_reattach_replay_is_sanitized_cr_and_ansi() {
 
   let start_params = TaskStartParams {
     project_root: env.root.display().to_string(),
-    task: TaskRef { id: Some(info.id), slug: None },
+    task: TaskRef {
+      id: Some(info.id),
+      slug: None,
+    },
   };
   let s: RpcResp<TaskStartResult> = client
-    .call("task.start", Some(serde_json::to_value(&start_params).unwrap()))
+    .call(
+      "task.start",
+      Some(serde_json::to_value(&start_params).unwrap()),
+    )
     .await;
   assert!(s.error.is_none());
 
@@ -346,26 +352,38 @@ async fn pty_reattach_replay_is_sanitized_cr_and_ansi() {
   let attachment_id = att.result.unwrap().attachment_id;
 
   // Produce colored line and CR-only progress updates
-  let script = "printf '\x1b[32mgreen\x1b[0m\n'; printf 'progress 1\rprogress 2\rprogress 3\n'; echo done\n";
+  let script =
+    "printf '\x1b[32mgreen\x1b[0m\n'; printf 'progress 1\rprogress 2\rprogress 3\n'; echo done\n";
   let _: RpcResp<Value> = client
-    .call("pty.input", Some(json!({ "attachment_id": attachment_id, "data": script })))
+    .call(
+      "pty.input",
+      Some(json!({ "attachment_id": attachment_id, "data": script })),
+    )
     .await;
 
   // Drain all available output
   for _ in 0..20u8 {
     let r: RpcResp<PtyReadResult> = client
-      .call("pty.read", Some(json!({ "attachment_id": attachment_id, "max_bytes": 8192usize })))
+      .call(
+        "pty.read",
+        Some(json!({ "attachment_id": attachment_id, "max_bytes": 8192usize })),
+      )
       .await;
     assert!(r.error.is_none());
-    if let Some(res) = r.result {
-      if res.data.contains("done") { break; }
+    if let Some(res) = r.result
+      && res.data.contains("done")
+    {
+      break;
     }
     tokio::time::sleep(Duration::from_millis(50)).await;
   }
 
   // Detach
   let _: RpcResp<Value> = client
-    .call("pty.detach", Some(json!({ "attachment_id": attachment_id })))
+    .call(
+      "pty.detach",
+      Some(json!({ "attachment_id": attachment_id })),
+    )
     .await;
 
   // Re-attach
@@ -375,7 +393,10 @@ async fn pty_reattach_replay_is_sanitized_cr_and_ansi() {
 
   // First read should return sanitized replay (CR -> LF) and intact colors (complete SGR sequences)
   let r2: RpcResp<PtyReadResult> = client
-    .call("pty.read", Some(json!({ "attachment_id": attachment_id2, "max_bytes": 8192usize })))
+    .call(
+      "pty.read",
+      Some(json!({ "attachment_id": attachment_id2, "max_bytes": 8192usize })),
+    )
     .await;
   assert!(r2.error.is_none());
   let replayed = r2.result.unwrap().data;
@@ -418,15 +439,16 @@ async fn pty_reattach_replay_is_sanitized_cr_and_ansi() {
     };
     panic!(
       "Expected sanitized replay to contain \"progress 3\" followed by a newline (LF or CRLF).\n{}\n-- escaped --\n{}\n-- hex (first 256) --\n{}",
-      hint,
-      escaped,
-      hex_preview
+      hint, escaped, hex_preview
     );
   }
 
   // cleanup
   let _: RpcResp<Value> = client
-    .call("pty.detach", Some(json!({ "attachment_id": attachment_id2 })))
+    .call(
+      "pty.detach",
+      Some(json!({ "attachment_id": attachment_id2 })),
+    )
     .await;
   env.handle.stop();
 }
@@ -566,10 +588,16 @@ async fn attach_skips_replay_when_alt_screen_active() {
 
   let start_params = TaskStartParams {
     project_root: env.root.display().to_string(),
-    task: TaskRef { id: Some(info.id), slug: None },
+    task: TaskRef {
+      id: Some(info.id),
+      slug: None,
+    },
   };
   let s: RpcResp<TaskStartResult> = client
-    .call("task.start", Some(serde_json::to_value(&start_params).unwrap()))
+    .call(
+      "task.start",
+      Some(serde_json::to_value(&start_params).unwrap()),
+    )
     .await;
   assert!(s.error.is_none());
 
@@ -586,17 +614,22 @@ async fn attach_skips_replay_when_alt_screen_active() {
 
   // Emit alt-screen enter and some text so detection sees it in output stream
   // Use POSIX printf with octal escape for ESC to ensure portability
-  let script = "printf '\u{001b}[?1049h'"; // fallback if shell supports \u
   // Prefer octal form to guarantee ESC across shells
   let script = "printf '\\033[?1049h'; echo in-alt\n";
   let _: RpcResp<Value> = client
-    .call("pty.input", Some(json!({ "attachment_id": attachment_id, "data": script })))
+    .call(
+      "pty.input",
+      Some(json!({ "attachment_id": attachment_id, "data": script })),
+    )
     .await;
 
   // Drain any current output and give the reader a moment to process detection
   for _ in 0..10u8 {
     let _ = client
-      .call::<PtyReadResult>("pty.read", Some(json!({ "attachment_id": attachment_id, "max_bytes": 8192usize })))
+      .call::<PtyReadResult>(
+        "pty.read",
+        Some(json!({ "attachment_id": attachment_id, "max_bytes": 8192usize })),
+      )
       .await;
     tokio::time::sleep(Duration::from_millis(20)).await;
   }
@@ -604,7 +637,10 @@ async fn attach_skips_replay_when_alt_screen_active() {
 
   // Detach
   let _: RpcResp<Value> = client
-    .call("pty.detach", Some(json!({ "attachment_id": attachment_id })))
+    .call(
+      "pty.detach",
+      Some(json!({ "attachment_id": attachment_id })),
+    )
     .await;
 
   // Re-attach with default replay (true). Since alt-screen is active, replay should be skipped.
@@ -614,7 +650,10 @@ async fn attach_skips_replay_when_alt_screen_active() {
 
   // Immediate read should have no replayed history. It may be empty or contain only new live bytes.
   let r: RpcResp<PtyReadResult> = client
-    .call("pty.read", Some(json!({ "attachment_id": attachment_id2, "max_bytes": 8192usize })))
+    .call(
+      "pty.read",
+      Some(json!({ "attachment_id": attachment_id2, "max_bytes": 8192usize })),
+    )
     .await;
   assert!(r.error.is_none());
   let data = r.result.unwrap().data;
@@ -626,7 +665,10 @@ async fn attach_skips_replay_when_alt_screen_active() {
 
   // Cleanup
   let _: RpcResp<Value> = client
-    .call("pty.detach", Some(json!({ "attachment_id": attachment_id2 })))
+    .call(
+      "pty.detach",
+      Some(json!({ "attachment_id": attachment_id2 })),
+    )
     .await;
   env.handle.stop();
 }
@@ -653,10 +695,16 @@ async fn attach_performs_resize_jiggle() {
 
   let start_params = TaskStartParams {
     project_root: env.root.display().to_string(),
-    task: TaskRef { id: Some(info.id), slug: None },
+    task: TaskRef {
+      id: Some(info.id),
+      slug: None,
+    },
   };
   let s: RpcResp<TaskStartResult> = client
-    .call("task.start", Some(serde_json::to_value(&start_params).unwrap()))
+    .call(
+      "task.start",
+      Some(serde_json::to_value(&start_params).unwrap()),
+    )
     .await;
   assert!(s.error.is_none());
 
@@ -678,7 +726,10 @@ async fn attach_performs_resize_jiggle() {
 
   // Cleanup
   let _: RpcResp<Value> = client
-    .call("pty.detach", Some(json!({ "attachment_id": attachment_id })))
+    .call(
+      "pty.detach",
+      Some(json!({ "attachment_id": attachment_id })),
+    )
     .await;
   env.handle.stop();
 }

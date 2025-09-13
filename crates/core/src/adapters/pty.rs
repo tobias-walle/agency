@@ -8,7 +8,7 @@ use std::thread;
 
 use anyhow::Context;
 use once_cell::sync::Lazy;
-use portable_pty::{native_pty_system, CommandBuilder, PtySize};
+use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 use tracing::debug;
 use uuid::Uuid;
 
@@ -32,10 +32,8 @@ fn sanitize_with_counters(input: &[u8]) -> (Vec<u8>, usize, usize) {
   let mut start = 0usize;
   let first = input[0];
   let at_safe = first == b'\n' || first == 0x1B || is_printable_ascii(first);
-  if !at_safe {
-    if let Some(pos) = input.iter().position(|&b| b == b'\n') {
-      start = pos.saturating_add(1);
-    }
+  if !at_safe && let Some(pos) = input.iter().position(|&b| b == b'\n') {
+    start = pos.saturating_add(1);
   }
 
   // Step 2: head sanitize: drop until safe boundary
@@ -50,7 +48,11 @@ fn sanitize_with_counters(input: &[u8]) -> (Vec<u8>, usize, usize) {
         let mut _found_final = false;
         while i < input.len() {
           let bb = input[i];
-          if bb >= 0x40 && bb <= 0x7E { _found_final = true; i += 1; break; }
+          if (0x40..=0x7E).contains(&bb) {
+            _found_final = true;
+            i += 1;
+            break;
+          }
           i += 1;
         }
         // Drop the mid-CSI head if it seems like a bracketed sequence
@@ -95,7 +97,10 @@ fn sanitize_with_counters(input: &[u8]) -> (Vec<u8>, usize, usize) {
         let mut has_final = false;
         while j < out.len() {
           let bb = out[j];
-          if bb >= 0x40 && bb <= 0x7E { has_final = true; break; }
+          if (0x40..=0x7E).contains(&bb) {
+            has_final = true;
+            break;
+          }
           j += 1;
         }
         if !has_final {
@@ -109,6 +114,7 @@ fn sanitize_with_counters(input: &[u8]) -> (Vec<u8>, usize, usize) {
   (out, dropped_head, dropped_tail)
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 fn sanitize_replay(input: &[u8]) -> Vec<u8> {
   sanitize_with_counters(input).0
 }
@@ -130,23 +136,24 @@ fn alt_detect_process(state: &mut AltDetectState, data: &[u8]) {
   while i + 3 <= scan.len() {
     if scan[i] == 0x1B && i + 2 < scan.len() && scan[i + 1] == b'[' && scan[i + 2] == b'?' {
       let mut j = i + 3;
-      while j < scan.len() && scan[j].is_ascii_digit() { j += 1; }
+      while j < scan.len() && scan[j].is_ascii_digit() {
+        j += 1;
+      }
       if j < scan.len() {
-        let num = std::str::from_utf8(&scan[i + 3..j]).ok().and_then(|s| s.parse::<u32>().ok());
+        let num = std::str::from_utf8(&scan[i + 3..j])
+          .ok()
+          .and_then(|s| s.parse::<u32>().ok());
         let final_byte = scan[j];
-        if let Some(n) = num {
-          if (n == 1049 || n == 1047 || n == 47) && (final_byte == b'h' || final_byte == b'l') {
-            let before = state.active;
-            if final_byte == b'h' {
-              state.active = true;
-            } else {
-              state.active = false;
-            }
-            let _ = before; // for potential future use
-            // advance past this sequence
-            i = j + 1;
-            continue;
-          }
+        if let Some(n) = num
+          && (n == 1049 || n == 1047 || n == 47)
+          && (final_byte == b'h' || final_byte == b'l')
+        {
+          let before = state.active;
+          state.active = final_byte == b'h';
+          let _ = before; // for potential future use
+          // advance past this sequence
+          i = j + 1;
+          continue;
         }
       }
       // Incomplete or non-matching; move forward by one to resync
@@ -545,13 +552,38 @@ pub fn jiggle_resize(attachment_id: &str, rows: u16, cols: u16) -> anyhow::Resul
   drop(reg);
   let master = sess.master.lock().unwrap();
   if cols > 1 {
-    master.resize(PtySize { rows, cols: cols - 1, pixel_width: 0, pixel_height: 0 })?;
-    master.resize(PtySize { rows, cols, pixel_width: 0, pixel_height: 0 })?;
+    master.resize(PtySize {
+      rows,
+      cols: cols - 1,
+      pixel_width: 0,
+      pixel_height: 0,
+    })?;
+    master.resize(PtySize {
+      rows,
+      cols,
+      pixel_width: 0,
+      pixel_height: 0,
+    })?;
   } else if rows > 1 {
-    master.resize(PtySize { rows: rows - 1, cols, pixel_width: 0, pixel_height: 0 })?;
-    master.resize(PtySize { rows, cols, pixel_width: 0, pixel_height: 0 })?;
+    master.resize(PtySize {
+      rows: rows - 1,
+      cols,
+      pixel_width: 0,
+      pixel_height: 0,
+    })?;
+    master.resize(PtySize {
+      rows,
+      cols,
+      pixel_width: 0,
+      pixel_height: 0,
+    })?;
   } else {
-    master.resize(PtySize { rows, cols, pixel_width: 0, pixel_height: 0 })?;
+    master.resize(PtySize {
+      rows,
+      cols,
+      pixel_width: 0,
+      pixel_height: 0,
+    })?;
   }
   Ok(())
 }
@@ -579,7 +611,9 @@ pub fn detach(attachment_id: &str) -> anyhow::Result<()> {
 mod tests {
   use super::*;
 
-  fn bytes(s: &str) -> Vec<u8> { s.as_bytes().to_vec() }
+  fn bytes(s: &str) -> Vec<u8> {
+    s.as_bytes().to_vec()
+  }
 
   #[test]
   fn sanitize_drops_mid_csi_head_and_keeps_plain_text() {
@@ -602,7 +636,10 @@ mod tests {
   fn sanitize_converts_isolated_cr_to_lf() {
     let input = bytes("progress 1\rprogress 2\rprogress 3\n");
     let out = sanitize_replay(&input);
-    assert_eq!(String::from_utf8_lossy(&out), "progress 1\nprogress 2\nprogress 3\n");
+    assert_eq!(
+      String::from_utf8_lossy(&out),
+      "progress 1\nprogress 2\nprogress 3\n"
+    );
   }
 
   #[test]
@@ -619,17 +656,17 @@ mod tests {
     let part1 = bytes("foo\x1b[?10");
     let part2 = bytes("49hbar");
     alt_detect_process(&mut st, &part1);
-    assert_eq!(st.active, false, "Should not enter until full sequence present");
+    assert!(!st.active, "Should not enter until full sequence present");
     alt_detect_process(&mut st, &part2);
-    assert_eq!(st.active, true, "Should enter alt-screen after full sequence");
+    assert!(st.active, "Should enter alt-screen after full sequence");
 
     // Leave sequence split differently: "...\x1b[?1049l"
     let part3 = bytes("xxx\x1b[");
     let part4 = bytes("?1049l");
     alt_detect_process(&mut st, &part3);
-    assert_eq!(st.active, true, "Still active until leave completes");
+    assert!(st.active, "Still active until leave completes");
     alt_detect_process(&mut st, &part4);
-    assert_eq!(st.active, false, "Should leave alt-screen after full sequence");
+    assert!(!st.active, "Should leave alt-screen after full sequence");
 
     // Also support 1047 and 47
     let mut st2 = AltDetectState::default();
