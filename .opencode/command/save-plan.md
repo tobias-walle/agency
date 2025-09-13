@@ -21,10 +21,10 @@ agent: autoaccept
 
 ## Plan Format
 
-Structure your plan into the following sections (replace placeholders in `[]`):
+Structure your plan into the following sections (replace placeholders in `[]`). Add a new line between each section:
 
 - `# PLN-[ID]: [title]`
-- `Date: [iso-timestamp]`
+- `Date: [iso-timestamp without time]`
 - `[short sentence what this plan is about]`
 - `## Goals`
 - `[goals (as a bullet point list)]`
