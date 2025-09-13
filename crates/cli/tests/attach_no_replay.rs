@@ -17,7 +17,7 @@ fn attach_no_replay_suppresses_history() {
   init
     .env("AGENCY_SOCKET", sock.as_os_str())
     .current_dir(&root)
-    .args(["init"]) 
+    .args(["init"])
     .assert()
     .success();
 
@@ -26,7 +26,7 @@ fn attach_no_replay_suppresses_history() {
   newc
     .env("AGENCY_SOCKET", sock.as_os_str())
     .current_dir(&root)
-    .args(["new", "feat-no-replay"]) 
+    .args(["new", "feat-no-replay"])
     .assert()
     .success();
 
@@ -35,7 +35,7 @@ fn attach_no_replay_suppresses_history() {
   attach
     .env("AGENCY_SOCKET", sock.as_os_str())
     .current_dir(&root)
-    .args(["attach", "feat-no-replay"]) 
+    .args(["attach", "feat-no-replay"])
     .stdin(Stdio::piped())
     .stdout(Stdio::piped())
     .stderr(Stdio::piped());
@@ -44,10 +44,7 @@ fn attach_no_replay_suppresses_history() {
   // write stdin: echo lines then Ctrl-Q (0x11)
   {
     let stdin = child.stdin.as_mut().expect("stdin");
-    let mut bytes = Vec::new();
-    bytes.extend_from_slice(b"echo first\n");
-    bytes.extend_from_slice(b"echo second\n");
-    bytes.push(0x11); // Ctrl-Q
+    let bytes = [b"echo first\n" as &[u8], b"echo second\n" as &[u8], &[0x11u8]].concat();
     stdin.write_all(&bytes).unwrap();
   }
 
@@ -61,7 +58,7 @@ fn attach_no_replay_suppresses_history() {
   attach2
     .env("AGENCY_SOCKET", sock.as_os_str())
     .current_dir(&root)
-    .args(["attach", "--no-replay", "feat-no-replay"]) 
+    .args(["attach", "--no-replay", "feat-no-replay"])
     .stdin(Stdio::piped())
     .stdout(Stdio::piped())
     .stderr(Stdio::piped());
@@ -71,8 +68,7 @@ fn attach_no_replay_suppresses_history() {
   std::thread::sleep(std::time::Duration::from_millis(150));
   {
     let stdin = child2.stdin.as_mut().expect("stdin");
-    let mut bytes = Vec::new();
-    bytes.push(0x11); // Ctrl-Q
+    let bytes = vec![0x11u8]; // Ctrl-Q
     stdin.write_all(&bytes).unwrap();
   }
 
@@ -80,5 +76,9 @@ fn attach_no_replay_suppresses_history() {
   assert!(out2.status.success());
   let stdout2 = String::from_utf8_lossy(&out2.stdout);
   // Should not contain the previous history lines
-  assert!(!stdout2.contains("first") && !stdout2.contains("second"), "stdout2: {}", stdout2);
+  assert!(
+    !stdout2.contains("first") && !stdout2.contains("second"),
+    "stdout2: {}",
+    stdout2
+  );
 }
