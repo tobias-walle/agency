@@ -183,11 +183,23 @@ pub async fn pty_attach(
   rows: u16,
   cols: u16,
 ) -> Result<PtyAttachResult> {
+  pty_attach_with_replay(sock, project_root, task, rows, cols, true).await
+}
+
+pub async fn pty_attach_with_replay(
+  sock: &Path,
+  project_root: &Path,
+  task: TaskRef,
+  rows: u16,
+  cols: u16,
+  replay: bool,
+) -> Result<PtyAttachResult> {
   let params = serde_json::to_value(PtyAttachParams {
     project_root: project_root.display().to_string(),
     task,
     rows,
     cols,
+    replay: Some(replay),
   })?;
   let v = rpc_call(sock, "pty.attach", Some(params)).await?;
   let res: PtyAttachResult = serde_json::from_value(v)?;

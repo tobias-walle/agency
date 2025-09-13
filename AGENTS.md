@@ -74,10 +74,13 @@ If you add a new dependency, resolve its Context7 ID and append it [here](./AGEN
 ## Testing
 
 - Keep tests readable and focused on behavior.
+- Highly emphasize good test assertion output. This is crucial to understand test failures better and find fixes fast. The following questions need to be answered on every assertion:
+  - What is asserted and why?
+  - What was the actual output?
+  - What was the expected output?
 - Centralize setup in `crates/test-support` helpers to avoid duplication (daemon, RPC, CLI, git, PTY).
 - Prefer polling with bounded timeouts over fixed sleeps to reduce flakiness.
 - Use `git2` for local repositories instead of shelling out to `git`.
 - Avoid global env mutations; prefer per-command `.env()` or scoped guards.
 - Use consistent file names (feature-oriented) and `subject_action_expected` test names.
 - Follow TDD for new behavior: write failing test, implement, then pass.
-

@@ -360,8 +360,9 @@ fn attach_interactive(args: args::AttachArgs) {
     .build()
     .unwrap();
 
-  let attach_res =
-    rt.block_on(async { rpc::client::pty_attach(&sock, &root, tref, rows, cols).await });
+  let attach_res = rt.block_on(async {
+    rpc::client::pty_attach_with_replay(&sock, &root, tref, rows, cols, !args.no_replay).await
+  });
   let attachment_id = match attach_res {
     Ok(r) => r.attachment_id,
     Err(e) => {

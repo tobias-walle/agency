@@ -71,6 +71,9 @@ pub struct StartArgs {
 pub struct AttachArgs {
   /// Task reference: numeric id or slug
   pub task: String,
+  /// Attach without replaying prior PTY output
+  #[arg(long = "no-replay")]
+  pub no_replay: bool,
 }
 
 #[derive(Debug, ClapArgs)]

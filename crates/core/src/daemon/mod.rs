@@ -294,9 +294,11 @@ pub async fn start(socket_path: &Path) -> io::Result<DaemonHandle> {
         return Err(ErrorObjectOwned::owned(-32010, format!("cannot attach: task is not running (status: {:?})", task.front_matter.status), None::<()>));
       }
       // Attach to existing session
-      let attach_id = crate::adapters::pty::attach(&root, id).map_err(|e| ErrorObjectOwned::owned(-32010, e.to_string(), None::<()>))?;
-      // Apply initial size
-      let _ = crate::adapters::pty::resize(&attach_id, p.rows, p.cols);
+      let prefill = p.replay.unwrap_or(true);
+      let attach_id = crate::adapters::pty::attach(&root, id, prefill).map_err(|e| ErrorObjectOwned::owned(-32010, e.to_string(), None::<()>))?;
+      // Apply initial size with a minimal jiggle to force redraws in TUIs
+      let _ = crate::adapters::pty::jiggle_resize(&attach_id, p.rows, p.cols);
+      tracing::info!(event = "pty_attach_jiggle_resize", task_id = id, attachment_id = %attach_id, rows = p.rows, cols = p.cols, "applied initial jiggle resize");
       tracing::info!(event = "pty_attach", task_id = id, attachment_id = %attach_id, rows = p.rows, cols = p.cols, "pty attached");
       let res = PtyAttachResult { attachment_id: attach_id };
       Ok(serde_json::to_value(res).unwrap())

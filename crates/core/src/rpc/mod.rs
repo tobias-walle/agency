@@ -84,6 +84,8 @@ pub struct PtyAttachParams {
   pub task: TaskRef,
   pub rows: u16,
   pub cols: u16,
+  #[serde(default)]
+  pub replay: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

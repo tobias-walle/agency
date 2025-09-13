@@ -305,6 +305,133 @@ async fn pty_reattach_replays_scrollback_tail() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn pty_reattach_replay_is_sanitized_cr_and_ansi() {
+  use serde_json::json;
+  let env = start_test_env().await;
+  let client = UnixRpcClient::new(&env.sock);
+
+  // Create and start a task
+  let params = TaskNewParams {
+    project_root: env.root.display().to_string(),
+    slug: "feat-sanitize".into(),
+    base_branch: "main".into(),
+    labels: vec![],
+    agent: Agent::Fake,
+    body: None,
+  };
+  let v: RpcResp<TaskInfo> = client
+    .call("task.new", Some(serde_json::to_value(&params).unwrap()))
+    .await;
+  assert!(v.error.is_none());
+  let info = v.result.unwrap();
+
+  let start_params = TaskStartParams {
+    project_root: env.root.display().to_string(),
+    task: TaskRef { id: Some(info.id), slug: None },
+  };
+  let s: RpcResp<TaskStartResult> = client
+    .call("task.start", Some(serde_json::to_value(&start_params).unwrap()))
+    .await;
+  assert!(s.error.is_none());
+
+  // Attach and generate mixed output: SGR color + CR progress + normal lines
+  let attach_params = json!({
+    "project_root": env.root.display().to_string(),
+    "task": {"id": info.id},
+    "rows": 24u16,
+    "cols": 80u16
+  });
+  let att: RpcResp<PtyAttachResult> = client.call("pty.attach", Some(attach_params.clone())).await;
+  assert!(att.error.is_none());
+  let attachment_id = att.result.unwrap().attachment_id;
+
+  // Produce colored line and CR-only progress updates
+  let script = "printf '\x1b[32mgreen\x1b[0m\n'; printf 'progress 1\rprogress 2\rprogress 3\n'; echo done\n";
+  let _: RpcResp<Value> = client
+    .call("pty.input", Some(json!({ "attachment_id": attachment_id, "data": script })))
+    .await;
+
+  // Drain all available output
+  for _ in 0..20u8 {
+    let r: RpcResp<PtyReadResult> = client
+      .call("pty.read", Some(json!({ "attachment_id": attachment_id, "max_bytes": 8192usize })))
+      .await;
+    assert!(r.error.is_none());
+    if let Some(res) = r.result {
+      if res.data.contains("done") { break; }
+    }
+    tokio::time::sleep(Duration::from_millis(50)).await;
+  }
+
+  // Detach
+  let _: RpcResp<Value> = client
+    .call("pty.detach", Some(json!({ "attachment_id": attachment_id })))
+    .await;
+
+  // Re-attach
+  let att2: RpcResp<PtyAttachResult> = client.call("pty.attach", Some(attach_params)).await;
+  assert!(att2.error.is_none());
+  let attachment_id2 = att2.result.unwrap().attachment_id;
+
+  // First read should return sanitized replay (CR -> LF) and intact colors (complete SGR sequences)
+  let r2: RpcResp<PtyReadResult> = client
+    .call("pty.read", Some(json!({ "attachment_id": attachment_id2, "max_bytes": 8192usize })))
+    .await;
+  assert!(r2.error.is_none());
+  let replayed = r2.result.unwrap().data;
+  // Progress should be line-aligned (no stray \r); at minimum last progress line must appear
+  // Ensure no isolated carriage returns: any '\r' must be followed by '\n'
+  if let Some(_pos) = replayed.find('\r') {
+    let bytes = replayed.as_bytes();
+    for i in 0..bytes.len().saturating_sub(1) {
+      if bytes[i] == b'\r' {
+        assert_eq!(
+          bytes[i + 1],
+          b'\n',
+          "Isolated CR at byte {}.\nEscaped: {:?}\nHex (first 256): {}",
+          i,
+          replayed,
+          bytes
+            .iter()
+            .take(256)
+            .map(|b| format!("{:02X}", b))
+            .collect::<Vec<_>>()
+            .join(" ")
+        );
+      }
+    }
+  }
+  let has_last_line = replayed.contains("progress 3\n") || replayed.contains("progress 3\r\n");
+  if !has_last_line {
+    let escaped = format!("{:?}", replayed);
+    let hex_preview = replayed
+      .as_bytes()
+      .iter()
+      .take(256)
+      .map(|b| format!("{:02X}", b))
+      .collect::<Vec<_>>()
+      .join(" ");
+    let hint = if replayed.contains("printf '") {
+      "Hint: PTY may have echoed the input script; replay window might start before command output."
+    } else {
+      ""
+    };
+    panic!(
+      "Expected sanitized replay to contain \"progress 3\" followed by a newline (LF or CRLF).\n{}\n-- escaped --\n{}\n-- hex (first 256) --\n{}",
+      hint,
+      escaped,
+      hex_preview
+    );
+  }
+
+  // cleanup
+  let _: RpcResp<Value> = client
+    .call("pty.detach", Some(json!({ "attachment_id": attachment_id2 })))
+    .await;
+  env.handle.stop();
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn pty_read_wait_ms_returns_on_data() {
   let env = start_test_env().await;
   let client = UnixRpcClient::new(&env.sock);
@@ -414,5 +541,144 @@ async fn pty_read_wait_ms_returns_on_data() {
   }
   assert!(seen, "expected echoed 'ping' within subsequent reads");
 
+  env.handle.stop();
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn attach_skips_replay_when_alt_screen_active() {
+  let env = start_test_env().await;
+  let client = UnixRpcClient::new(&env.sock);
+
+  // Create and start a task
+  let params = TaskNewParams {
+    project_root: env.root.display().to_string(),
+    slug: "feat-alt-skip".into(),
+    base_branch: "main".into(),
+    labels: vec![],
+    agent: Agent::Fake,
+    body: None,
+  };
+  let v: RpcResp<TaskInfo> = client
+    .call("task.new", Some(serde_json::to_value(&params).unwrap()))
+    .await;
+  assert!(v.error.is_none());
+  let info = v.result.unwrap();
+
+  let start_params = TaskStartParams {
+    project_root: env.root.display().to_string(),
+    task: TaskRef { id: Some(info.id), slug: None },
+  };
+  let s: RpcResp<TaskStartResult> = client
+    .call("task.start", Some(serde_json::to_value(&start_params).unwrap()))
+    .await;
+  assert!(s.error.is_none());
+
+  // Attach and mark alt-screen active by emitting enter sequence
+  let attach_params = json!({
+    "project_root": env.root.display().to_string(),
+    "task": {"id": info.id},
+    "rows": 24u16,
+    "cols": 80u16
+  });
+  let att: RpcResp<PtyAttachResult> = client.call("pty.attach", Some(attach_params.clone())).await;
+  assert!(att.error.is_none());
+  let attachment_id = att.result.unwrap().attachment_id;
+
+  // Emit alt-screen enter and some text so detection sees it in output stream
+  // Use POSIX printf with octal escape for ESC to ensure portability
+  let script = "printf '\u{001b}[?1049h'"; // fallback if shell supports \u
+  // Prefer octal form to guarantee ESC across shells
+  let script = "printf '\\033[?1049h'; echo in-alt\n";
+  let _: RpcResp<Value> = client
+    .call("pty.input", Some(json!({ "attachment_id": attachment_id, "data": script })))
+    .await;
+
+  // Drain any current output and give the reader a moment to process detection
+  for _ in 0..10u8 {
+    let _ = client
+      .call::<PtyReadResult>("pty.read", Some(json!({ "attachment_id": attachment_id, "max_bytes": 8192usize })))
+      .await;
+    tokio::time::sleep(Duration::from_millis(20)).await;
+  }
+  tokio::time::sleep(Duration::from_millis(50)).await;
+
+  // Detach
+  let _: RpcResp<Value> = client
+    .call("pty.detach", Some(json!({ "attachment_id": attachment_id })))
+    .await;
+
+  // Re-attach with default replay (true). Since alt-screen is active, replay should be skipped.
+  let att2: RpcResp<PtyAttachResult> = client.call("pty.attach", Some(attach_params)).await;
+  assert!(att2.error.is_none());
+  let attachment_id2 = att2.result.unwrap().attachment_id;
+
+  // Immediate read should have no replayed history. It may be empty or contain only new live bytes.
+  let r: RpcResp<PtyReadResult> = client
+    .call("pty.read", Some(json!({ "attachment_id": attachment_id2, "max_bytes": 8192usize })))
+    .await;
+  assert!(r.error.is_none());
+  let data = r.result.unwrap().data;
+  assert!(
+    data.is_empty() || (!data.contains("in-alt") && !data.contains("printf")),
+    "Expected no replay when alt-screen active (no prior 'in-alt' or command echo); got: {:?}",
+    data
+  );
+
+  // Cleanup
+  let _: RpcResp<Value> = client
+    .call("pty.detach", Some(json!({ "attachment_id": attachment_id2 })))
+    .await;
+  env.handle.stop();
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn attach_performs_resize_jiggle() {
+  let env = start_test_env().await;
+  let client = UnixRpcClient::new(&env.sock);
+
+  // Create and start a task
+  let params = TaskNewParams {
+    project_root: env.root.display().to_string(),
+    slug: "feat-jiggle".into(),
+    base_branch: "main".into(),
+    labels: vec![],
+    agent: Agent::Fake,
+    body: None,
+  };
+  let v: RpcResp<TaskInfo> = client
+    .call("task.new", Some(serde_json::to_value(&params).unwrap()))
+    .await;
+  assert!(v.error.is_none());
+  let info = v.result.unwrap();
+
+  let start_params = TaskStartParams {
+    project_root: env.root.display().to_string(),
+    task: TaskRef { id: Some(info.id), slug: None },
+  };
+  let s: RpcResp<TaskStartResult> = client
+    .call("task.start", Some(serde_json::to_value(&start_params).unwrap()))
+    .await;
+  assert!(s.error.is_none());
+
+  // Attach
+  let attach_params = json!({
+    "project_root": env.root.display().to_string(),
+    "task": {"id": info.id},
+    "rows": 24u16,
+    "cols": 80u16
+  });
+  let att: RpcResp<PtyAttachResult> = client.call("pty.attach", Some(attach_params)).await;
+  assert!(att.error.is_none());
+  let attachment_id = att.result.unwrap().attachment_id;
+
+  // Smoke test: direct jiggle calls should not error, including boundary sizes
+  assert!(agency_core::adapters::pty::jiggle_resize(&attachment_id, 24, 80).is_ok());
+  assert!(agency_core::adapters::pty::jiggle_resize(&attachment_id, 24, 1).is_ok());
+  assert!(agency_core::adapters::pty::jiggle_resize(&attachment_id, 1, 1).is_ok());
+
+  // Cleanup
+  let _: RpcResp<Value> = client
+    .call("pty.detach", Some(json!({ "attachment_id": attachment_id })))
+    .await;
   env.handle.stop();
 }

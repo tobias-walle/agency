@@ -8,12 +8,159 @@ use std::thread;
 
 use anyhow::Context;
 use once_cell::sync::Lazy;
-use portable_pty::{CommandBuilder, PtySize, native_pty_system};
+use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use tracing::debug;
 use uuid::Uuid;
 
 const MAX_BUFFER_BYTES: usize = 1024 * 1024; // ~1 MiB cap for history ring
 const ATTACH_REPLAY_BYTES: usize = 128 * 1024; // 128 KiB replay limit
+const ATTACH_REPLAY_EMIT_BYTES: usize = 8 * 1024; // Emit up to 8 KiB on initial prefill
+const ALT_TAIL_MAX: usize = 8; // lookbehind window for alt-screen detection
+
+fn is_printable_ascii(b: u8) -> bool {
+  b >= 0x20 && b != 0x7F
+}
+
+fn sanitize_with_counters(input: &[u8]) -> (Vec<u8>, usize, usize) {
+  if input.is_empty() {
+    return (Vec::new(), 0, 0);
+  }
+  let mut dropped_head = 0usize;
+  let mut dropped_tail = 0usize;
+
+  // Step 1: if not at a safe boundary, try to align to line boundary after the first \n
+  let mut start = 0usize;
+  let first = input[0];
+  let at_safe = first == b'\n' || first == 0x1B || is_printable_ascii(first);
+  if !at_safe {
+    if let Some(pos) = input.iter().position(|&b| b == b'\n') {
+      start = pos.saturating_add(1);
+    }
+  }
+
+  // Step 2: head sanitize: drop until safe boundary
+  // Safe boundary: \n, ESC, or printable ASCII. Additionally, drop a head that looks like mid-CSI (starts with '[' followed by params and optional final).
+  while start < input.len() {
+    let b = input[start];
+    if b == b'\n' || b == 0x1B || is_printable_ascii(b) {
+      // Special-case: mid-CSI without ESC at very start like "[31m...": drop the bracketed sequence
+      if b == b'[' {
+        // Scan until a potential final (0x40..0x7E) or end
+        let mut i = start + 1;
+        let mut _found_final = false;
+        while i < input.len() {
+          let bb = input[i];
+          if bb >= 0x40 && bb <= 0x7E { _found_final = true; i += 1; break; }
+          i += 1;
+        }
+        // Drop the mid-CSI head if it seems like a bracketed sequence
+        dropped_head += i - start;
+        start = i;
+        continue;
+      }
+      break;
+    }
+    start += 1;
+    dropped_head += 1;
+  }
+
+  // Step 3: copy with CR normalization (convert isolated \r to \n)
+  let mut out = Vec::with_capacity(input.len().saturating_sub(start));
+  let mut i = start;
+  while i < input.len() {
+    let b = input[i];
+    if b == b'\r' {
+      if i + 1 < input.len() && input[i + 1] == b'\n' {
+        out.push(b'\r');
+      } else {
+        out.push(b'\n');
+      }
+      i += 1;
+      continue;
+    }
+    out.push(b);
+    i += 1;
+  }
+
+  // Step 4: tail sanitize: drop dangling ESC or incomplete CSI starting at last ESC
+  if let Some(last_esc_pos) = out.iter().rposition(|&b| b == 0x1B) {
+    // If ESC is the last byte, drop it
+    if last_esc_pos == out.len() - 1 {
+      out.truncate(last_esc_pos);
+      dropped_tail += 1;
+    } else {
+      // If ESC is followed by '[' but no final (0x40..0x7E) appears, drop from ESC onwards
+      if out.get(last_esc_pos + 1) == Some(&b'[') {
+        let mut j = last_esc_pos + 2;
+        let mut has_final = false;
+        while j < out.len() {
+          let bb = out[j];
+          if bb >= 0x40 && bb <= 0x7E { has_final = true; break; }
+          j += 1;
+        }
+        if !has_final {
+          dropped_tail += out.len() - last_esc_pos;
+          out.truncate(last_esc_pos);
+        }
+      }
+    }
+  }
+
+  (out, dropped_head, dropped_tail)
+}
+
+fn sanitize_replay(input: &[u8]) -> Vec<u8> {
+  sanitize_with_counters(input).0
+}
+
+#[derive(Debug, Default, Clone)]
+struct AltDetectState {
+  active: bool,
+  tail: Vec<u8>,
+}
+
+fn alt_detect_process(state: &mut AltDetectState, data: &[u8]) {
+  // Build scan buffer: previous tail + current data
+  let mut scan = Vec::with_capacity(state.tail.len() + data.len());
+  scan.extend_from_slice(&state.tail);
+  scan.extend_from_slice(data);
+
+  // Helper to attempt to parse CSI ? <num> <final>
+  let mut i = 0usize;
+  while i + 3 <= scan.len() {
+    if scan[i] == 0x1B && i + 2 < scan.len() && scan[i + 1] == b'[' && scan[i + 2] == b'?' {
+      let mut j = i + 3;
+      while j < scan.len() && scan[j].is_ascii_digit() { j += 1; }
+      if j < scan.len() {
+        let num = std::str::from_utf8(&scan[i + 3..j]).ok().and_then(|s| s.parse::<u32>().ok());
+        let final_byte = scan[j];
+        if let Some(n) = num {
+          if (n == 1049 || n == 1047 || n == 47) && (final_byte == b'h' || final_byte == b'l') {
+            let before = state.active;
+            if final_byte == b'h' {
+              state.active = true;
+            } else {
+              state.active = false;
+            }
+            let _ = before; // for potential future use
+            // advance past this sequence
+            i = j + 1;
+            continue;
+          }
+        }
+      }
+      // Incomplete or non-matching; move forward by one to resync
+    }
+    i += 1;
+  }
+
+  // Update tail to last up to ALT_TAIL_MAX bytes of scan
+  if scan.len() > ALT_TAIL_MAX {
+    state.tail = scan[scan.len() - ALT_TAIL_MAX..].to_vec();
+  } else {
+    state.tail = scan;
+  }
+}
 
 pub struct PtySession {
   pub id: u64,
@@ -27,6 +174,9 @@ pub struct PtySession {
   child: Mutex<Option<Box<dyn portable_pty::Child + Send + Sync>>>, // retain child handle
   // Long-polling primitive: condvar paired with outbox and eof state
   cv: (Mutex<bool>, std::sync::Condvar),
+  // Alt-screen tracking
+  alt_screen_active: AtomicBool,
+  alt_detect_tail: Mutex<Vec<u8>>, // last up to 8 bytes across read boundaries
 }
 
 impl PtySession {
@@ -45,6 +195,8 @@ impl PtySession {
       active_attach: Mutex::new(None),
       child: Mutex::new(Some(child)),
       cv: (Mutex::new(false), std::sync::Condvar::new()),
+      alt_screen_active: AtomicBool::new(false),
+      alt_detect_tail: Mutex::new(Vec::new()),
     }
   }
 }
@@ -135,6 +287,34 @@ pub fn ensure_spawn(project_root: &Path, task_id: u64, worktree_path: &Path) -> 
               bytes = n
             );
             let data = &tmp[..n];
+
+            // Alt-screen detection over output stream
+            {
+              let before = sess_for_thread.alt_screen_active.load(Ordering::SeqCst);
+              let mut state = AltDetectState {
+                active: before,
+                tail: sess_for_thread.alt_detect_tail.lock().unwrap().clone(),
+              };
+              alt_detect_process(&mut state, data);
+              if state.active != before {
+                if state.active {
+                  tracing::info!(event = "pty_alt_screen_on", task_id = sess_for_thread.id);
+                } else {
+                  tracing::info!(event = "pty_alt_screen_off", task_id = sess_for_thread.id);
+                }
+                sess_for_thread
+                  .alt_screen_active
+                  .store(state.active, Ordering::SeqCst);
+              } else {
+                // store unchanged state too to keep tail current
+                sess_for_thread
+                  .alt_screen_active
+                  .store(state.active, Ordering::SeqCst);
+              }
+              let mut tail = sess_for_thread.alt_detect_tail.lock().unwrap();
+              *tail = state.tail;
+            }
+
             // Append to history ring (bounded)
             {
               let mut ring = sess_for_thread.history_ring.lock().unwrap();
@@ -186,7 +366,7 @@ pub fn ensure_spawn(project_root: &Path, task_id: u64, worktree_path: &Path) -> 
 }
 
 /// Attach to a running PTY session for a task; returns an attachment id. Only one active attach.
-pub fn attach(project_root: &Path, task_id: u64) -> anyhow::Result<String> {
+pub fn attach(project_root: &Path, task_id: u64, prefill: bool) -> anyhow::Result<String> {
   let mut reg = REGISTRY.lock().unwrap();
   let root_key = project_root
     .canonicalize()
@@ -209,22 +389,31 @@ pub fn attach(project_root: &Path, task_id: u64) -> anyhow::Result<String> {
     reg.attachments.insert(id.clone(), sess.clone());
     debug!(event = "pty_attach_new", task_id = sess.id, attachment_id = %id);
 
-    // Prefill outbox with tail of history ring for replay
-    {
+    // Prefill outbox with tail of history ring for replay (gated by alt-screen state)
+    let effective_prefill = prefill && !sess.alt_screen_active.load(Ordering::SeqCst);
+    if effective_prefill {
       let ring = sess.history_ring.lock().unwrap();
       let tail_start = if ring.len() > ATTACH_REPLAY_BYTES {
         ring.len() - ATTACH_REPLAY_BYTES
       } else {
         0
       };
-      let replay_data = ring[tail_start..].to_vec();
-      debug!(
+      let (sanitized, dropped_head, dropped_tail) = sanitize_with_counters(&ring[tail_start..]);
+      let replay_len = sanitized.len();
+      let emit_start = replay_len.saturating_sub(ATTACH_REPLAY_EMIT_BYTES);
+      let replay_data = sanitized[emit_start..].to_vec();
+      tracing::info!(
         event = "pty_attach_replay_prefill",
         task_id = sess.id,
-        replay_bytes = replay_data.len()
+        replay_bytes = replay_data.len(),
+        dropped_head,
+        dropped_tail
       );
       let mut outbox = sess.outbox.lock().unwrap();
       *outbox = Some(replay_data);
+    } else {
+      let mut outbox = sess.outbox.lock().unwrap();
+      *outbox = Some(Vec::new());
     }
     // Notify waiter in case a read is already waiting
     {
@@ -345,6 +534,28 @@ pub fn resize(attachment_id: &str, rows: u16, cols: u16) -> anyhow::Result<()> {
   Ok(())
 }
 
+/// Perform a minimal two-step resize to trigger TUI redraws without altering state.
+pub fn jiggle_resize(attachment_id: &str, rows: u16, cols: u16) -> anyhow::Result<()> {
+  let reg = REGISTRY.lock().unwrap();
+  let sess = reg
+    .attachments
+    .get(attachment_id)
+    .cloned()
+    .ok_or_else(|| anyhow::anyhow!("invalid attachment"))?;
+  drop(reg);
+  let master = sess.master.lock().unwrap();
+  if cols > 1 {
+    master.resize(PtySize { rows, cols: cols - 1, pixel_width: 0, pixel_height: 0 })?;
+    master.resize(PtySize { rows, cols, pixel_width: 0, pixel_height: 0 })?;
+  } else if rows > 1 {
+    master.resize(PtySize { rows: rows - 1, cols, pixel_width: 0, pixel_height: 0 })?;
+    master.resize(PtySize { rows, cols, pixel_width: 0, pixel_height: 0 })?;
+  } else {
+    master.resize(PtySize { rows, cols, pixel_width: 0, pixel_height: 0 })?;
+  }
+  Ok(())
+}
+
 /// Detach the active attachment.
 pub fn detach(attachment_id: &str) -> anyhow::Result<()> {
   let mut reg = REGISTRY.lock().unwrap();
@@ -362,4 +573,75 @@ pub fn detach(attachment_id: &str) -> anyhow::Result<()> {
     cv.notify_all();
   }
   Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  fn bytes(s: &str) -> Vec<u8> { s.as_bytes().to_vec() }
+
+  #[test]
+  fn sanitize_drops_mid_csi_head_and_keeps_plain_text() {
+    let input = bytes("[31mHello");
+    let out = sanitize_replay(&input);
+    assert_eq!(String::from_utf8_lossy(&out), "Hello");
+  }
+
+  #[test]
+  fn sanitize_truncates_dangling_escape_tails() {
+    let a = bytes("Hello\x1b");
+    let b = bytes("Hello\x1b[");
+    let c = bytes("Hello\x1b[31");
+    assert_eq!(String::from_utf8_lossy(&sanitize_replay(&a)), "Hello");
+    assert_eq!(String::from_utf8_lossy(&sanitize_replay(&b)), "Hello");
+    assert_eq!(String::from_utf8_lossy(&sanitize_replay(&c)), "Hello");
+  }
+
+  #[test]
+  fn sanitize_converts_isolated_cr_to_lf() {
+    let input = bytes("progress 1\rprogress 2\rprogress 3\n");
+    let out = sanitize_replay(&input);
+    assert_eq!(String::from_utf8_lossy(&out), "progress 1\nprogress 2\nprogress 3\n");
+  }
+
+  #[test]
+  fn sanitize_preserves_complete_ansi_sequences() {
+    let input = bytes("\x1b[31mHello\x1b[0m\n");
+    let out = sanitize_replay(&input);
+    assert_eq!(out, input);
+  }
+
+  #[test]
+  fn alt_screen_detection_enters_and_leaves() {
+    let mut st = AltDetectState::default();
+    // Enter sequence split across boundary: "...\x1b[?1049h"
+    let part1 = bytes("foo\x1b[?10");
+    let part2 = bytes("49hbar");
+    alt_detect_process(&mut st, &part1);
+    assert_eq!(st.active, false, "Should not enter until full sequence present");
+    alt_detect_process(&mut st, &part2);
+    assert_eq!(st.active, true, "Should enter alt-screen after full sequence");
+
+    // Leave sequence split differently: "...\x1b[?1049l"
+    let part3 = bytes("xxx\x1b[");
+    let part4 = bytes("?1049l");
+    alt_detect_process(&mut st, &part3);
+    assert_eq!(st.active, true, "Still active until leave completes");
+    alt_detect_process(&mut st, &part4);
+    assert_eq!(st.active, false, "Should leave alt-screen after full sequence");
+
+    // Also support 1047 and 47
+    let mut st2 = AltDetectState::default();
+    alt_detect_process(&mut st2, b"\x1b[?1047h");
+    assert!(st2.active);
+    alt_detect_process(&mut st2, b"\x1b[?1047l");
+    assert!(!st2.active);
+
+    let mut st3 = AltDetectState::default();
+    alt_detect_process(&mut st3, b"\x1b[?47h");
+    assert!(st3.active);
+    alt_detect_process(&mut st3, b"\x1b[?47l");
+    assert!(!st3.active);
+  }
 }
