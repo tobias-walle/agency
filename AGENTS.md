@@ -166,10 +166,9 @@ If you add a new dependency, resolve its Context7 ID and append it here.
   - Lookup new APIs before you use them
   - Check correct API use when encountering errors
 - Never use single letter variable names if they span more than 3 lines
-- You MUST work with TDD
-  1. Write the tests first, make sure they fail
-  2. Implement the functionality
-  3. Make sure the tests pass
+- You SHOULD use TDD then appropriate:
+  - Fixing bugs -> Write tests before implementation
+  - Implement new features, with unclear final solution -> Write tests after implementation
 
 ## Testing
 
@@ -180,4 +179,3 @@ If you add a new dependency, resolve its Context7 ID and append it here.
 - Use `git2` for local repositories instead of shelling out to `git`.
 - Avoid global env mutations; prefer per-command `.env()` or scoped guards.
 - Use consistent file names (feature-oriented) and `subject_action_expected` test names.
-- Follow TDD for new behavior: write failing test, implement, then pass.
