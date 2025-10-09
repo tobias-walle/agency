@@ -65,13 +65,13 @@ Unify agent process spawning behind a single path, add a Stopped status to chang
 
 HINT: Update checkboxes during the implementation
 
-1. [ ] Domain: add `Stopped` status and transitions
+1. [x] Domain: add `Stopped` status and transitions
    - Update `crates/core/src/domain/task.rs` to add `Status::Stopped` (serde) and transition rules (`Running -> Stopped`, `Stopped -> Running`).
    - Expose in `crates/core/src/domain/mod.rs` if re-exports are used.
    - Update CLI rendering in `crates/cli/src/lib.rs` to include `stopped` in status mapping.
    - Add unit tests in `crates/core/tests/tasks.rs` for the new transitions and explicit `Idle` vs `Stopped` behavior.
 
-2. [ ] Daemon: persist Running -> Stopped on restart (no spawn)
+2. [x] Daemon: persist Running -> Stopped on restart (no spawn)
    - In `crates/core/src/daemon/mod.rs::resume_running_tasks_if_configured`, scan tasks; for each `Running`, transition to `Stopped` and write the updated file back to disk.
    - Do not spawn PTYs during resume; log `daemon_resume_mark_stopped` with counts.
    - Update tests in `crates/core/tests/daemon_resume.rs` to assert: statuses changed to `Stopped`, `pty.attach` rejected until `task.start` is called again.

@@ -1,15 +1,15 @@
 use std::time::Duration;
 
 use agency_core::rpc::{
-  PtyAttachResult, PtyReadResult, TaskInfo, TaskNewParams, TaskRef, TaskStartParams,
+  PtyAttachResult, TaskInfo, TaskListResponse, TaskNewParams, TaskRef, TaskStartParams,
   TaskStartResult,
 };
-use agency_core::{adapters::fs as fsutil, domain::task::Agent, logging};
+use agency_core::{adapters::fs as fsutil, domain::task::{Agent, Status}, logging};
 use serde_json::{Value, json};
 use test_support::{RpcResp, UnixRpcClient, init_repo_with_initial_commit, poll_until};
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn resumes_running_task_on_boot() {
+async fn marks_running_task_as_stopped_on_boot() {
   let td = tempfile::tempdir().unwrap();
   let root = td.path().to_path_buf();
   let log = fsutil::logs_path(&root);
@@ -89,29 +89,45 @@ async fn resumes_running_task_on_boot() {
   .await;
   assert!(ok2, "daemon did not become ready in time after restart");
 
-  // Attach without calling task.start again
+  let status_resp: RpcResp<TaskListResponse> = client2
+    .call(
+      "task.status",
+      Some(json!({ "project_root": root.display().to_string() })),
+    )
+    .await;
+  assert!(status_resp.error.is_none(), "status error: {:?}", status_resp.error);
+  let tasks = status_resp.result.unwrap().tasks;
+  assert_eq!(tasks.len(), 1);
+  assert_eq!(tasks[0].status, Status::Stopped);
+
   let attach_params = json!({
     "project_root": root.display().to_string(),
     "task": {"id": info.id},
     "rows": 24u16,
     "cols": 80u16
   });
-  let att: RpcResp<PtyAttachResult> = client2.call("pty.attach", Some(attach_params)).await;
-  assert!(att.error.is_none(), "attach error: {:?}", att.error);
+  let att: RpcResp<PtyAttachResult> = client2
+    .call("pty.attach", Some(attach_params.clone()))
+    .await;
+  assert!(att.error.is_some(), "expected attach to fail when task is stopped");
 
-  // Basic read sanity
-  let attachment_id = att.result.unwrap().attachment_id;
-  let r: RpcResp<PtyReadResult> = client2
+  let restart: RpcResp<TaskStartResult> = client2
     .call(
-      "pty.read",
-      Some(json!({
-        "attachment_id": attachment_id,
-        "max_bytes": 4096usize,
-        "wait_ms": 50u64
-      })),
+      "task.start",
+      Some(serde_json::to_value(&start_params).unwrap()),
     )
     .await;
-  assert!(r.error.is_none());
+  assert!(restart.error.is_none(), "restart start error: {:?}", restart.error);
+  let restart_info = restart.result.unwrap();
+  assert_eq!(restart_info.status, Status::Running);
+
+  let att2: RpcResp<PtyAttachResult> = client2
+    .call("pty.attach", Some(attach_params))
+    .await;
+  assert!(att2.error.is_none(), "attach after restart error: {:?}", att2.error);
 
   handle2.stop();
+  unsafe {
+    std::env::remove_var("AGENCY_RESUME_ROOT");
+  }
 }

@@ -107,24 +107,101 @@ fn resume_running_tasks_if_configured() {
       return;
     }
     info!(event = "daemon_resume_scan", root = %root.display(), "scanning for running tasks to resume");
-    if let Ok(read_dir) = fs::read_dir(&tasks_dir) {
-      for entry in read_dir.flatten() {
-        let name = entry.file_name();
-        let name = name.to_string_lossy().to_string();
-        if let Ok((TaskId(id), slug)) = Task::parse_filename(&name)
-          && let Ok(s) = fs::read_to_string(entry.path())
-          && let Ok(task) = Task::from_markdown(TaskId(id), slug.clone(), &s)
-          && task.front_matter.status == Status::Running
-        {
-          let wt = fsutil::worktree_path(&root, id, &slug);
-          let _ = fs::create_dir_all(&wt);
-          match crate::adapters::pty::ensure_spawn(&root, id, &wt) {
-            Ok(()) => info!(event = "daemon_resume_ok", id, slug = %slug, "resumed running task"),
-            Err(e) => {
-              warn!(event = "daemon_resume_fail", id, slug = %slug, error = %e, "failed to resume task")
+    match fs::read_dir(&tasks_dir) {
+      Ok(read_dir) => {
+        let mut running_count = 0;
+        let mut stopped_count = 0;
+        let mut error_count = 0;
+        for entry in read_dir.flatten() {
+          let name = entry.file_name();
+          let name = name.to_string_lossy().to_string();
+          if let Ok((TaskId(id), slug)) = Task::parse_filename(&name) {
+            let path = entry.path();
+            match fs::read_to_string(&path) {
+              Ok(contents) => match Task::from_markdown(TaskId(id), slug.clone(), &contents) {
+                Ok(mut task) => {
+                  if task.front_matter.status == Status::Running {
+                    running_count += 1;
+                    match task.transition_to(Status::Stopped) {
+                      Ok(()) => match task.to_markdown() {
+                        Ok(markdown) => {
+                          if let Err(error) = fs::write(&path, markdown) {
+                            error_count += 1;
+                            warn!(
+                              event = "daemon_resume_mark_stopped_write_fail",
+                              id,
+                              slug = %slug,
+                              error = %error,
+                              "failed to persist stopped status"
+                            );
+                          } else {
+                            stopped_count += 1;
+                          }
+                        }
+                        Err(error) => {
+                          error_count += 1;
+                          warn!(
+                            event = "daemon_resume_mark_stopped_serialize_fail",
+                            id,
+                            slug = %slug,
+                            error = %error,
+                            "failed to serialize task after marking stopped"
+                          );
+                        }
+                      },
+                      Err(error) => {
+                        error_count += 1;
+                        warn!(
+                          event = "daemon_resume_mark_stopped_transition_fail",
+                          id,
+                          slug = %slug,
+                          error = %error,
+                          "failed to mark task as stopped"
+                        );
+                      }
+                    }
+                  }
+                }
+                Err(error) => {
+                  error_count += 1;
+                  warn!(
+                    event = "daemon_resume_parse_fail",
+                    id,
+                    slug = %slug,
+                    error = %error,
+                    "failed to parse task markdown"
+                  );
+                }
+              },
+              Err(error) => {
+                error_count += 1;
+                warn!(
+                  event = "daemon_resume_read_fail",
+                  id,
+                  slug = %slug,
+                  error = %error,
+                  "failed to read task file"
+                );
+              }
             }
           }
         }
+        info!(
+          event = "daemon_resume_mark_stopped",
+          root = %root.display(),
+          running = running_count,
+          stopped = stopped_count,
+          errors = error_count,
+          "marked running tasks as stopped"
+        );
+      }
+      Err(error) => {
+        warn!(
+          event = "daemon_resume_read_dir_fail",
+          root = %root.display(),
+          error = %error,
+          "failed to read tasks directory"
+        );
       }
     }
   }
