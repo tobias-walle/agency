@@ -1,4 +1,5 @@
 use std::io::{Read, Write};
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -63,6 +64,9 @@ pub(crate) fn alt_detect_process(state: &mut AltDetectState, data: &[u8]) {
 
 pub(crate) struct PtySession {
   pub(crate) id: u64,
+  pub(crate) slug: String,
+  pub(crate) project_root: PathBuf,
+  pub(crate) registry_root: String,
   pub(crate) master: Mutex<Box<dyn portable_pty::MasterPty + Send>>,
   pub(crate) writer: Mutex<Option<Box<dyn Write + Send>>>,
   pub(crate) history_ring: Mutex<Vec<u8>>,
@@ -79,11 +83,17 @@ pub(crate) struct PtySession {
 impl PtySession {
   pub(crate) fn new(
     id: u64,
+    slug: String,
+    project_root: PathBuf,
+    registry_root: String,
     master: Box<dyn portable_pty::MasterPty + Send>,
     child: Box<dyn portable_pty::Child + Send + Sync>,
   ) -> Self {
     Self {
       id,
+      slug,
+      project_root,
+      registry_root,
       master: Mutex::new(master),
       writer: Mutex::new(None),
       history_ring: Mutex::new(Vec::new()),

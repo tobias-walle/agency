@@ -390,6 +390,7 @@ pub async fn start(socket_path: &Path) -> io::Result<DaemonHandle> {
       if let Err(error) = crate::adapters::pty::spawn_command(
         &root,
         id,
+        &slug,
         &wt,
         &program,
         &substituted_args,

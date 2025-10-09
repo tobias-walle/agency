@@ -2,10 +2,23 @@ use std::path::PathBuf;
 use std::sync::OnceLock;
 use std::time::Duration;
 
-use agency_core::{adapters::fs as fsutil, logging, rpc::DaemonStatus};
+use agency_core::{
+  adapters::fs as fsutil,
+  domain::task::{Status, Task, TaskId},
+  logging,
+  rpc::{
+    DaemonStatus,
+    TaskInfo,
+    TaskListResponse,
+    TaskNewParams,
+    TaskRef,
+    TaskStartParams,
+    TaskStartResult,
+  },
+};
 use hyperlocal::UnixClientExt;
-use serde_json::Value;
-use test_support::{RpcResp, UnixRpcClient, poll_until};
+use serde_json::{Value, json};
+use test_support::{RpcResp, UnixRpcClient, init_repo_with_initial_commit, poll_until};
 
 struct TestEnv {
   _td: tempfile::TempDir,
@@ -121,6 +134,97 @@ async fn handles_multiple_connections() {
   }
 
   env.handle.stop();
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn marks_task_stopped_when_agent_exits() {
+  let td = tempfile::tempdir().unwrap();
+  let root = td.path().to_path_buf();
+  let log = fsutil::logs_path(&root);
+  logging::init(&log, agency_core::config::LogLevel::Info);
+  fsutil::ensure_layout(&root).unwrap();
+  std::fs::write(
+    root.join(".agency/config.toml"),
+    r#"[agents.fake]
+start = ["sh", "-c", "exit 0"]
+"#,
+  )
+  .unwrap();
+
+  let sock = td.path().join("agency.sock");
+  let handle = agency_core::daemon::start(&sock)
+    .await
+    .expect("start daemon");
+
+  let client = UnixRpcClient::new(&sock);
+  let ready = poll_until(Duration::from_secs(2), Duration::from_millis(50), || {
+    let c = &client;
+    async move {
+      let r: RpcResp<DaemonStatus> = c.call("daemon.status", None).await;
+      r.error.is_none()
+    }
+  })
+  .await;
+  assert!(ready, "daemon did not become ready in time");
+
+  let params = TaskNewParams {
+    project_root: root.display().to_string(),
+    slug: "auto-stop".into(),
+    base_branch: "main".into(),
+    labels: vec![],
+    agent: agency_core::domain::task::Agent::Fake,
+    body: None,
+  };
+  let created: RpcResp<TaskInfo> = client
+    .call("task.new", Some(serde_json::to_value(&params).unwrap()))
+    .await;
+  assert!(created.error.is_none(), "task.new error: {:?}", created.error);
+  let info = created.result.unwrap();
+
+  init_repo_with_initial_commit(&root);
+
+  let start_params = TaskStartParams {
+    project_root: root.display().to_string(),
+    task: TaskRef {
+      id: Some(info.id),
+      slug: None,
+    },
+  };
+  let started: RpcResp<TaskStartResult> = client
+    .call("task.start", Some(serde_json::to_value(&start_params).unwrap()))
+    .await;
+  assert!(started.error.is_none(), "task.start error: {:?}", started.error);
+
+  let task_id = info.id;
+  let root_str = root.display().to_string();
+  let stopped = poll_until(Duration::from_secs(3), Duration::from_millis(100), || {
+    let c = &client;
+    let root_clone = root_str.clone();
+    async move {
+      let status: RpcResp<TaskListResponse> = c
+        .call("task.status", Some(json!({ "project_root": root_clone })))
+        .await;
+      if let Some(result) = status.result {
+        return result
+          .tasks
+          .into_iter()
+          .find(|t| t.id == task_id)
+          .map(|t| t.status == Status::Stopped)
+          .unwrap_or(false);
+      }
+      false
+    }
+  })
+  .await;
+  assert!(stopped, "task did not transition to stopped after agent exit");
+
+  let task_path = fsutil::tasks_dir(&root)
+    .join(Task::format_filename(TaskId(task_id), &info.slug));
+  let contents = std::fs::read_to_string(&task_path).unwrap();
+  let parsed = Task::from_markdown(TaskId(task_id), info.slug.clone(), &contents).unwrap();
+  assert_eq!(parsed.front_matter.status, Status::Stopped);
+
+  handle.stop();
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
