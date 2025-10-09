@@ -16,10 +16,15 @@ struct TaskListResponse {
 }
 
 #[derive(Debug, Deserialize)]
-struct PtyAttachResult { attachment_id: String }
+struct PtyAttachResult {
+  attachment_id: String,
+}
 
 #[derive(Debug, Deserialize)]
-struct PtyReadResult { data: String, eof: bool }
+struct PtyReadResult {
+  data: String,
+  eof: bool,
+}
 
 #[test]
 fn new_opencode_auto_attaches_and_injects_command_into_pty_history() {
@@ -42,7 +47,11 @@ fn new_opencode_auto_attaches_and_injects_command_into_pty_history() {
     perms.set_mode(0o755);
     std::fs::set_permissions(&mock_path, perms).unwrap();
   }
-  let path_prefix = format!("{}:{}", bindir.display(), std::env::var("PATH").unwrap_or_default());
+  let path_prefix = format!(
+    "{}:{}",
+    bindir.display(),
+    std::env::var("PATH").unwrap_or_default()
+  );
 
   // Start daemon (ensure it inherits the PATH with our mock)
   let mut start = Command::cargo_bin("agency").expect("compile bin");
@@ -79,16 +88,18 @@ fn new_opencode_auto_attaches_and_injects_command_into_pty_history() {
   let client = test_support::UnixRpcClient::new(&sock);
 
   // Fetch tasks and find feat-inject
-  let tasks: TaskListResponse = rt
-    .block_on(async {
-      let resp: test_support::RpcResp<TaskListResponse> = client
-        .call("task.status", Some(serde_json::json!({
+  let tasks: TaskListResponse = rt.block_on(async {
+    let resp: test_support::RpcResp<TaskListResponse> = client
+      .call(
+        "task.status",
+        Some(serde_json::json!({
           "project_root": root.display().to_string()
-        })))
-        .await;
-      assert!(resp.error.is_none(), "rpc error: {:?}", resp.error);
-      resp.result.unwrap()
-    });
+        })),
+      )
+      .await;
+    assert!(resp.error.is_none(), "rpc error: {:?}", resp.error);
+    resp.result.unwrap()
+  });
   let task = tasks
     .tasks
     .into_iter()
@@ -115,7 +126,8 @@ fn new_opencode_auto_attaches_and_injects_command_into_pty_history() {
 
   // Read a chunk of replay (allow some time for command to run)
   let mut combined = String::new();
-  for _ in 0..30 { // up to ~3s total
+  for _ in 0..30 {
+    // up to ~3s total
     let read: PtyReadResult = rt.block_on(async {
       let resp: test_support::RpcResp<PtyReadResult> = client
         .call(

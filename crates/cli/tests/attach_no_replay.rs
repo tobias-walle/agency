@@ -44,7 +44,12 @@ fn attach_no_replay_suppresses_history() {
   // write stdin: echo lines then Ctrl-Q (0x11)
   {
     let stdin = child.stdin.as_mut().expect("stdin");
-    let bytes = [b"echo first\n" as &[u8], b"echo second\n" as &[u8], &[0x11u8]].concat();
+    let bytes = [
+      b"echo first\n" as &[u8],
+      b"echo second\n" as &[u8],
+      &[0x11u8],
+    ]
+    .concat();
     stdin.write_all(&bytes).unwrap();
   }
 

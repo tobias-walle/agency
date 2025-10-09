@@ -33,15 +33,22 @@ fn edit_text(initial: &str) -> std::io::Result<String> {
   let status = Command::new(&editor)
     .arg(&path)
     .status()
-    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("failed to launch editor '{}': {}", editor, e)))?;
+    .map_err(|e| std::io::Error::other(format!("failed to launch editor '{}': {}", editor, e)))?;
   if !status.success() {
-    return Err(std::io::Error::new(std::io::ErrorKind::Other, format!("editor exited with status: {}", status)));
+    return Err(std::io::Error::other(format!(
+      "editor exited with status: {}",
+      status
+    )));
   }
 
   // Read edited content and cleanup
   let body = std::fs::read_to_string(&path)?;
   let _ = std::fs::remove_file(&path);
-  tracing::debug!(event = "cli_task_body_ready", len = body.len(), "editor produced body");
+  tracing::debug!(
+    event = "cli_task_body_ready",
+    len = body.len(),
+    "editor produced body"
+  );
   Ok(body)
 }
 
@@ -52,7 +59,11 @@ fn build_opencode_injection(prompt: &str) -> Vec<u8> {
   s.push_str("opencode --agent plan -p \"$(cat <<'EOF'\n");
   s.push_str(prompt);
   s.push_str("\nEOF\n)\"\n");
-  tracing::debug!(event = "cli_new_agent_inject", bytes = s.len(), "constructed opencode injection");
+  tracing::debug!(
+    event = "cli_new_agent_inject",
+    bytes = s.len(),
+    "constructed opencode injection"
+  );
   s.into_bytes()
 }
 
@@ -80,7 +91,9 @@ fn attach_and_maybe_inject(
   let attachment_id = match attach_res {
     Ok(r) => r.attachment_id,
     Err(e) => {
-      return Err(std::io::Error::new(std::io::ErrorKind::Other, render_rpc_failure("attach", sock, &e)));
+      return Err(std::io::Error::other(render_rpc_failure(
+        "attach", sock, &e,
+      )));
     }
   };
   tracing::debug!(event = "cli_attach_ok", %attachment_id, rows, cols, "attached for injection");
@@ -89,8 +102,10 @@ fn attach_and_maybe_inject(
     let _ = rt.block_on(async { rpc::client::pty_input(sock, &attachment_id, bytes).await });
     // Give the child a brief moment to produce output and capture a small chunk
     let session = rpc::client::PtySession::new();
-    let _ = rt.block_on(async {
-      let _ = rpc::client::session::pty_read_wait(&session, sock, &attachment_id, Some(8192), Some(200)).await;
+    rt.block_on(async {
+      let _ =
+        rpc::client::session::pty_read_wait(&session, sock, &attachment_id, Some(8192), Some(200))
+          .await;
     });
   }
 
@@ -338,7 +353,11 @@ fn new_task(a: args::NewArgs) {
     }
   }
   if let Some(ref s) = body_opt {
-    tracing::debug!(event = "cli_task_body_ready", len = s.len(), "message provided");
+    tracing::debug!(
+      event = "cli_task_body_ready",
+      len = s.len(),
+      "message provided"
+    );
   }
 
   let params = agency_core::rpc::TaskNewParams {
@@ -371,7 +390,11 @@ fn new_task(a: args::NewArgs) {
           println!("{} {} {:?}", sr.id, sr.slug, sr.status);
           // Auto-attach unless --no-attach
           if a.no_attach {
-            tracing::debug!(event = "cli_new_autostart_attach", attach = false, "skipping auto-attach by flag");
+            tracing::debug!(
+              event = "cli_new_autostart_attach",
+              attach = false,
+              "skipping auto-attach by flag"
+            );
             return;
           }
           // Compute initial injection for opencode, if applicable
@@ -382,8 +405,15 @@ fn new_task(a: args::NewArgs) {
           } else {
             None
           };
-          tracing::debug!(event = "cli_new_autostart_attach", attach = true, "auto-attach for new task");
-          let tref2 = agency_core::rpc::TaskRef { id: Some(sr.id), slug: None };
+          tracing::debug!(
+            event = "cli_new_autostart_attach",
+            attach = true,
+            "auto-attach for new task"
+          );
+          let tref2 = agency_core::rpc::TaskRef {
+            id: Some(sr.id),
+            slug: None,
+          };
           let inj_bytes_ref = initial_bytes.as_deref();
           if let Err(e) = attach_and_maybe_inject(&sock, &root, tref2, false, inj_bytes_ref) {
             eprintln!("attach failed: {}", e);
@@ -455,6 +485,7 @@ fn list_status() {
         let status = match t.status {
           agency_core::domain::task::Status::Draft => "draft",
           agency_core::domain::task::Status::Running => "running",
+          agency_core::domain::task::Status::Stopped => "stopped",
           agency_core::domain::task::Status::Idle => "idle",
           agency_core::domain::task::Status::Completed => "completed",
           agency_core::domain::task::Status::Reviewed => "reviewed",

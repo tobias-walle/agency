@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use agency_core::{
   adapters::fs as fsutil,
-  domain::task::{Agent, Status},
+  domain::task::{Agent, Status, Task},
   logging,
   rpc::{
     TaskInfo, TaskListParams, TaskListResponse, TaskNewParams, TaskRef, TaskStartParams,
@@ -111,6 +111,14 @@ async fn start_test_env() -> TestEnv {
     sock,
     handle,
   }
+}
+
+#[test]
+fn stopped_idle_transitions_are_distinct() {
+  assert!(Task::can_transition(&Status::Running, &Status::Stopped));
+  assert!(Task::can_transition(&Status::Stopped, &Status::Running));
+  assert!(!Task::can_transition(&Status::Idle, &Status::Stopped));
+  assert!(!Task::can_transition(&Status::Stopped, &Status::Idle));
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

@@ -24,7 +24,6 @@ fn requires_agent_when_not_configured_and_no_flag() {
 
 #[test]
 fn new_with_fake_agent_and_message_writes_body_and_starts_running() {
-  use std::path::Path;
   // Create unique socket path
   let mut sock = std::env::temp_dir();
   sock.push(format!("agency-test-{}.sock", std::process::id()));
@@ -34,13 +33,13 @@ fn new_with_fake_agent_and_message_writes_body_and_starts_running() {
   let td = tempfile::tempdir().unwrap();
   let root = td.path();
   // Initialize repo with initial commit on main
-  test_support::init_repo_with_initial_commit(&root);
+  test_support::init_repo_with_initial_commit(root);
 
   // Start daemon
   let mut start = Command::cargo_bin("agency").expect("compile bin");
   start
     .env("AGENCY_SOCKET", &sock)
-    .current_dir(&root)
+    .current_dir(root)
     .args(["daemon", "start"]) // fire-and-wait
     .assert()
     .success();
@@ -49,7 +48,7 @@ fn new_with_fake_agent_and_message_writes_body_and_starts_running() {
   let mut new_cmd = Command::cargo_bin("agency").expect("compile bin");
   let out = new_cmd
     .env("AGENCY_SOCKET", &sock)
-    .current_dir(&root)
+    .current_dir(root)
     .args([
       "new",
       "--agent",
@@ -77,7 +76,7 @@ fn new_with_fake_agent_and_message_writes_body_and_starts_running() {
   let mut stop = Command::cargo_bin("agency").expect("compile bin");
   stop
     .env("AGENCY_SOCKET", &sock)
-    .current_dir(&root)
+    .current_dir(root)
     .args(["daemon", "stop"]) // best effort
     .assert()
     .success();

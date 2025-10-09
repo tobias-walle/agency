@@ -18,6 +18,7 @@ impl fmt::Display for TaskId {
 pub enum Status {
   Draft,
   Running,
+  Stopped,
   Idle,
   Completed,
   Reviewed,
@@ -74,6 +75,8 @@ impl Task {
     matches!(
       (from, to),
       (Draft, Running)
+        | (Running, Stopped)
+        | (Stopped, Running)
         | (Running, Idle)
         | (Idle, Running)
         | (Running, Completed)
@@ -205,18 +208,35 @@ mod tests {
       front_matter: sample_front_matter(),
       body: String::new(),
     };
-    // draft -> running ok
     task.transition_to(Status::Running).expect("draft->running");
-    // running -> completed ok
+    task
+      .transition_to(Status::Stopped)
+      .expect("running->stopped");
+    task
+      .transition_to(Status::Running)
+      .expect("stopped->running");
+    task.transition_to(Status::Idle).expect("running->idle");
+    task.transition_to(Status::Running).expect("idle->running");
     task
       .transition_to(Status::Completed)
       .expect("running->completed");
-    // completed -> merged ok
     task
       .transition_to(Status::Merged)
       .expect("completed->merged");
-    // merged -> running not allowed
     let err = task.transition_to(Status::Running).unwrap_err();
+    match err {
+      TaskError::InvalidTransition { .. } => {}
+      _ => panic!("wrong error"),
+    }
+
+    let mut idle_task = Task {
+      id: TaskId(2),
+      slug: "idle".into(),
+      front_matter: sample_front_matter(),
+      body: String::new(),
+    };
+    idle_task.front_matter.status = Status::Idle;
+    let err = idle_task.transition_to(Status::Stopped).unwrap_err();
     match err {
       TaskError::InvalidTransition { .. } => {}
       _ => panic!("wrong error"),
