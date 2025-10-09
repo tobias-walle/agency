@@ -20,7 +20,7 @@ agent: build
 
 Commit the current changes.
 
-- Follow Conventional Commits
+- Follow Conventional Commits (e.g. `feat: add new feature`)
 - Keep most commits in a single line. Only use the body if there are unexpected changes in the commit.
 
 - Summarize the changes into a single sentence, starting with a lowercase verb.
@@ -30,4 +30,4 @@ Commit the current changes.
 - You can use the footer for references (like related PDRs or ADRs)
 - You might want to create multiple commits if the changes are not related.
 
-ONLY answer with one or more tool calls in the form of `git add [relevant files] && git commit -m "[message]"`
+ONLY run the `bash` tool with one or more calls in the form of `git add [relevant files] && git commit -m "[message]"`

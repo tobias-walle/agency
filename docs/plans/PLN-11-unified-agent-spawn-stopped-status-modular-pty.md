@@ -92,29 +92,11 @@ HINT: Update checkboxes during the implementation
      - `resolve_action(agent, action) -> (program: String, args: Vec<String>)` using config/defaults and validating availability.
    - Tests for substitution, env building, and action resolution (no external binaries required).
 
-5. [ ] PTY modularization + generic spawn API
-   - Split `crates/core/src/adapters/pty.rs` into `crates/core/src/adapters/pty/`:
-     - `spawn.rs`: builds `CommandBuilder` from `(program, args)`, sets `cwd`, spawns into PTY.
-     - `session.rs`: `PtySession` and reader loop.
-     - `registry.rs`: session/attachment registry and test reset helper.
-     - `sanitize.rs`: replay sanitization and alt-screen detection (moved from current file).
-     - `mod.rs`: public API re-exporting `spawn_command`, `attach`, `read`, `input`, `resize`, `detach` to preserve external callers.
-   - Provide `spawn_command(root, task_id, worktree, program, args)`; remove hard-coded `sh` from the primary path.
-   - Keep a thin `ensure_spawn_sh(...)` helper for tests/debugging if needed and keep `clear_registry_for_tests()` accessible in tests.
-   - Update imports/usages in daemon and tests.
+5. [x] PTY modularization + generic spawn API
+6. [x] Daemon: start tasks via agent runner
+7. [x] CLI: remove injection and use TTY-only auto-attach
+8. [x] Docs and examples
 
-6. [ ] Daemon: start tasks via agent runner
-   - In `task.start`, construct env map and resolve the `start` action for the selected agent.
-   - Perform `$AGENCY_*` substitution and call `pty::spawn_command(...)` to start the process directly.
-   - Log sizes/flags, not prompt contents.
-   - Tests: ensure `fake` spawns `sh`; CI must not depend on external `opencode` binary.
-
-7. [ ] CLI: remove injection and use TTY-only auto-attach
-   - In `crates/cli/src/lib.rs::new_task`, remove `build_opencode_injection` and `attach_and_maybe_inject`.
-   - If `--no-attach`: return; else if stdout is TTY: call `attach_interactive(...)`; otherwise, print status only.
-   - Update CLI tests: drop injection-based assertions; continue using `--agent fake --no-attach` where appropriate.
-
-8. [ ] Docs and examples
    - Update `README.md` to document:
      - `Stopped` status semantics vs `Idle` and the restart policy (`Running -> Stopped` persisted; requires `task.start` to run again).
      - Agent config under `[agents.<name>]` in `config.toml` with per-action arrays and default availability for `opencode` and `fake`; `claude-code` requires explicit config.
@@ -142,3 +124,7 @@ HINT: Update this section during the implementation with relevant changes to the
 - The agent runner abstraction decouples agent semantics from PTY and daemon, enabling future agent expansion.
 - Using `$AGENCY_*` tokens avoids shell quoting; only opt into shell when explicitly required by the agent.
 - Keep tests independent of external agent binaries by using the `shell`/`fake` agent in CI.
+- PTY adapter is split into `spawn`, `session`, `registry`, and `sanitize`, with a generic `spawn_command` handling env injection.
+- Daemon loads agent config to resolve `(program, args)` and logs spawn attempts, preserving stop semantics across restarts.
+- CLI `new` now skips auto-attach when stdout is not a TTY and attaches interactively without shell injection.
+- README documents agent configuration, `$AGENCY_*` substitution, and `Stopped` lifecycle semantics.

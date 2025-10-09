@@ -225,7 +225,16 @@ mod tests {
   }
 
   #[test]
+  fn resolve_action_fake_returns_sh() {
+    let config = Config::default();
+    let (program, args) = resolve_action(&config, &Agent::Fake, AgentAction::Start).unwrap();
+    assert_eq!(program, "sh");
+    assert!(args.is_empty());
+  }
+
+  #[test]
   fn resolve_action_missing_agent_errors() {
+
     let config = Config::default();
     let err = resolve_action(&config, &Agent::ClaudeCode, AgentAction::Start).unwrap_err();
     match err {

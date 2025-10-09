@@ -70,6 +70,9 @@ agency shell-hook
 agency session set <id|slug> <session_id>
 ```
 
+Agency spawns the selected agent directly inside the task PTY when a task starts.
+`agency new` auto-attaches only when stdout is a TTY (unless `--no-attach`); non-interactive runs print the task status and return immediately.
+
 Helpful commands:
 
 ```bash
@@ -82,12 +85,37 @@ just test
 just check
 ```
 
+## Task Lifecycle
+
+- `Running`: task process is active and attachable.
+- `Stopped`: daemon restarted a previously running task; run `agency start` to launch the agent again.
+- `Idle`: user paused the task without terminating the process.
+
+When the daemon restarts it marks every `Running` task as `Stopped` on disk and leaves the PTY offline until the task is started again.
+
 ## Configuration
 
 - Global: `~/.config/agency/config.toml`
 - Project: `./.agency/config.toml`
 - Socket: `AGENCY_SOCKET` controls the Unix socket path
 - Selected settings: log level (off|warn|info|debug|trace), idle timeout, concurrency limits, confirmation defaults
+
+Agent launch commands live under `[agents.<name>]` with per-action arrays.
+If an agent is missing or its `start` command is empty the daemon returns an actionable error.
+The daemon ships defaults for `opencode` and `fake`, and you can override or extend them per project.
+
+```toml
+[agents.opencode]
+display_name = "OpenCode"
+start = ["opencode", "--agent", "plan", "-p", "$AGENCY_PROMPT"]
+
+[agents.fake]
+display_name = "Shell"
+start = ["sh"]
+```
+
+Arguments support `$AGENCY_*` placeholders which are expanded before the process starts.
+The same keys (task id, slug, body, prompt, project root, worktree, optional session/message) are also exported as environment variables in the child process.
 
 ## Logging
 
