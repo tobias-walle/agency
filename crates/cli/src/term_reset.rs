@@ -5,8 +5,8 @@
 //! Guard emission behind a TTY check at call site.
 //!
 //! References: XTerm Control Sequences
-//! - DECSTR (soft reset): CSI ! p
 //! - Alt-screen leave: CSI ? 1049/1047/47 l
+//!   (soft reset omitted; some terminals echo mode reports)
 //! - Show cursor: CSI ? 25 h
 //! - Reset SGR: CSI 0 m
 //! - Bracketed paste off: CSI ? 2004 l
@@ -24,7 +24,6 @@ const OSC: &[u8] = b"]"; // Operating System Command after ESC
 const ST: &[u8] = &[0x1B, b'\\']; // String Terminator (ESC \\)
 
 // Core reset sequences
-const DECSTR: &[u8] = b"\x1b[!p"; // Soft reset
 const LEAVE_ALT_1049: &[u8] = b"\x1b[?1049l";
 const LEAVE_ALT_1047: &[u8] = b"\x1b[?1047l";
 const LEAVE_ALT_47: &[u8] = b"\x1b[?47l";
@@ -50,9 +49,12 @@ const OSC_RESET_CURSOR: &[u8] = b"\x1b]112"; // + ST
 const CURSOR_STYLE_DEFAULT: &[u8] = b"\x1b[0q";
 
 /// Write the terminal reset footer to `w` in a safe order.
+///
+/// Excludes DECSTR (soft reset) to avoid triggering terminal response
+/// sequences (e.g. DECRPM), which would echo escape codes into stdout on
+/// some terminals when the user detaches.
 pub fn write_reset_footer<W: Write>(w: &mut W) -> std::io::Result<()> {
-  // Core soft reset and leave alt-screen modes
-  w.write_all(DECSTR)?;
+  // Leave alt-screen modes
   w.write_all(LEAVE_ALT_1049)?;
   w.write_all(LEAVE_ALT_1047)?;
   w.write_all(LEAVE_ALT_47)?;
@@ -83,4 +85,25 @@ pub fn write_reset_footer<W: Write>(w: &mut W) -> std::io::Result<()> {
   w.write_all(CURSOR_STYLE_DEFAULT)?;
 
   w.flush()
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn reset_footer_excludes_soft_reset() {
+    let mut buf = Vec::new();
+    write_reset_footer(&mut buf).expect("write reset footer");
+    assert!(
+      !buf.windows(4).any(|w| w == b"\x1b[!p"),
+      "should not emit DECSTR"
+    );
+    assert!(
+      buf
+        .windows(LEAVE_ALT_1049.len())
+        .any(|w| w == LEAVE_ALT_1049),
+      "should leave alt screen"
+    );
+  }
 }
