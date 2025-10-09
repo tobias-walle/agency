@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -27,6 +28,18 @@ pub struct PtyConfig {
   pub detach_keys: Option<String>,
 }
 
+/// Configuration for launching an agent process.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AgentConfig {
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub display_name: Option<String>,
+  pub start: Vec<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub resume: Option<Vec<String>>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub run: Option<Vec<String>>,
+}
+
 /// Effective configuration after merging defaults, global, and project config
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Config {
@@ -44,6 +57,8 @@ pub struct Config {
   pub default_agent: Option<crate::domain::task::Agent>,
   /// PTY configuration
   pub pty: PtyConfig,
+  /// Agent command definitions resolved by the daemon when spawning tasks.
+  pub agents: BTreeMap<String, AgentConfig>,
 }
 
 impl Default for Config {
@@ -56,8 +71,38 @@ impl Default for Config {
       confirm_by_default: false,
       default_agent: None,
       pty: PtyConfig::default(),
+      agents: builtin_agents(),
     }
   }
+}
+
+fn builtin_agents() -> BTreeMap<String, AgentConfig> {
+  let mut agents = BTreeMap::new();
+  agents.insert(
+    "opencode".to_string(),
+    AgentConfig {
+      display_name: Some("OpenCode".to_string()),
+      start: vec![
+        "opencode".to_string(),
+        "--agent".to_string(),
+        "plan".to_string(),
+        "-p".to_string(),
+        "$AGENCY_PROMPT".to_string(),
+      ],
+      resume: None,
+      run: None,
+    },
+  );
+  agents.insert(
+    "fake".to_string(),
+    AgentConfig {
+      display_name: Some("Shell".to_string()),
+      start: vec!["sh".to_string()],
+      resume: None,
+      run: None,
+    },
+  );
+  agents
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -84,18 +129,49 @@ struct PartialConfig {
   pub confirm_by_default: Option<bool>,
   pub default_agent: Option<crate::domain::task::Agent>,
   pub pty: Option<PartialPtyConfig>,
+  pub agents: Option<BTreeMap<String, AgentConfig>>,
 }
 
 impl PartialConfig {
   fn merge_over(self, base: Config) -> Config {
+    let PartialConfig {
+      log_level,
+      idle_timeout_secs,
+      dwell_secs,
+      concurrency,
+      confirm_by_default,
+      default_agent,
+      pty,
+      agents,
+    } = self;
+
+    let Config {
+      log_level: base_log_level,
+      idle_timeout_secs: base_idle_timeout_secs,
+      dwell_secs: base_dwell_secs,
+      concurrency: base_concurrency,
+      confirm_by_default: base_confirm_by_default,
+      default_agent: base_default_agent,
+      pty: base_pty,
+      agents: base_agents,
+    } = base;
+
+    let mut merged_agents = base_agents;
+    if let Some(overrides) = agents {
+      for (name, cfg) in overrides {
+        merged_agents.insert(name, cfg);
+      }
+    }
+
     Config {
-      log_level: self.log_level.unwrap_or(base.log_level),
-      idle_timeout_secs: self.idle_timeout_secs.unwrap_or(base.idle_timeout_secs),
-      dwell_secs: self.dwell_secs.unwrap_or(base.dwell_secs),
-      concurrency: self.concurrency.unwrap_or(base.concurrency),
-      confirm_by_default: self.confirm_by_default.unwrap_or(base.confirm_by_default),
-      default_agent: self.default_agent.or(base.default_agent),
-      pty: self.pty.unwrap_or_default().merge_over(base.pty),
+      log_level: log_level.unwrap_or(base_log_level),
+      idle_timeout_secs: idle_timeout_secs.unwrap_or(base_idle_timeout_secs),
+      dwell_secs: dwell_secs.unwrap_or(base_dwell_secs),
+      concurrency: concurrency.unwrap_or(base_concurrency),
+      confirm_by_default: confirm_by_default.unwrap_or(base_confirm_by_default),
+      default_agent: default_agent.or(base_default_agent),
+      pty: pty.unwrap_or_default().merge_over(base_pty),
+      agents: merged_agents,
     }
   }
 }
@@ -108,6 +184,10 @@ pub enum ConfigError {
   Toml(#[from] toml::de::Error),
   #[error("unsupported platform: windows is not supported")]
   UnsupportedPlatform,
+  #[error("agent `{agent}` is required but not configured")]
+  MissingAgentDefinition { agent: String },
+  #[error("agent `{agent}` must have at least one start command")]
+  InvalidAgentDefinition { agent: String },
 }
 
 pub type Result<T> = std::result::Result<T, ConfigError>;
@@ -164,6 +244,8 @@ pub fn load(project_root: Option<&Path>) -> Result<Config> {
     }
   }
 
+  validate_agents(&cfg)?;
+
   Ok(cfg)
 }
 
@@ -187,7 +269,36 @@ pub(crate) fn load_from_paths(global: Option<&Path>, project: Option<&Path>) -> 
     cfg = partial.merge_over(cfg);
   }
 
+  validate_agents(&cfg)?;
+
   Ok(cfg)
+}
+
+fn validate_agents(cfg: &Config) -> Result<()> {
+  for (name, agent_cfg) in &cfg.agents {
+    if agent_cfg.start.is_empty() {
+      return Err(ConfigError::InvalidAgentDefinition {
+        agent: name.to_string(),
+      });
+    }
+  }
+
+  if let Some(agent) = cfg.default_agent.as_ref() {
+    let key = agent_key(agent).to_string();
+    if !cfg.agents.contains_key(&key) {
+      return Err(ConfigError::MissingAgentDefinition { agent: key });
+    }
+  }
+
+  Ok(())
+}
+
+fn agent_key(agent: &crate::domain::task::Agent) -> &'static str {
+  match agent {
+    crate::domain::task::Agent::Opencode => "opencode",
+    crate::domain::task::Agent::ClaudeCode => "claude-code",
+    crate::domain::task::Agent::Fake => "fake",
+  }
 }
 
 /// Resolve the socket path using AGENCY_SOCKET or platform defaults.
@@ -219,6 +330,21 @@ mod tests {
     assert!(!cfg.confirm_by_default);
     assert_eq!(cfg.default_agent, None);
     assert_eq!(cfg.pty.detach_keys, None);
+    let opencode = cfg.agents.get("opencode").expect("opencode agent");
+    assert_eq!(
+      opencode.start,
+      vec![
+        "opencode".to_string(),
+        "--agent".to_string(),
+        "plan".to_string(),
+        "-p".to_string(),
+        "$AGENCY_PROMPT".to_string()
+      ]
+    );
+    assert_eq!(opencode.display_name.as_deref(), Some("OpenCode"));
+    let fake = cfg.agents.get("fake").expect("fake agent");
+    assert_eq!(fake.start, vec!["sh".to_string()]);
+    assert_eq!(fake.display_name.as_deref(), Some("Shell"));
   }
 
   #[test]
@@ -236,6 +362,9 @@ confirm_by_default = false
 default_agent = "opencode"
 [pty]
 detach_keys = "ctrl-p"
+
+[agents.opencode]
+start = ["opencode", "--agent", "plan", "-p", "GLOBAL"]
 "#,
     )
     .unwrap();
@@ -248,6 +377,12 @@ dwell_secs = 3
 default_agent = "fake"
 [pty]
 detach_keys = "ctrl-q"
+
+[agents.opencode]
+start = ["opencode", "--agent", "plan", "-p", "PROJECT"]
+
+[agents.fake]
+start = ["sh", "-c", "echo project"]
 "#,
     )
     .unwrap();
@@ -265,6 +400,61 @@ detach_keys = "ctrl-q"
     assert_eq!(cfg.default_agent, Some(crate::domain::task::Agent::Fake));
     // pty precedence
     assert_eq!(cfg.pty.detach_keys.as_deref(), Some("ctrl-q"));
+
+    let opencode = cfg.agents.get("opencode").expect("opencode agent");
+    assert_eq!(
+      opencode.start,
+      vec![
+        "opencode".to_string(),
+        "--agent".to_string(),
+        "plan".to_string(),
+        "-p".to_string(),
+        "PROJECT".to_string()
+      ]
+    );
+    let fake = cfg.agents.get("fake").expect("fake agent");
+    assert_eq!(fake.start, vec!["sh".to_string(), "-c".to_string(), "echo project".to_string()]);
+  }
+
+  #[test]
+  fn missing_default_agent_definition_is_rejected() {
+    let td = tempfile::tempdir().unwrap();
+    let project = td.path().join("project.toml");
+
+    fs::write(
+      &project,
+      r#"
+default_agent = "claude-code"
+"#,
+    )
+    .unwrap();
+
+    let err = load_from_paths(None, Some(&project)).unwrap_err();
+    match err {
+      ConfigError::MissingAgentDefinition { agent } => assert_eq!(agent, "claude-code"),
+      other => panic!("unexpected error: {:?}", other),
+    }
+  }
+
+  #[test]
+  fn empty_start_list_is_invalid() {
+    let td = tempfile::tempdir().unwrap();
+    let project = td.path().join("project.toml");
+
+    fs::write(
+      &project,
+      r#"
+[agents.fake]
+start = []
+"#,
+    )
+    .unwrap();
+
+    let err = load_from_paths(None, Some(&project)).unwrap_err();
+    match err {
+      ConfigError::InvalidAgentDefinition { agent } => assert_eq!(agent, "fake"),
+      other => panic!("unexpected error: {:?}", other),
+    }
   }
 
   #[test]

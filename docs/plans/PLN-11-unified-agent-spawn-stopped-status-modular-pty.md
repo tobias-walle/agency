@@ -76,7 +76,7 @@ HINT: Update checkboxes during the implementation
    - Do not spawn PTYs during resume; log `daemon_resume_mark_stopped` with counts.
    - Update tests in `crates/core/tests/daemon_resume.rs` to assert: statuses changed to `Stopped`, `pty.attach` rejected until `task.start` is called again.
 
-3. [ ] Config: embed agent command arrays in `config.toml`
+3. [x] Config: embed agent command arrays in `config.toml`
    - Extend `crates/core/src/config/mod.rs` to parse `[agents.<name>]` sections with fields:
      - `display_name: Option<String>`
      - `start: Vec<String>`
