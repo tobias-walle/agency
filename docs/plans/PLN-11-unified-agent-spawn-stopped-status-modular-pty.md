@@ -85,7 +85,7 @@ HINT: Update checkboxes during the implementation
    - Provide built-in defaults for `opencode` and `fake` (maps to `sh`) when not present. If `claude-code` is selected without config, error clearly.
    - Add unit tests for parsing and precedence (project overrides global) and missing/invalid agent definitions.
 
-4. [ ] Agent runner: resolve commands, token substitution, and env
+4. [x] Agent runner: resolve commands, token substitution, and env
    - New module `crates/core/src/agent/runner.rs`:
      - `build_env(...) -> HashMap<String, String>` producing `AGENCY_TASK_ID`, `AGENCY_SLUG`, `AGENCY_BODY`, `AGENCY_PROMPT`, `AGENCY_PROJECT_ROOT`, `AGENCY_WORKTREE`, optional `AGENCY_SESSION_ID`, `AGENCY_MESSAGE`.
      - `substitute_tokens(args: &[String], env: &HashMap<_,_>) -> Vec<String>` replacing `$AGENCY_*` in argv without shell; also set the same keys in the child environment.

@@ -1,3 +1,4 @@
+pub mod agent;
 pub mod adapters;
 pub mod config;
 pub mod daemon;
