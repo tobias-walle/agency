@@ -1,5 +1,8 @@
 # Agency
 
+> [!CAUTION]
+> Agency is in early development and currently does not work. Expect breaking changes and incomplete features.
+
 Agency lets you run multiple AI CLI agents in parallel, each in its own isolated Git worktree.
 It uses a single Rust daemon with JSON-RPC and MCP interfaces to manage everything.
 Agency is designed for predictable task management, easy TUI attach/detach, and minimal overhead.
