@@ -1,3 +1,5 @@
+![Agency Logo](./media/logo.svg)
+
 # Agency
 
 > [!CAUTION]
