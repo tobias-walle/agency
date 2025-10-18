@@ -7,12 +7,7 @@ use agency_core::{
   domain::task::{Status, Task, TaskId},
   logging,
   rpc::{
-    DaemonStatus,
-    TaskInfo,
-    TaskListResponse,
-    TaskNewParams,
-    TaskRef,
-    TaskStartParams,
+    DaemonStatus, TaskInfo, TaskListResponse, TaskNewParams, TaskRef, TaskStartParams,
     TaskStartResult,
   },
 };
@@ -178,7 +173,11 @@ start = ["sh", "-c", "exit 0"]
   let created: RpcResp<TaskInfo> = client
     .call("task.new", Some(serde_json::to_value(&params).unwrap()))
     .await;
-  assert!(created.error.is_none(), "task.new error: {:?}", created.error);
+  assert!(
+    created.error.is_none(),
+    "task.new error: {:?}",
+    created.error
+  );
   let info = created.result.unwrap();
 
   init_repo_with_initial_commit(&root);
@@ -191,9 +190,16 @@ start = ["sh", "-c", "exit 0"]
     },
   };
   let started: RpcResp<TaskStartResult> = client
-    .call("task.start", Some(serde_json::to_value(&start_params).unwrap()))
+    .call(
+      "task.start",
+      Some(serde_json::to_value(&start_params).unwrap()),
+    )
     .await;
-  assert!(started.error.is_none(), "task.start error: {:?}", started.error);
+  assert!(
+    started.error.is_none(),
+    "task.start error: {:?}",
+    started.error
+  );
 
   let task_id = info.id;
   let root_str = root.display().to_string();
@@ -216,10 +222,12 @@ start = ["sh", "-c", "exit 0"]
     }
   })
   .await;
-  assert!(stopped, "task did not transition to stopped after agent exit");
+  assert!(
+    stopped,
+    "task did not transition to stopped after agent exit"
+  );
 
-  let task_path = fsutil::tasks_dir(&root)
-    .join(Task::format_filename(TaskId(task_id), &info.slug));
+  let task_path = fsutil::tasks_dir(&root).join(Task::format_filename(TaskId(task_id), &info.slug));
   let contents = std::fs::read_to_string(&task_path).unwrap();
   let parsed = Task::from_markdown(TaskId(task_id), info.slug.clone(), &contents).unwrap();
   assert_eq!(parsed.front_matter.status, Status::Stopped);

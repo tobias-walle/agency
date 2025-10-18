@@ -1,7 +1,7 @@
 use std::io::Write;
 use std::path::Path;
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
 
 use portable_pty::PtySize;
@@ -151,10 +151,18 @@ pub fn input(attachment_id: &str, data: &[u8]) -> anyhow::Result<()> {
   if opt_writer.is_none() {
     let master = sess.master.lock().unwrap();
     *opt_writer = Some(master.take_writer()?);
-    debug!(event = "pty_writer_init", task_id = sess.id, "initialized writer for session");
+    debug!(
+      event = "pty_writer_init",
+      task_id = sess.id,
+      "initialized writer for session"
+    );
   }
   let writer = opt_writer.as_mut().unwrap();
-  debug!(event = "pty_input_write", task_id = sess.id, bytes = data.len());
+  debug!(
+    event = "pty_input_write",
+    task_id = sess.id,
+    bytes = data.len()
+  );
   writer.write_all(data)?;
   Ok(())
 }

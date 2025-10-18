@@ -62,7 +62,7 @@ fn attach_emits_reset_footer_on_detach() {
     "missing OSC 112 reset: {}",
     stdout
   );
-  assert!(stdout.contains("\x1b[!p"), "missing DECSTR: {}", stdout);
+  assert!(!stdout.contains("\x1b[!p"), "unexpected DECSTR: {}", stdout);
   assert!(
     stdout.contains("\x1b[?1049l"),
     "missing leave alt-screen: {}",

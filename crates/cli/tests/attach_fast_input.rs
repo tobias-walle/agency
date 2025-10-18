@@ -1,6 +1,7 @@
 use assert_cmd::prelude::*;
 use std::io::Write;
 use std::process::{Command, Stdio};
+use test_support::init_repo_with_initial_commit;
 use std::thread;
 use std::time::Duration;
 
@@ -33,23 +34,8 @@ fn attach_handles_fast_small_chunks_and_final_detach() {
   let root = td.path().to_path_buf();
   let sock = td.path().join("agency.sock");
 
-  // Init git repo
-  std::process::Command::new("git")
-    .arg("init")
-    .current_dir(&root)
-    .output()
-    .unwrap();
-  std::fs::write(root.join("README.md"), "# E2E Test\n").unwrap();
-  std::process::Command::new("git")
-    .args(["add", "."])
-    .current_dir(&root)
-    .output()
-    .unwrap();
-  std::process::Command::new("git")
-    .args(["commit", "-m", "Initial commit"])
-    .current_dir(&root)
-    .output()
-    .unwrap();
+  // Init git repo with initial commit on main
+  let _repo = init_repo_with_initial_commit(&root);
 
   start_daemon(&sock);
 
@@ -133,23 +119,8 @@ fn attach_fast_burst_full_echo() {
   let root = td.path().to_path_buf();
   let sock = td.path().join("agency.sock");
 
-  // Init git repo
-  std::process::Command::new("git")
-    .arg("init")
-    .current_dir(&root)
-    .output()
-    .unwrap();
-  std::fs::write(root.join("README.md"), "# E2E Test\n").unwrap();
-  std::process::Command::new("git")
-    .args(["add", "."])
-    .current_dir(&root)
-    .output()
-    .unwrap();
-  std::process::Command::new("git")
-    .args(["commit", "-m", "Initial commit"])
-    .current_dir(&root)
-    .output()
-    .unwrap();
+  // Init git repo with initial commit on main
+  let _repo = init_repo_with_initial_commit(&root);
 
   start_daemon(&sock);
 
