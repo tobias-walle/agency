@@ -15,12 +15,9 @@
 
 use std::io::Write;
 
-#[allow(dead_code)]
-const ESC: u8 = 0x1B; // '\x1b'
-#[allow(dead_code)]
-const CSI: &[u8] = b"["; // Control Sequence Introducer after ESC
-#[allow(dead_code)]
-const OSC: &[u8] = b"]"; // Operating System Command after ESC
+const _ESC: u8 = 0x1B; // '\x1b'
+const _CSI: &[u8] = b"["; // Control Sequence Introducer after ESC
+const _OSC: &[u8] = b"]"; // Operating System Command after ESC
 const ST: &[u8] = &[0x1B, b'\\']; // String Terminator (ESC \\)
 
 // Core reset sequences
