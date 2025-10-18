@@ -26,12 +26,12 @@ Resolve current test failures and Clippy warnings, then incrementally improve ro
 
 => ✅ Completed: full suite passes; clippy clean for tests.
 
-### Phase 2: Daemon RPC Serialization Robustness (<= 0.25 day)
+### Phase 2: Daemon RPC Serialization Robustness (<= 0.25 day) ✅
 
-- Replace `serde_json::to_value(...).unwrap()` with safer patterns:
-  - Prefer `serde_json::json!` for literal DTO construction,
-  - Or propagate serialization errors via `RpcResult` if any (unlikely).
-- Validate: targeted core tests (`daemon_e2e`, `tasks`, `pty`) + full suite.
+- Replaced `serde_json::to_value(...).unwrap()` in daemon handlers with `serde_json::json!(...)` for DTOs (`DaemonStatus`, `TaskInfo`, `TaskListResponse`, `TaskStartResult`, `PtyAttachResult`, `PtyReadResult`).
+- Left `json!(true)` for boolean returns.
+- Validation: Ran targeted tests (`daemon_e2e`, `tasks`, `pty`) and full suite; all passing.
+- Clippy: `cargo clippy --tests` clean.
 
 ### Phase 3: Agent Env Builder Refactor (<= 0.5 day)
 

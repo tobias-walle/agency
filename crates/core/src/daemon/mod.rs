@@ -229,7 +229,7 @@ pub async fn start(socket_path: &Path) -> io::Result<DaemonHandle> {
     .register_method("daemon.status", |_params, ctx: &PathBuf, _ext| -> RpcResult<serde_json::Value> {
       let status = DaemonStatus { version: env!("CARGO_PKG_VERSION").to_string(), pid: std::process::id(), socket_path: ctx.display().to_string() };
       info!(event = "daemon_status", pid = status.pid, socket = %status.socket_path, version = %status.version, "status served");
-      Ok(serde_json::to_value(status).unwrap())
+      Ok(serde_json::json!(status))
     })
     .expect("register daemon.status");
 
@@ -291,7 +291,7 @@ pub async fn start(socket_path: &Path) -> io::Result<DaemonHandle> {
           slug,
           status: Status::Draft,
         };
-        Ok(serde_json::to_value(info).unwrap())
+        Ok(serde_json::json!(info))
       },
     )
     .expect("register task.new");
@@ -322,7 +322,7 @@ pub async fn start(socket_path: &Path) -> io::Result<DaemonHandle> {
         }
         tasks.sort_by_key(|t| t.id);
         let resp = TaskListResponse { tasks };
-        Ok(serde_json::to_value(resp).unwrap())
+        Ok(serde_json::json!(resp))
       },
     )
     .expect("register task.status");
@@ -420,7 +420,7 @@ pub async fn start(socket_path: &Path) -> io::Result<DaemonHandle> {
         slug,
         status: Status::Running,
       };
-      Ok(serde_json::to_value(res).unwrap())
+      Ok(serde_json::json!(res))
     })
     .expect("register task.start");
 
@@ -444,7 +444,7 @@ pub async fn start(socket_path: &Path) -> io::Result<DaemonHandle> {
       tracing::info!(event = "pty_attach_jiggle_resize", task_id = id, attachment_id = %attach_id, rows = p.rows, cols = p.cols, "applied initial jiggle resize");
       tracing::info!(event = "pty_attach", task_id = id, attachment_id = %attach_id, rows = p.rows, cols = p.cols, "pty attached");
       let res = PtyAttachResult { attachment_id: attach_id };
-      Ok(serde_json::to_value(res).unwrap())
+      Ok(serde_json::json!(res))
     })
     .expect("register pty.attach");
 
@@ -458,7 +458,7 @@ pub async fn start(socket_path: &Path) -> io::Result<DaemonHandle> {
           .map_err(|e| ErrorObjectOwned::owned(-32011, e.to_string(), None::<()>))?;
         let text = String::from_utf8_lossy(&data).to_string();
         let res = PtyReadResult { data: text, eof };
-        Ok(serde_json::to_value(res).unwrap())
+        Ok(serde_json::json!(res))
       },
     )
     .expect("register pty.read");
@@ -481,7 +481,7 @@ pub async fn start(socket_path: &Path) -> io::Result<DaemonHandle> {
         debug!(event = "daemon_pty_tick_read", attachment_id = %p.attachment_id, bytes = data.len(), eof, wait_ms = p.wait_ms, max_bytes = ?p.max_bytes);
         let text = String::from_utf8_lossy(&data).to_string();
         let res = PtyReadResult { data: text, eof };
-        Ok(serde_json::to_value(res).unwrap())
+        Ok(serde_json::json!(res))
       },
     )
     .expect("register pty.tick");
