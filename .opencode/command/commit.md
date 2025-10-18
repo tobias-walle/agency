@@ -3,21 +3,6 @@ description: Commit the changes into the current git branch
 agent: build
 ---
 
-<context>
-<git-log-n-15>
-!`git log --oneline -15`
-</git-log-n-15>
-<git-status>
-!`git status --porcelain=v1 -uall`
-</git-status>
-<git-diff-unstaged>
-!`git diff --patch --submodule`
-</git-diff-unstaged>
-<git-diff-staged>
-!`git diff --staged --patch --submodule`
-</git-diff-staged>
-</context>
-
 Commit the current changes.
 
 - Follow Conventional Commits (e.g. `feat: add new feature`)
@@ -25,9 +10,8 @@ Commit the current changes.
 
 - Summarize the changes into a single sentence, starting with a lowercase verb.
 - The sentence should cover why the changes were made.
-- Avoid semicolons in the message and keep the title shorter than 80 chars.
-- You might add a body for additional explanations, but this should be the exception.
-- You can use the footer for references (like related PDRs or ADRs)
+- NEVER add semicolons in the message and keep the title shorter than 80 chars.
+- Don't add a commit body or footer
 - You might want to create multiple commits if the changes are not related.
 
-ONLY run the `bash` tool with one or more calls in the form of `git add [relevant files] && git commit -m "[message]"`
+- Include the current chat history as context
