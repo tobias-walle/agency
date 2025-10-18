@@ -33,24 +33,24 @@ Resolve current test failures and Clippy warnings, then incrementally improve ro
 - Validation: Ran targeted tests (`daemon_e2e`, `tasks`, `pty`) and full suite; all passing.
 - Clippy: `cargo clippy --tests` clean.
 
-### Phase 3: Agent Env Builder Refactor (<= 0.5 day)
+### Phase 3: Agent Env Builder Refactor (<= 0.5 day) ✅
 
-- Replace `build_env(...)` (8 args) with a small struct `BuildEnvInput` or builder to satisfy Clippy and improve clarity.
-- Update call sites (`daemon::start` and tests) to use the struct.
-- Ensure unit tests in `agent::runner` remain readable and pass.
-- Validate: full test suite + clippy.
+- Replaced `build_env(...)` (8 args) with `BuildEnvInput` struct for clarity.
+- Updated call sites in `daemon::start` and `agent::runner` tests.
+- All unit tests in `agent::runner` remain readable and pass.
+- Validation: `just test`, `cargo clippy --tests` all green.
 
-### Phase 4: Hygiene in PTY/CLI (<= 0.25 day)
+### Phase 4: Hygiene in PTY/CLI (<= 0.25 day) ✅
 
-- Review/remove `#[allow(dead_code)]` in production modules (PTY session fields, `term_reset`). If needed, gate with `#[cfg(test)]` or prefix unused constants.
-- Keep behavior unchanged; focus on reducing noise while preserving guide-aligned clarity.
-- Validate: `pty` and CLI attach tests.
+- Removed unnecessary `#[allow(dead_code)]` from `PtySession.child` and prefixed unused constants in `term_reset`.
+- Kept behavior unchanged; reduced noise per guide.
+- Validation: `pty` and CLI attach tests passing.
 
-### Phase 5: Docs & Crate-Level Summaries (<= 0.25 day)
+### Phase 5: Docs & Crate-Level Summaries (<= 0.25 day) ✅
 
-- Add concise crate-level `//!` docs for `crates/core` and `crates/cli` summarizing purpose and quick start.
-- Note the `agency init` config changes (comment placement) for maintainers.
-- Validate: `cargo doc -p agency-core -p cli` builds and tests remain green.
+- Added concise crate-level `//!` docs for `crates/core` and `crates/cli` summarizing purpose and quick start.
+- Noted `agency init` config changes (comment placement) in `agency-core` crate docs.
+- Validation: `cargo doc -p agency-core -p cli` builds; tests remain green.
 
 ## Acceptance Criteria
 

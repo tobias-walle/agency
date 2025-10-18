@@ -35,31 +35,37 @@ pub enum AgentRunnerError {
 
 pub type RunnerResult<T> = Result<T, AgentRunnerError>;
 
-#[allow(clippy::too_many_arguments)]
-pub fn build_env(
-  task_id: TaskId,
-  slug: &str,
-  body: &str,
-  prompt: &str,
-  project_root: &Path,
-  worktree_path: &Path,
-  session_id: Option<&str>,
-  message: Option<&str>,
-) -> HashMap<String, String> {
+/// Input parameters for environment construction passed to agent processes.
+#[derive(Debug, Clone, Copy)]
+pub struct BuildEnvInput<'a> {
+  pub task_id: TaskId,
+  pub slug: &'a str,
+  pub body: &'a str,
+  pub prompt: &'a str,
+  pub project_root: &'a Path,
+  pub worktree_path: &'a Path,
+  pub session_id: Option<&'a str>,
+  pub message: Option<&'a str>,
+}
+
+pub fn build_env(input: BuildEnvInput) -> HashMap<String, String> {
   let mut env = HashMap::new();
-  env.insert("AGENCY_TASK_ID".to_string(), task_id.0.to_string());
-  env.insert("AGENCY_SLUG".to_string(), slug.to_string());
-  env.insert("AGENCY_BODY".to_string(), body.to_string());
-  env.insert("AGENCY_PROMPT".to_string(), prompt.to_string());
+  env.insert("AGENCY_TASK_ID".to_string(), input.task_id.0.to_string());
+  env.insert("AGENCY_SLUG".to_string(), input.slug.to_string());
+  env.insert("AGENCY_BODY".to_string(), input.body.to_string());
+  env.insert("AGENCY_PROMPT".to_string(), input.prompt.to_string());
   env.insert(
     "AGENCY_PROJECT_ROOT".to_string(),
-    path_to_string(project_root),
+    path_to_string(input.project_root),
   );
-  env.insert("AGENCY_WORKTREE".to_string(), path_to_string(worktree_path));
-  if let Some(value) = session_id {
+  env.insert(
+    "AGENCY_WORKTREE".to_string(),
+    path_to_string(input.worktree_path),
+  );
+  if let Some(value) = input.session_id {
     env.insert("AGENCY_SESSION_ID".to_string(), value.to_string());
   }
-  if let Some(value) = message {
+  if let Some(value) = input.message {
     env.insert("AGENCY_MESSAGE".to_string(), value.to_string());
   }
   env
@@ -138,16 +144,16 @@ mod tests {
 
   #[test]
   fn build_env_populates_expected_keys() {
-    let env = build_env(
-      TaskId(42),
-      "hello-world",
-      "body text",
-      "prompt text",
-      Path::new("/tmp/project"),
-      Path::new("/tmp/project/.agency/worktrees/42-hello-world"),
-      Some("session-123"),
-      Some("message-abc"),
-    );
+    let env = build_env(BuildEnvInput {
+      task_id: TaskId(42),
+      slug: "hello-world",
+      body: "body text",
+      prompt: "prompt text",
+      project_root: Path::new("/tmp/project"),
+      worktree_path: Path::new("/tmp/project/.agency/worktrees/42-hello-world"),
+      session_id: Some("session-123"),
+      message: Some("message-abc"),
+    });
     assert_eq!(env.get("AGENCY_TASK_ID").map(String::as_str), Some("42"));
     assert_eq!(
       env.get("AGENCY_SLUG").map(String::as_str),
@@ -181,16 +187,16 @@ mod tests {
 
   #[test]
   fn build_env_omits_optional_when_none() {
-    let env = build_env(
-      TaskId(7),
-      "slug",
-      "body",
-      "prompt",
-      Path::new("/project"),
-      Path::new("/project/.agency/worktrees/7-slug"),
-      None,
-      None,
-    );
+    let env = build_env(BuildEnvInput {
+      task_id: TaskId(7),
+      slug: "slug",
+      body: "body",
+      prompt: "prompt",
+      project_root: Path::new("/project"),
+      worktree_path: Path::new("/project/.agency/worktrees/7-slug"),
+      session_id: None,
+      message: None,
+    });
     assert!(!env.contains_key("AGENCY_SESSION_ID"));
     assert!(!env.contains_key("AGENCY_MESSAGE"));
   }

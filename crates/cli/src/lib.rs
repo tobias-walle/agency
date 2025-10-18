@@ -1,3 +1,12 @@
+//! Agency CLI for orchestrating the daemon and interactive PTY attach.
+//!
+//! Responsibilities:
+//! - Parse user commands and arguments.
+//! - Autostart and communicate with the JSON-RPC daemon over a Unix socket.
+//! - Manage interactive PTY attach/detach with safe terminal resets.
+//!
+//! See `agency init` for bootstrapping `.agency` layout and project config.
+
 pub mod args;
 pub mod rpc;
 pub mod stdin_handler;

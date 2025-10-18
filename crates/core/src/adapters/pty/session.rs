@@ -73,7 +73,6 @@ pub(crate) struct PtySession {
   pub(crate) outbox: Mutex<Option<Vec<u8>>>,
   pub(crate) eof: AtomicBool,
   pub(crate) active_attach: Mutex<Option<String>>,
-  #[allow(dead_code)]
   pub(crate) child: Mutex<Option<Box<dyn portable_pty::Child + Send + Sync>>>,
   pub(crate) cv: (Mutex<bool>, std::sync::Condvar),
   pub(crate) alt_screen_active: AtomicBool,

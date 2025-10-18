@@ -47,12 +47,16 @@ pub(crate) fn sanitize_with_counters(input: &[u8]) -> (Vec<u8>, usize, usize) {
     let b = input[i];
     if b == b'\r' {
       if i + 1 < input.len() && input[i + 1] == b'\n' {
-        out.push(b'\r');
-      } else {
+        // Normalize CRLF to LF
         out.push(b'\n');
+        i += 2;
+        continue;
+      } else {
+        // Normalize lone CR to LF
+        out.push(b'\n');
+        i += 1;
+        continue;
       }
-      i += 1;
-      continue;
     }
     out.push(b);
     i += 1;
