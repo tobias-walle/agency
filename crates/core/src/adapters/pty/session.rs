@@ -120,7 +120,11 @@ pub(crate) fn spawn_reader_thread(session: Arc<PtySession>) {
         match reader.read(&mut tmp) {
           Ok(0) => {
             session.eof.store(true, Ordering::SeqCst);
-            debug!(event = "pty_reader_eof", task_id = session.id, "PTY reader reached EOF");
+            debug!(
+              event = "pty_reader_eof",
+              task_id = session.id,
+              "PTY reader reached EOF"
+            );
             break;
           }
           Ok(n) => {

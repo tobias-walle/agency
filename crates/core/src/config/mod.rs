@@ -214,7 +214,7 @@ pub fn write_default_project_config(project_root: &Path) -> std::io::Result<()> 
     // Ensure a [pty] section is present with a commented example for detach_keys.
     // We avoid setting a value to keep default None semantics.
     s.push_str(
-      "\n# Default agent for `agency new` when --agent is not provided.\n# default_agent = \"opencode\" # or \"claude-code\" or \"fake\"\n\n[pty]\n# Detach key sequence for attach. Comma-separated control keys.\n# Leave unset to use the default Ctrl-Q. Examples:\n# detach_keys = \"ctrl-q\"\n# detach_keys = \"ctrl-p,ctrl-q\"\n",
+      "\n# Default agent for `agency new` when --agent is not provided.\n# default_agent = \"opencode\" # or \"claude-code\" or \"fake\"\n\n# Detach key sequence for attach under the [pty] section.\n# Leave unset to use the default Ctrl-Q. Examples:\n# pty.detach_keys = \"ctrl-q\"\n# pty.detach_keys = \"ctrl-p,ctrl-q\"\n",
     );
     std::fs::write(&path, s)?;
   }
@@ -304,6 +304,19 @@ fn agent_key(agent: &crate::domain::task::Agent) -> &'static str {
 /// Resolve the socket path using AGENCY_SOCKET or platform defaults.
 pub fn resolve_socket_path() -> Result<PathBuf> {
   let env_socket = env::var("AGENCY_SOCKET").ok().map(PathBuf::from);
+  // Prefer runtime_dir for ephemeral sockets; fall back to data_dir
+  let base_dir = runtime_dir().or(data_dir());
+  if let Some(val) = env_socket {
+    return Ok(val);
+  }
+  if let Some(dir) = base_dir {
+    return Ok(dir.join("agency.sock"));
+  }
+  Err(ConfigError::UnsupportedPlatform)
+}
+
+#[cfg(test)]
+pub(crate) fn resolve_socket_path_for(env_socket: Option<PathBuf>) -> Result<PathBuf> {
   // Prefer runtime_dir for ephemeral sockets; fall back to data_dir
   let base_dir = runtime_dir().or(data_dir());
   if let Some(val) = env_socket {
@@ -413,7 +426,14 @@ start = ["sh", "-c", "echo project"]
       ]
     );
     let fake = cfg.agents.get("fake").expect("fake agent");
-    assert_eq!(fake.start, vec!["sh".to_string(), "-c".to_string(), "echo project".to_string()]);
+    assert_eq!(
+      fake.start,
+      vec![
+        "sh".to_string(),
+        "-c".to_string(),
+        "echo project".to_string()
+      ]
+    );
   }
 
   #[test]
@@ -461,18 +481,13 @@ start = []
   fn socket_env_overrides() {
     let td = tempfile::tempdir().unwrap();
     let p = td.path().join("sock");
-    // Set the environment variable and check resolve_socket_path
-    unsafe { std::env::set_var("AGENCY_SOCKET", &p) };
-    let got = resolve_socket_path().unwrap();
+    let got = resolve_socket_path_for(Some(p.clone())).unwrap();
     assert_eq!(got, p);
-    unsafe { std::env::remove_var("AGENCY_SOCKET") };
   }
 
   #[test]
   fn socket_platform_fallback() {
-    // Unset the environment variable to test fallback
-    unsafe { std::env::remove_var("AGENCY_SOCKET") };
-    let got = resolve_socket_path().unwrap();
+    let got = resolve_socket_path_for(None).unwrap();
 
     let expected = if let Some(r) = dirs::runtime_dir() {
       r.join("agency.sock")

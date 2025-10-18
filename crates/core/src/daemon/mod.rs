@@ -11,7 +11,7 @@ use tokio::task::JoinHandle;
 use tracing::{debug, error, info, warn};
 
 use crate::adapters::{fs as fsutil, git as gitutil};
-use crate::agent::{build_env, resolve_action, substitute_tokens, AgentAction};
+use crate::agent::{AgentAction, build_env, resolve_action, substitute_tokens};
 use crate::domain::task::{Status, Task, TaskFrontMatter, TaskId};
 use crate::rpc::{
   DaemonStatus, PtyAttachParams, PtyAttachResult, PtyDetachParams, PtyInputParams, PtyReadParams,

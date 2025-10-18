@@ -1,18 +1,18 @@
 use std::fs;
 use std::path::Path;
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 use std::thread;
 
-use anyhow::{anyhow, Context};
-use portable_pty::{native_pty_system, CommandBuilder, PtySize};
+use anyhow::{Context, anyhow};
+use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 use tracing::{debug, info, warn};
 
 use crate::adapters::fs as fsutil;
 use crate::domain::task::{Status, Task, TaskId};
 
 use super::registry::{registry, root_key};
-use super::session::{spawn_reader_thread, PtySession};
+use super::session::{PtySession, spawn_reader_thread};
 
 pub fn spawn_command(
   project_root: &Path,
@@ -49,7 +49,13 @@ pub fn spawn_command(
       pixel_height: 0,
     })
     .with_context(|| format!("openpty failed for task {}", task_id))?;
-  debug!(event = "pty_spawn_openpty", task_id, rows = 24u16, cols = 80u16, "opened PTY pair");
+  debug!(
+    event = "pty_spawn_openpty",
+    task_id,
+    rows = 24u16,
+    cols = 80u16,
+    "opened PTY pair"
+  );
 
   let mut cmd = CommandBuilder::new(program);
   cmd.cwd(worktree_path.as_os_str());
@@ -148,8 +154,12 @@ fn spawn_reaper_thread(session: Arc<PtySession>) {
 
     {
       let mut reg = registry().lock().unwrap();
-      reg.sessions.remove(&(session.registry_root.clone(), session.id));
-      reg.attachments.retain(|_, existing| !Arc::ptr_eq(existing, &session));
+      reg
+        .sessions
+        .remove(&(session.registry_root.clone(), session.id));
+      reg
+        .attachments
+        .retain(|_, existing| !Arc::ptr_eq(existing, &session));
     }
 
     if let Err(error) = persist_task_stopped(&session) {
@@ -166,8 +176,8 @@ fn spawn_reaper_thread(session: Arc<PtySession>) {
 
 fn persist_task_stopped(session: &PtySession) -> anyhow::Result<()> {
   let task_id = TaskId(session.id);
-  let task_path = fsutil::tasks_dir(&session.project_root)
-    .join(Task::format_filename(task_id, &session.slug));
+  let task_path =
+    fsutil::tasks_dir(&session.project_root).join(Task::format_filename(task_id, &session.slug));
   let contents = fs::read_to_string(&task_path)
     .with_context(|| format!("read task file {}", task_path.display()))?;
   let mut task = Task::from_markdown(task_id, session.slug.clone(), &contents)
@@ -208,5 +218,13 @@ pub fn ensure_spawn_sh(
   worktree_path: &Path,
 ) -> anyhow::Result<()> {
   const EMPTY: [(&str, &str); 0] = [];
-  spawn_command(project_root, task_id, slug, worktree_path, "sh", &[], &EMPTY)
+  spawn_command(
+    project_root,
+    task_id,
+    slug,
+    worktree_path,
+    "sh",
+    &[],
+    &EMPTY,
+  )
 }

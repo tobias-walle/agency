@@ -35,6 +35,7 @@ pub enum AgentRunnerError {
 
 pub type RunnerResult<T> = Result<T, AgentRunnerError>;
 
+#[allow(clippy::too_many_arguments)]
 pub fn build_env(
   task_id: TaskId,
   slug: &str,
@@ -148,9 +149,18 @@ mod tests {
       Some("message-abc"),
     );
     assert_eq!(env.get("AGENCY_TASK_ID").map(String::as_str), Some("42"));
-    assert_eq!(env.get("AGENCY_SLUG").map(String::as_str), Some("hello-world"));
-    assert_eq!(env.get("AGENCY_BODY").map(String::as_str), Some("body text"));
-    assert_eq!(env.get("AGENCY_PROMPT").map(String::as_str), Some("prompt text"));
+    assert_eq!(
+      env.get("AGENCY_SLUG").map(String::as_str),
+      Some("hello-world")
+    );
+    assert_eq!(
+      env.get("AGENCY_BODY").map(String::as_str),
+      Some("body text")
+    );
+    assert_eq!(
+      env.get("AGENCY_PROMPT").map(String::as_str),
+      Some("prompt text")
+    );
     assert_eq!(
       env.get("AGENCY_PROJECT_ROOT").map(String::as_str),
       Some("/tmp/project"),
@@ -234,7 +244,6 @@ mod tests {
 
   #[test]
   fn resolve_action_missing_agent_errors() {
-
     let config = Config::default();
     let err = resolve_action(&config, &Agent::ClaudeCode, AgentAction::Start).unwrap_err();
     match err {

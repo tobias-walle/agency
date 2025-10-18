@@ -12,6 +12,7 @@ The Agency tool orchestrates parallel-running AI CLI agents in isolated Git work
 - `./docs/prd/PRD-[id]-[slug].md` - Store for PRDs (Product Requirement Documents). Increment the id when creating a new PRD.
 - `./docs/adr/ADR-[id]-[slug].md` - Architecture Decision Records. Increment ids here as well.
 - `./docs/plans/PLN-[id]-[slug].md` - High-level plans with self-contained phases (< 0.5 day by a skilled engineer).
+- `./docs/guides/*.md` - Contains more detailed documentation in addition to the README.
 - `./justfile` - Project scripts
 - Entrypoint: `apps/agency/src/main.rs`
 - CLI: `crates/cli` (args, RPC client, interactive attach)
@@ -169,6 +170,7 @@ If you add a new dependency, resolve its Context7 ID and append it here.
 - You SHOULD use TDD then appropriate:
   - Fixing bugs -> Write tests before implementation
   - Implement new features, with unclear final solution -> Write tests after implementation
+- Before writing or editing Rust code, you MUST read `./docs/guides/RUST_BEST_PRACTICES.md` and follow it
 
 ## Testing
 

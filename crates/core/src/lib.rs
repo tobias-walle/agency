@@ -1,5 +1,5 @@
-pub mod agent;
 pub mod adapters;
+pub mod agent;
 pub mod config;
 pub mod daemon;
 pub mod domain;

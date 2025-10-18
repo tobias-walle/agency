@@ -4,7 +4,11 @@ use agency_core::rpc::{
   PtyAttachResult, TaskInfo, TaskListResponse, TaskNewParams, TaskRef, TaskStartParams,
   TaskStartResult,
 };
-use agency_core::{adapters::fs as fsutil, domain::task::{Agent, Status}, logging};
+use agency_core::{
+  adapters::fs as fsutil,
+  domain::task::{Agent, Status},
+  logging,
+};
 use serde_json::{Value, json};
 use test_support::{RpcResp, UnixRpcClient, init_repo_with_initial_commit, poll_until};
 
@@ -95,7 +99,11 @@ async fn marks_running_task_as_stopped_on_boot() {
       Some(json!({ "project_root": root.display().to_string() })),
     )
     .await;
-  assert!(status_resp.error.is_none(), "status error: {:?}", status_resp.error);
+  assert!(
+    status_resp.error.is_none(),
+    "status error: {:?}",
+    status_resp.error
+  );
   let tasks = status_resp.result.unwrap().tasks;
   assert_eq!(tasks.len(), 1);
   assert_eq!(tasks[0].status, Status::Stopped);
@@ -109,7 +117,10 @@ async fn marks_running_task_as_stopped_on_boot() {
   let att: RpcResp<PtyAttachResult> = client2
     .call("pty.attach", Some(attach_params.clone()))
     .await;
-  assert!(att.error.is_some(), "expected attach to fail when task is stopped");
+  assert!(
+    att.error.is_some(),
+    "expected attach to fail when task is stopped"
+  );
 
   let restart: RpcResp<TaskStartResult> = client2
     .call(
@@ -117,14 +128,20 @@ async fn marks_running_task_as_stopped_on_boot() {
       Some(serde_json::to_value(&start_params).unwrap()),
     )
     .await;
-  assert!(restart.error.is_none(), "restart start error: {:?}", restart.error);
+  assert!(
+    restart.error.is_none(),
+    "restart start error: {:?}",
+    restart.error
+  );
   let restart_info = restart.result.unwrap();
   assert_eq!(restart_info.status, Status::Running);
 
-  let att2: RpcResp<PtyAttachResult> = client2
-    .call("pty.attach", Some(attach_params))
-    .await;
-  assert!(att2.error.is_none(), "attach after restart error: {:?}", att2.error);
+  let att2: RpcResp<PtyAttachResult> = client2.call("pty.attach", Some(attach_params)).await;
+  assert!(
+    att2.error.is_none(),
+    "attach after restart error: {:?}",
+    att2.error
+  );
 
   handle2.stop();
   unsafe {
