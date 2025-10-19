@@ -14,4 +14,4 @@ Commit the current changes.
 - Don't add a commit body or footer
 - You might want to create multiple commits if the changes are not related.
 
-- Include the current chat history as context
+Add the files and commit in a single command, e.g. `git add file1.ts file2.ts && git commit -m "..."`
