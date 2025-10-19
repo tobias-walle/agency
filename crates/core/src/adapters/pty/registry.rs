@@ -4,12 +4,12 @@ use std::sync::{Arc, Mutex};
 
 use once_cell::sync::Lazy;
 
-use super::session::PtySession;
+use super::{AttachmentId, session::PtySession};
 
 #[derive(Default)]
 pub(crate) struct Registry {
   pub(crate) sessions: HashMap<(String, u64), Arc<PtySession>>,
-  pub(crate) attachments: HashMap<String, Arc<PtySession>>,
+  pub(crate) attachments: HashMap<AttachmentId, Arc<PtySession>>,
 }
 
 static REGISTRY: Lazy<Mutex<Registry>> = Lazy::new(|| Mutex::new(Registry::default()));

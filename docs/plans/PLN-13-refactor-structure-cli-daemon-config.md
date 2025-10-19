@@ -138,11 +138,11 @@ Acceptance: Core integration tests still pass (`daemon_e2e`, `daemon_resume`, `p
 
 Acceptance: All `config` unit tests pass; dependent modules compile unchanged.
 
-### [ ] Phase 4: Optional polish
+### [x] Phase 4: Optional polish
 
-- Introduce `AttachmentId(String)` newtype in `adapters::pty` and mirror in `rpc` DTOs (non-breaking if via `From/Into<String>` where needed). Consider deferring if it cascades too much churn.
-- Extract small `pty::constants` for history/replay limits, referenced by `session` and façade.
-- Split `agent/runner.rs` into `resolve.rs` and `env.rs` only if future growth demands.
+- Introduced `AttachmentId(String)` newtype in `adapters::pty` and mirrored in `rpc` DTOs with `serde(transparent)` and `From/Into<String>` to avoid breaking callers.
+- Extracted `pty::constants` for history/replay limits, referenced by `session` and façade.
+- Consider splitting `agent/runner.rs` into `resolve.rs` and `env.rs` in the future if growth demands.
 
 Acceptance: No behavior change; types self-document intent.
 

@@ -1,3 +1,4 @@
+use std::fmt;
 use std::io::Write;
 use std::path::Path;
 use std::sync::Arc;
@@ -5,9 +6,11 @@ use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
 
 use portable_pty::PtySize;
+use serde::{Deserialize, Serialize};
 use tracing::debug;
 use uuid::Uuid;
 
+mod constants;
 mod registry;
 mod sanitize;
 mod session;
@@ -15,14 +18,42 @@ mod spawn;
 
 pub use spawn::{ensure_spawn_sh, spawn_command};
 
+use constants::{ATTACH_REPLAY_BYTES, ATTACH_REPLAY_EMIT_BYTES};
 use registry::{registry, root_key};
 use sanitize::sanitize_with_counters;
-use session::{ATTACH_REPLAY_BYTES, ATTACH_REPLAY_EMIT_BYTES};
 
 #[cfg(test)]
 pub use registry::clear_registry_for_tests;
 
-pub fn attach(project_root: &Path, task_id: u64, prefill: bool) -> anyhow::Result<String> {
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct AttachmentId(pub String);
+
+impl fmt::Display for AttachmentId {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    self.0.fmt(f)
+  }
+}
+
+impl From<String> for AttachmentId {
+  fn from(s: String) -> Self {
+    AttachmentId(s)
+  }
+}
+
+impl From<&str> for AttachmentId {
+  fn from(s: &str) -> Self {
+    AttachmentId(s.to_string())
+  }
+}
+
+impl AsRef<str> for AttachmentId {
+  fn as_ref(&self) -> &str {
+    &self.0
+  }
+}
+
+pub fn attach(project_root: &Path, task_id: u64, prefill: bool) -> anyhow::Result<AttachmentId> {
   let mut reg = registry().lock().unwrap();
   let key = (root_key(project_root), task_id);
   let sess = reg
@@ -35,8 +66,8 @@ pub fn attach(project_root: &Path, task_id: u64, prefill: bool) -> anyhow::Resul
     if active.is_some() {
       anyhow::bail!("session already attached");
     }
-    let id = Uuid::new_v4().to_string();
-    *active = Some(id.clone());
+    let id = AttachmentId(Uuid::new_v4().to_string());
+    *active = Some(id.0.clone());
     reg.attachments.insert(id.clone(), Arc::clone(&sess));
     debug!(event = "pty_attach_new", task_id = sess.id, attachment_id = %id);
 
@@ -78,7 +109,7 @@ pub fn attach(project_root: &Path, task_id: u64, prefill: bool) -> anyhow::Resul
 }
 
 pub fn read(
-  attachment_id: &str,
+  attachment_id: &AttachmentId,
   max_bytes: Option<usize>,
   wait_ms: Option<u64>,
 ) -> anyhow::Result<(Vec<u8>, bool)> {
@@ -127,7 +158,7 @@ pub fn read(
   let eof = sess.eof.load(Ordering::SeqCst);
   debug!(
     event = "pty_read_drain",
-    attachment_id,
+    attachment_id = %attachment_id,
     pre_len,
     drained = n,
     post_len,
@@ -138,7 +169,7 @@ pub fn read(
   Ok((data, eof))
 }
 
-pub fn input(attachment_id: &str, data: &[u8]) -> anyhow::Result<()> {
+pub fn input(attachment_id: &AttachmentId, data: &[u8]) -> anyhow::Result<()> {
   let reg = registry().lock().unwrap();
   let sess = reg
     .attachments
@@ -167,7 +198,7 @@ pub fn input(attachment_id: &str, data: &[u8]) -> anyhow::Result<()> {
   Ok(())
 }
 
-pub fn resize(attachment_id: &str, rows: u16, cols: u16) -> anyhow::Result<()> {
+pub fn resize(attachment_id: &AttachmentId, rows: u16, cols: u16) -> anyhow::Result<()> {
   let reg = registry().lock().unwrap();
   let sess = reg
     .attachments
@@ -185,7 +216,7 @@ pub fn resize(attachment_id: &str, rows: u16, cols: u16) -> anyhow::Result<()> {
   Ok(())
 }
 
-pub fn jiggle_resize(attachment_id: &str, rows: u16, cols: u16) -> anyhow::Result<()> {
+pub fn jiggle_resize(attachment_id: &AttachmentId, rows: u16, cols: u16) -> anyhow::Result<()> {
   let reg = registry().lock().unwrap();
   let sess = reg
     .attachments
@@ -231,7 +262,7 @@ pub fn jiggle_resize(attachment_id: &str, rows: u16, cols: u16) -> anyhow::Resul
   Ok(())
 }
 
-pub fn detach(attachment_id: &str) -> anyhow::Result<()> {
+pub fn detach(attachment_id: &AttachmentId) -> anyhow::Result<()> {
   let mut reg = registry().lock().unwrap();
   if let Some(sess) = reg.attachments.remove(attachment_id) {
     let mut active = sess.active_attach.lock().unwrap();
