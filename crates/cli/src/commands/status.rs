@@ -27,7 +27,10 @@ pub fn list_status() {
       }
     }
     Err(e) => {
-      eprintln!("{}", crate::util::errors::render_rpc_failure("status", &sock, &e));
+      eprintln!(
+        "{}",
+        crate::util::errors::render_rpc_failure("status", &sock, &e)
+      );
       std::process::exit(1);
     }
   }

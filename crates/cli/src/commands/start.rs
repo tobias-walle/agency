@@ -1,4 +1,10 @@
-use crate::{args, rpc::client, util::{daemon_proc::ensure_daemon_running, task_ref::parse_task_ref, errors::render_rpc_failure}};
+use crate::{
+  args,
+  rpc::client,
+  util::{
+    daemon_proc::ensure_daemon_running, errors::render_rpc_failure, task_ref::parse_task_ref,
+  },
+};
 
 pub fn start_task(a: args::StartArgs) {
   let sock = ensure_daemon_running();
@@ -10,7 +16,9 @@ pub fn start_task(a: args::StartArgs) {
     .unwrap();
   let res = rt.block_on(async { client::task_start(&sock, &root, tref).await });
   match res {
-    Ok(r) => { println!("{} {} {:?}", r.id, r.slug, r.status); }
+    Ok(r) => {
+      println!("{} {} {:?}", r.id, r.slug, r.status);
+    }
     Err(e) => {
       eprintln!("{}", render_rpc_failure("start", &sock, &e));
       std::process::exit(1);
