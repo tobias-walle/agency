@@ -10,6 +10,7 @@ pub struct DaemonStatus {
 }
 
 // ---- Task lifecycle RPC DTOs (Phase 9) ----
+pub use crate::adapters::pty::AttachmentId;
 use crate::domain::task::{Agent, Status};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -91,13 +92,13 @@ pub struct PtyAttachParams {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub struct PtyAttachResult {
-  pub attachment_id: String,
+  pub attachment_id: AttachmentId,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub struct PtyReadParams {
-  pub attachment_id: String,
+  pub attachment_id: AttachmentId,
   #[serde(default)]
   pub max_bytes: Option<usize>,
   #[serde(default)]
@@ -114,14 +115,14 @@ pub struct PtyReadResult {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub struct PtyInputParams {
-  pub attachment_id: String,
+  pub attachment_id: AttachmentId,
   pub data: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub struct PtyResizeParams {
-  pub attachment_id: String,
+  pub attachment_id: AttachmentId,
   pub rows: u16,
   pub cols: u16,
 }
@@ -129,14 +130,14 @@ pub struct PtyResizeParams {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub struct PtyDetachParams {
-  pub attachment_id: String,
+  pub attachment_id: AttachmentId,
 }
 
 // ---- Extended tick DTOs ----
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub struct PtyTickParams {
-  pub attachment_id: String,
+  pub attachment_id: AttachmentId,
   #[serde(default)]
   pub input: Option<String>,
   #[serde(default)]

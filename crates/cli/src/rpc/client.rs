@@ -1,9 +1,9 @@
 use std::path::Path;
 
 use agency_core::rpc::{
-  DaemonStatus, PtyAttachParams, PtyAttachResult, PtyDetachParams, PtyInputParams, PtyReadResult,
-  PtyResizeParams, TaskInfo, TaskListParams, TaskListResponse, TaskNewParams, TaskRef,
-  TaskStartParams, TaskStartResult,
+  AttachmentId, DaemonStatus, PtyAttachParams, PtyAttachResult, PtyDetachParams, PtyInputParams,
+  PtyReadParams, PtyReadResult, PtyResizeParams, PtyTickParams, TaskInfo, TaskListParams,
+  TaskListResponse, TaskNewParams, TaskRef, TaskStartParams, TaskStartResult,
 };
 use http_body_util::{BodyExt, Full};
 use hyper::{Method, Request, body::Bytes};
@@ -99,19 +99,19 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 pub async fn pty_tick(
   sock: &Path,
-  attachment_id: &str,
+  attachment_id: &AttachmentId,
   input: Option<&str>,
   resize: Option<(u16, u16)>,
   max_bytes: Option<usize>,
   wait_ms: Option<u64>,
 ) -> Result<PtyReadResult> {
-  let params = serde_json::json!({
-    "attachment_id": attachment_id,
-    "input": input,
-    "resize": resize,
-    "max_bytes": max_bytes,
-    "wait_ms": wait_ms,
-  });
+  let params = serde_json::to_value(PtyTickParams {
+    attachment_id: attachment_id.clone(),
+    input: input.map(|s| s.to_string()),
+    resize,
+    max_bytes,
+    wait_ms,
+  })?;
   debug!(event = "rpc_pty_tick_call", wait_ms, input_len = input.map(|s| s.len()), resize = ?resize, max_bytes);
   let v = rpc_call(sock, "pty.tick", Some(params)).await?;
   let res: PtyReadResult = serde_json::from_value(v)?;
@@ -208,10 +208,14 @@ pub async fn pty_attach_with_replay(
 
 pub async fn pty_read(
   sock: &Path,
-  attachment_id: &str,
+  attachment_id: &AttachmentId,
   max_bytes: Option<usize>,
 ) -> Result<PtyReadResult> {
-  let params = serde_json::json!({ "attachment_id": attachment_id, "max_bytes": max_bytes, "wait_ms": serde_json::Value::Null });
+  let params = serde_json::to_value(PtyReadParams {
+    attachment_id: attachment_id.clone(),
+    max_bytes,
+    wait_ms: None,
+  })?;
   debug!(event = "rpc_pty_read_call", max_bytes);
   let v = rpc_call(sock, "pty.read", Some(params)).await?;
   let res: PtyReadResult = serde_json::from_value(v)?;
@@ -223,19 +227,24 @@ pub async fn pty_read(
   Ok(res)
 }
 
-pub async fn pty_input(sock: &Path, attachment_id: &str, data: &[u8]) -> Result<()> {
+pub async fn pty_input(sock: &Path, attachment_id: &AttachmentId, data: &[u8]) -> Result<()> {
   debug!(event = "rpc_pty_input_call", bytes = data.len());
   let params = serde_json::to_value(PtyInputParams {
-    attachment_id: attachment_id.to_string(),
+    attachment_id: attachment_id.clone(),
     data: String::from_utf8_lossy(data).to_string(),
   })?;
   let _ = rpc_call(sock, "pty.input", Some(params)).await?;
   Ok(())
 }
 
-pub async fn pty_resize(sock: &Path, attachment_id: &str, rows: u16, cols: u16) -> Result<()> {
+pub async fn pty_resize(
+  sock: &Path,
+  attachment_id: &AttachmentId,
+  rows: u16,
+  cols: u16,
+) -> Result<()> {
   let params = serde_json::to_value(PtyResizeParams {
-    attachment_id: attachment_id.to_string(),
+    attachment_id: attachment_id.clone(),
     rows,
     cols,
   })?;
@@ -243,9 +252,9 @@ pub async fn pty_resize(sock: &Path, attachment_id: &str, rows: u16, cols: u16) 
   Ok(())
 }
 
-pub async fn pty_detach(sock: &Path, attachment_id: &str) -> Result<()> {
+pub async fn pty_detach(sock: &Path, attachment_id: &AttachmentId) -> Result<()> {
   let params = serde_json::to_value(PtyDetachParams {
-    attachment_id: attachment_id.to_string(),
+    attachment_id: attachment_id.clone(),
   })?;
   let _ = rpc_call(sock, "pty.detach", Some(params)).await?;
   Ok(())
@@ -258,10 +267,14 @@ pub mod session {
   pub async fn pty_read(
     session: &PtySession,
     sock: &Path,
-    attachment_id: &str,
+    attachment_id: &AttachmentId,
     max_bytes: Option<usize>,
   ) -> Result<PtyReadResult> {
-    let params = serde_json::json!({ "attachment_id": attachment_id, "max_bytes": max_bytes, "wait_ms": serde_json::Value::Null });
+    let params = serde_json::to_value(PtyReadParams {
+      attachment_id: attachment_id.clone(),
+      max_bytes,
+      wait_ms: None,
+    })?;
     let v = session.rpc_call(sock, "pty.read", Some(params)).await?;
     let res: PtyReadResult = serde_json::from_value(v)?;
     Ok(res)
@@ -270,11 +283,15 @@ pub mod session {
   pub async fn pty_read_wait(
     session: &PtySession,
     sock: &Path,
-    attachment_id: &str,
+    attachment_id: &AttachmentId,
     max_bytes: Option<usize>,
     wait_ms: Option<u64>,
   ) -> Result<PtyReadResult> {
-    let params = serde_json::json!({ "attachment_id": attachment_id, "max_bytes": max_bytes, "wait_ms": wait_ms });
+    let params = serde_json::to_value(PtyReadParams {
+      attachment_id: attachment_id.clone(),
+      max_bytes,
+      wait_ms,
+    })?;
     let v = session.rpc_call(sock, "pty.read", Some(params)).await?;
     let res: PtyReadResult = serde_json::from_value(v)?;
     Ok(res)
@@ -283,11 +300,11 @@ pub mod session {
   pub async fn pty_input(
     session: &PtySession,
     sock: &Path,
-    attachment_id: &str,
+    attachment_id: &AttachmentId,
     data: &[u8],
   ) -> Result<()> {
     let params = serde_json::to_value(PtyInputParams {
-      attachment_id: attachment_id.to_string(),
+      attachment_id: attachment_id.clone(),
       data: String::from_utf8_lossy(data).to_string(),
     })?;
     let _ = session.rpc_call(sock, "pty.input", Some(params)).await?;
@@ -297,12 +314,12 @@ pub mod session {
   pub async fn pty_resize(
     session: &PtySession,
     sock: &Path,
-    attachment_id: &str,
+    attachment_id: &AttachmentId,
     rows: u16,
     cols: u16,
   ) -> Result<()> {
     let params = serde_json::to_value(PtyResizeParams {
-      attachment_id: attachment_id.to_string(),
+      attachment_id: attachment_id.clone(),
       rows,
       cols,
     })?;
@@ -310,9 +327,13 @@ pub mod session {
     Ok(())
   }
 
-  pub async fn pty_detach(session: &PtySession, sock: &Path, attachment_id: &str) -> Result<()> {
+  pub async fn pty_detach(
+    session: &PtySession,
+    sock: &Path,
+    attachment_id: &AttachmentId,
+  ) -> Result<()> {
     let params = serde_json::to_value(PtyDetachParams {
-      attachment_id: attachment_id.to_string(),
+      attachment_id: attachment_id.clone(),
     })?;
     let _ = session.rpc_call(sock, "pty.detach", Some(params)).await?;
     Ok(())
