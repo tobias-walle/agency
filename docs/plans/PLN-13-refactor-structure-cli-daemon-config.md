@@ -124,7 +124,7 @@ Acceptance: `just test` passes; CLI binary behavior unchanged (manual spot-check
 
 Acceptance: Core integration tests still pass (`daemon_e2e`, `daemon_resume`, `pty`, `git_worktrees`, `tasks`).
 
-### [ ] Phase 3: Config split
+### [x] Phase 3: Config split
 
 - Create:
   - `types.rs` (Config, PtyConfig, AgentConfig, LogLevel)
