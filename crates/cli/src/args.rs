@@ -109,3 +109,26 @@ impl Cli {
     println!();
   }
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use clap::{CommandFactory, Parser, error::ErrorKind};
+
+  #[test]
+  fn help_flag_triggers_displayhelp() {
+    let err = Cli::try_parse_from(["agency", "--help"]).unwrap_err();
+    assert_eq!(err.kind(), ErrorKind::DisplayHelp);
+  }
+
+  #[test]
+  fn version_flag_triggers_displayversion() {
+    let err = Cli::try_parse_from(["agency", "--version"]).unwrap_err();
+    assert_eq!(err.kind(), ErrorKind::DisplayVersion);
+  }
+
+  #[test]
+  fn command_factory_builds() {
+    let _ = Cli::command();
+  }
+}

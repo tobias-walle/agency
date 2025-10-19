@@ -85,7 +85,7 @@ Note: Unit tests live inside source modules (e.g., config, domain/task, agent/ru
 
 ## Phases and Tasks
 
-### Phase 1: CLI extraction
+### [x] Phase 1: CLI extraction
 
 - Create `crates/cli/src/commands/` with one file per user-facing command:
   - daemon.rs (status/start/stop/run/restart)
@@ -110,7 +110,7 @@ Note: Unit tests live inside source modules (e.g., config, domain/task, agent/ru
 
 Acceptance: `just test` passes; CLI binary behavior unchanged (manual spot-check: `daemon status`, `init`, `new --draft`, `attach`).
 
-### Phase 2: Daemon modularization
+### [ ] Phase 2: Daemon modularization
 
 - Move accept/bind/stop-channel setup to `core/src/daemon/server.rs`.
 - Create `core/src/daemon/api/` and split:
@@ -124,7 +124,7 @@ Acceptance: `just test` passes; CLI binary behavior unchanged (manual spot-check
 
 Acceptance: Core integration tests still pass (`daemon_e2e`, `daemon_resume`, `pty`, `git_worktrees`, `tasks`).
 
-### Phase 3: Config split
+### [ ] Phase 3: Config split
 
 - Create:
   - `types.rs` (Config, PtyConfig, AgentConfig, LogLevel)
@@ -138,7 +138,7 @@ Acceptance: Core integration tests still pass (`daemon_e2e`, `daemon_resume`, `p
 
 Acceptance: All `config` unit tests pass; dependent modules compile unchanged.
 
-### Phase 4: Optional polish
+### [ ] Phase 4: Optional polish
 
 - Introduce `AttachmentId(String)` newtype in `adapters::pty` and mirror in `rpc` DTOs (non-breaking if via `From/Into<String>` where needed). Consider deferring if it cascades too much churn.
 - Extract small `pty::constants` for history/replay limits, referenced by `session` and façade.
