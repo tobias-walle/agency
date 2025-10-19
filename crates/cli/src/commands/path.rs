@@ -11,15 +11,25 @@ pub fn print_worktree_path(a: args::PathArgs) {
       let name = name.to_string_lossy().to_string();
       if let Ok((tid, slug)) = agency_core::domain::task::Task::parse_filename(&name) {
         let mut ok = false;
-        if let Some(id) = tref.id { ok = tid.0 == id; }
-        if !ok && let Some(ref s) = tref.slug { ok = &slug == s; }
-        if ok { found = Some((tid.0, slug)); break; }
+        if let Some(id) = tref.id {
+          ok = tid.0 == id;
+        }
+        if !ok && let Some(ref s) = tref.slug {
+          ok = &slug == s;
+        }
+        if ok {
+          found = Some((tid.0, slug));
+          break;
+        }
       }
     }
   }
   let (id, slug) = match found {
     Some(x) => x,
-    None => { eprintln!("task not found"); std::process::exit(1); }
+    None => {
+      eprintln!("task not found");
+      std::process::exit(1);
+    }
   };
   let path = agency_core::adapters::fs::worktree_path(&root, id, &slug);
   println!("{}", path.display());

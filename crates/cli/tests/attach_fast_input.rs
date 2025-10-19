@@ -1,9 +1,9 @@
 use assert_cmd::prelude::*;
 use std::io::Write;
 use std::process::{Command, Stdio};
-use test_support::init_repo_with_initial_commit;
 use std::thread;
 use std::time::Duration;
+use test_support::init_repo_with_initial_commit;
 
 fn start_daemon(sock: &std::path::Path) {
   let mut cmd = Command::cargo_bin("agency").expect("compile bin");

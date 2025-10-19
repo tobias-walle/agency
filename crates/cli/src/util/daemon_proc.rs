@@ -1,5 +1,5 @@
-use std::path::{Path, PathBuf};
 use crate::rpc::client;
+use std::path::{Path, PathBuf};
 
 pub fn resolve_socket() -> Option<PathBuf> {
   agency_core::config::resolve_socket_path().ok()
@@ -20,7 +20,9 @@ pub fn ensure_daemon_running() -> PathBuf {
     .build()
     .unwrap()
     .block_on(async { client::daemon_status(&sock).await.is_ok() });
-  if ok { return sock; }
+  if ok {
+    return sock;
+  }
 
   let resume_root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
   let _ = spawn_daemon_background(&sock, &resume_root);
@@ -32,7 +34,9 @@ pub fn ensure_daemon_running() -> PathBuf {
     .unwrap()
     .block_on(async {
       for _ in 0..20u8 {
-        if client::daemon_status(&sock).await.is_ok() { return true; }
+        if client::daemon_status(&sock).await.is_ok() {
+          return true;
+        }
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
       }
       false
@@ -46,7 +50,8 @@ pub fn spawn_daemon_background(sock: &Path, resume_root: &Path) -> std::io::Resu
   cmd.arg("daemon").arg("run");
   cmd.env("AGENCY_SOCKET", sock);
   cmd.env("AGENCY_RESUME_ROOT", resume_root);
-  cmd.stdin(std::process::Stdio::null())
+  cmd
+    .stdin(std::process::Stdio::null())
     .stdout(std::process::Stdio::null())
     .stderr(std::process::Stdio::null());
   let _ = cmd.spawn()?;

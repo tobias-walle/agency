@@ -1,5 +1,5 @@
-use std::path::Path;
 use crate::rpc::client;
+use std::path::Path;
 
 pub fn render_rpc_failure(action: &str, sock: &Path, err: &client::Error) -> String {
   match err {

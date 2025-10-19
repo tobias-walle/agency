@@ -110,7 +110,7 @@ Note: Unit tests live inside source modules (e.g., config, domain/task, agent/ru
 
 Acceptance: `just test` passes; CLI binary behavior unchanged (manual spot-check: `daemon status`, `init`, `new --draft`, `attach`).
 
-### [ ] Phase 2: Daemon modularization
+### [x] Phase 2: Daemon modularization
 
 - Move accept/bind/stop-channel setup to `core/src/daemon/server.rs`.
 - Create `core/src/daemon/api/` and split:

@@ -1,4 +1,11 @@
-use crate::{args, rpc::client, util::{base_branch::resolve_base_branch_default, daemon_proc::ensure_daemon_running, editor::edit_text, errors::render_rpc_failure}};
+use crate::{
+  args,
+  rpc::client,
+  util::{
+    base_branch::resolve_base_branch_default, daemon_proc::ensure_daemon_running,
+    editor::edit_text, errors::render_rpc_failure,
+  },
+};
 use std::io::IsTerminal;
 use tracing::debug;
 
@@ -32,11 +39,17 @@ pub fn new_task(a: args::NewArgs) {
   if body_opt.is_none() && std::io::stdout().is_terminal() {
     match edit_text("") {
       Ok(s) => body_opt = Some(s),
-      Err(e) => { eprintln!("failed to capture description via editor: {}", e); }
+      Err(e) => {
+        eprintln!("failed to capture description via editor: {}", e);
+      }
     }
   }
   if let Some(ref s) = body_opt {
-    debug!(event = "cli_task_body_ready", len = s.len(), "message provided");
+    debug!(
+      event = "cli_task_body_ready",
+      len = s.len(),
+      "message provided"
+    );
   }
 
   let params = agency_core::rpc::TaskNewParams {
@@ -54,24 +67,57 @@ pub fn new_task(a: args::NewArgs) {
   let res = rt.block_on(async { client::task_new(&sock, params).await });
   match res {
     Ok(info) => {
-      if a.draft { println!("{} {} draft", info.id, info.slug); return; }
-      let tref = agency_core::rpc::TaskRef { id: Some(info.id), slug: None };
+      if a.draft {
+        println!("{} {} draft", info.id, info.slug);
+        return;
+      }
+      let tref = agency_core::rpc::TaskRef {
+        id: Some(info.id),
+        slug: None,
+      };
       let start_res = rt.block_on(async { client::task_start(&sock, &root, tref).await });
       match start_res {
         Ok(sr) => {
           println!("{} {} {:?}", sr.id, sr.slug, sr.status);
-          if a.no_attach { debug!(event = "cli_new_autostart_attach", attach = false, reason = "flag_no_attach", "skipping auto-attach by flag"); return; }
+          if a.no_attach {
+            debug!(
+              event = "cli_new_autostart_attach",
+              attach = false,
+              reason = "flag_no_attach",
+              "skipping auto-attach by flag"
+            );
+            return;
+          }
           if std::io::stdout().is_terminal() {
-            debug!(event = "cli_new_autostart_attach", attach = true, reason = "stdout_tty", "auto-attach for new task");
-            let attach_args = crate::args::AttachArgs { task: sr.id.to_string(), no_replay: false };
+            debug!(
+              event = "cli_new_autostart_attach",
+              attach = true,
+              reason = "stdout_tty",
+              "auto-attach for new task"
+            );
+            let attach_args = crate::args::AttachArgs {
+              task: sr.id.to_string(),
+              no_replay: false,
+            };
             crate::commands::attach::attach_interactive(attach_args);
           } else {
-            debug!(event = "cli_new_autostart_attach", attach = false, reason = "stdout_not_tty", "stdout not a TTY; skipping auto-attach");
+            debug!(
+              event = "cli_new_autostart_attach",
+              attach = false,
+              reason = "stdout_not_tty",
+              "stdout not a TTY; skipping auto-attach"
+            );
           }
         }
-        Err(e) => { eprintln!("{}", render_rpc_failure("start", &sock, &e)); std::process::exit(1); }
+        Err(e) => {
+          eprintln!("{}", render_rpc_failure("start", &sock, &e));
+          std::process::exit(1);
+        }
       }
     }
-    Err(e) => { eprintln!("{}", render_rpc_failure("new", &sock, &e)); std::process::exit(1); }
+    Err(e) => {
+      eprintln!("{}", render_rpc_failure("new", &sock, &e));
+      std::process::exit(1);
+    }
   }
 }
