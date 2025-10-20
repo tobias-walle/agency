@@ -133,6 +133,51 @@ pub struct PtyDetachParams {
   pub attachment_id: AttachmentId,
 }
 
+// ---- Structured input events (Crokey-driven) ----
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum KeyCodeDTO {
+  Char(char),
+  Enter,
+  Backspace,
+  Tab,
+  Up,
+  Down,
+  Left,
+  Right,
+  Home,
+  End,
+  PageUp,
+  PageDown,
+  F(u8),
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct ModifiersDTO {
+  #[serde(default)]
+  pub ctrl: bool,
+  #[serde(default)]
+  pub alt: bool,
+  #[serde(default)]
+  pub shift: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct KeyCombinationDTO {
+  pub code: KeyCodeDTO,
+  #[serde(default)]
+  pub modifiers: ModifiersDTO,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct PtyInputEventsParams {
+  pub attachment_id: AttachmentId,
+  pub events: Vec<KeyCombinationDTO>,
+}
+
 // ---- Extended tick DTOs ----
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]

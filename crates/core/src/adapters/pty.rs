@@ -11,6 +11,7 @@ use tracing::debug;
 use uuid::Uuid;
 
 mod constants;
+pub mod input_encode;
 mod registry;
 mod sanitize;
 mod session;

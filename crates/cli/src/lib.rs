@@ -9,6 +9,7 @@
 
 pub mod args;
 pub mod commands;
+pub mod event_reader;
 pub mod rpc;
 pub mod stdin_handler;
 mod term_reset;

@@ -7,8 +7,8 @@ use tracing::debug;
 
 use crate::domain::task::{Status, Task, TaskId};
 use crate::rpc::{
-  PtyAttachParams, PtyAttachResult, PtyDetachParams, PtyInputParams, PtyReadParams, PtyReadResult,
-  PtyResizeParams,
+  KeyCombinationDTO, PtyAttachParams, PtyAttachResult, PtyDetachParams, PtyInputEventsParams,
+  PtyInputParams, PtyReadParams, PtyReadResult, PtyResizeParams,
 };
 
 use super::super::task_index::find_task_path_by_ref;
@@ -97,6 +97,25 @@ pub fn register(module: &mut RpcModule<PathBuf>) {
       },
     )
     .expect("register pty.input");
+
+  // ---- pty.input_events ----
+  module
+    .register_method(
+      "pty.input_events",
+      |params, _ctx: &PathBuf, _ext| -> RpcResult<serde_json::Value> {
+        let p: PtyInputEventsParams = params.parse()?;
+        let bytes: Vec<u8> = p
+          .events
+          .into_iter()
+          .flat_map(|ev: KeyCombinationDTO| crate::adapters::pty::input_encode::encode_event(&ev))
+          .collect();
+        debug!(event = "daemon_pty_input_events", attachment_id = %p.attachment_id, events = bytes.len());
+        crate::adapters::pty::input(&p.attachment_id, &bytes)
+          .map_err(|e| ErrorObjectOwned::owned(-32012, e.to_string(), None::<()>))?;
+        Ok(serde_json::json!(true))
+      },
+    )
+    .expect("register pty.input_events");
 
   // ---- pty.resize ----
   module
