@@ -47,13 +47,14 @@ pub(crate) fn sanitize_with_counters(input: &[u8]) -> (Vec<u8>, usize, usize) {
     let b = input[i];
     if b == b'\r' {
       if i + 1 < input.len() && input[i + 1] == b'\n' {
-        // Normalize CRLF to LF
+        // Preserve CRLF as-is
+        out.push(b'\r');
         out.push(b'\n');
         i += 2;
         continue;
       } else {
-        // Normalize lone CR to LF
-        out.push(b'\n');
+        // Preserve lone CR to avoid shifting prompts on replay
+        out.push(b'\r');
         i += 1;
         continue;
       }
@@ -118,12 +119,12 @@ mod tests {
   }
 
   #[test]
-  fn sanitize_converts_isolated_cr_to_lf() {
+  fn sanitize_preserves_isolated_cr() {
     let input = bytes("progress 1\rprogress 2\rprogress 3\n");
     let out = sanitize_replay(&input);
     assert_eq!(
       String::from_utf8_lossy(&out),
-      "progress 1\nprogress 2\nprogress 3\n"
+      "progress 1\rprogress 2\rprogress 3\n"
     );
   }
 

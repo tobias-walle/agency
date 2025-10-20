@@ -1,9 +1,10 @@
 use std::path::Path;
 
 use agency_core::rpc::{
-  AttachmentId, DaemonStatus, PtyAttachParams, PtyAttachResult, PtyDetachParams, PtyInputParams,
-  PtyReadParams, PtyReadResult, PtyResizeParams, PtyTickParams, TaskInfo, TaskListParams,
-  TaskListResponse, TaskNewParams, TaskRef, TaskStartParams, TaskStartResult,
+  AttachmentId, DaemonStatus, KeyCombinationDTO, PtyAttachParams, PtyAttachResult, PtyDetachParams,
+  PtyInputEventsParams, PtyInputParams, PtyReadParams, PtyReadResult, PtyResizeParams,
+  PtyTickParams, TaskInfo, TaskListParams, TaskListResponse, TaskNewParams, TaskRef,
+  TaskStartParams, TaskStartResult,
 };
 use http_body_util::{BodyExt, Full};
 use hyper::{Method, Request, body::Bytes};
@@ -308,6 +309,22 @@ pub mod session {
       data: String::from_utf8_lossy(data).to_string(),
     })?;
     let _ = session.rpc_call(sock, "pty.input", Some(params)).await?;
+    Ok(())
+  }
+
+  pub async fn pty_input_events(
+    session: &PtySession,
+    sock: &Path,
+    attachment_id: &AttachmentId,
+    events: &[KeyCombinationDTO],
+  ) -> Result<()> {
+    let params = serde_json::to_value(PtyInputEventsParams {
+      attachment_id: attachment_id.clone(),
+      events: events.to_vec(),
+    })?;
+    let _ = session
+      .rpc_call(sock, "pty.input_events", Some(params))
+      .await?;
     Ok(())
   }
 

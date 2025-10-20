@@ -18,6 +18,7 @@ thiserror = "2.0.16"
 tokio = { version = "1.47.1", features = ["macros", "net", "rt"], default-features = false }
 yansi = "1.0.1"
 tracing = "0.1.41"
+crokey = "1.3.0"
 
 [dev-dependencies]
 assert_cmd = "2.0.17"
