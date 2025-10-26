@@ -1,4 +1,4 @@
-# ADR-2: Plan Format (mvp)
+# ADR-2: Plan Format
 
 Date: 2025-09-25
 
