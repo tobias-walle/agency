@@ -58,7 +58,7 @@ fn format_table(headers: &[impl Display], rows: &[Vec<String>]) -> String {
     let hw = strip_ansi(&hdrs_raw[i]).len();
     let rw = rows
       .iter()
-      .map(|r| r.get(i).map(|c| c.len()).unwrap_or(0))
+       .map(|r| r.get(i).map(|c| strip_ansi(c).len()).unwrap_or(0))
       .max()
       .unwrap_or(0);
     widths[i] = hw.max(rw);
@@ -75,7 +75,7 @@ fn format_table(headers: &[impl Display], rows: &[Vec<String>]) -> String {
   for i in 0..cols {
     let visible = strip_ansi(&hdrs_raw[i]);
     let text = if color_headers {
-      format!("{}", visible.cyan())
+      format!("{}", visible.bold().dimmed())
     } else {
       visible
     };
@@ -107,16 +107,20 @@ fn format_table(headers: &[impl Display], rows: &[Vec<String>]) -> String {
       let val = row.get(i).cloned().unwrap_or_default();
       let pad = widths[i];
       if numeric[i] {
+        let visible_len = strip_ansi(&val).len();
+        let spaces = pad.saturating_sub(visible_len);
         if i == cols - 1 {
           parts.push(val);
         } else {
-          parts.push(format!("{:>width$}", val, width = pad));
+          parts.push(format!("{}{}", " ".repeat(spaces), val));
         }
       } else {
+        let visible_len = strip_ansi(&val).len();
+        let spaces = pad.saturating_sub(visible_len);
         if i == cols - 1 {
           parts.push(val);
         } else {
-          parts.push(format!("{:<width$}", val, width = pad));
+          parts.push(format!("{}{}", val, " ".repeat(spaces)));
         }
       }
     }
