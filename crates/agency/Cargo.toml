@@ -7,6 +7,7 @@ edition = "2024"
 anstream = "0.6.21"
 anyhow = "1.0.100"
 clap = { version = "4.5.50", features = ["derive"] }
+git2 = "0.20.2"
 owo-colors = "4.2.3"
 regex = "1.12.2"
 

@@ -10,7 +10,15 @@ impl AgencyConfig {
     Self { cwd: cwd.into() }
   }
 
+  pub fn cwd(&self) -> &PathBuf {
+    &self.cwd
+  }
+
   pub fn tasks_dir(&self) -> PathBuf {
     self.cwd.join(".agency").join("tasks")
+  }
+
+  pub fn worktrees_dir(&self) -> PathBuf {
+    self.cwd.join(".agency").join("worktrees")
   }
 }

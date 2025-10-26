@@ -19,6 +19,12 @@ pub struct Cli {
 enum Commands {
   /// Create a new task under .agency/tasks
   New { slug: String },
+  /// Print the absolute worktree path
+  Path { ident: String },
+  /// Print the branch name
+  Branch { ident: String },
+  /// Remove task file, worktree, and branch
+  Rm { ident: String },
 }
 
 pub fn parse() -> Cli {
@@ -33,6 +39,15 @@ pub fn run() -> Result<()> {
   match cli.command {
     Some(Commands::New { slug }) => {
       commands::new::run(&cfg, &slug)?;
+    }
+    Some(Commands::Path { ident }) => {
+      commands::path::run(&cfg, &ident)?;
+    }
+    Some(Commands::Branch { ident }) => {
+      commands::branch::run(&cfg, &ident)?;
+    }
+    Some(Commands::Rm { ident }) => {
+      commands::rm::run(&cfg, &ident)?;
     }
     None => {}
   }

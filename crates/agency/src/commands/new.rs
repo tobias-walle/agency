@@ -1,11 +1,13 @@
 use std::fs;
 use std::path::Path;
 
+use anstream::println;
 use anyhow::{Context, Result, bail};
 use owo_colors::OwoColorize as _;
 
 use crate::config::AgencyConfig;
-use crate::utils::task::TaskFileName;
+use crate::utils::git::{add_worktree, ensure_branch, open_main_repo};
+use crate::utils::task::{TaskRef, normalize_and_validate_slug};
 
 pub fn run(cfg: &AgencyConfig, slug: &str) -> Result<()> {
   let slug = normalize_and_validate_slug(slug)?;
@@ -13,7 +15,7 @@ pub fn run(cfg: &AgencyConfig, slug: &str) -> Result<()> {
   let tasks = cfg.tasks_dir();
   let created = ensure_dir(&tasks)?;
   if created {
-    anstream::println!("Created folder {}", ".agency/tasks".cyan());
+    println!("Created folder {}", ".agency/tasks".cyan());
   }
 
   if slug_exists(&tasks, &slug)? {
@@ -26,7 +28,18 @@ pub fn run(cfg: &AgencyConfig, slug: &str) -> Result<()> {
   fs::write(&file_path, content)
     .with_context(|| format!("failed to write {}", file_path.display()))?;
 
-  anstream::println!("Task {} with id {} created ✨", slug.cyan(), id.cyan());
+  // Git: open main repo, ensure branch, add worktree
+  let repo = open_main_repo(cfg.cwd())?;
+  let branch_name = format!("agency/{}-{}", id, slug);
+  let branch = ensure_branch(&repo, &branch_name)?;
+  let branch_ref = branch.into_reference();
+  let wt_name = format!("{}-{}", id, slug);
+  let wt_root = cfg.worktrees_dir();
+  let _ = ensure_dir(&wt_root)?;
+  let wt_dir = wt_root.join(&wt_name);
+  add_worktree(&repo, &wt_name, &wt_dir, &branch_ref)?;
+
+  println!("Task {} with id {} created ✨", slug.cyan(), id.cyan());
 
   Ok(())
 }
@@ -39,17 +52,6 @@ fn ensure_dir(dir: &Path) -> Result<bool> {
   Ok(true)
 }
 
-fn normalize_and_validate_slug(input: &str) -> Result<String> {
-  let lowered = input.to_lowercase();
-  if lowered.is_empty() {
-    bail!("invalid slug: empty");
-  }
-  if !lowered.chars().all(|c| c.is_alphanumeric() || c == '-') {
-    bail!("invalid slug: only Unicode letters, digits and '-' allowed");
-  }
-  Ok(lowered)
-}
-
 fn slug_exists(tasks: &Path, slug: &str) -> Result<bool> {
   if !tasks.exists() {
     return Ok(false);
@@ -57,10 +59,10 @@ fn slug_exists(tasks: &Path, slug: &str) -> Result<bool> {
   for entry in fs::read_dir(tasks).with_context(|| format!("failed to read {}", tasks.display()))? {
     let entry = entry?;
     let path = entry.path();
-    if let Some(tf) = TaskFileName::parse(&path) {
-      if tf.slug == slug {
-        return Ok(true);
-      }
+    if let Some(tf) = TaskRef::from_task_file(&path)
+      && tf.slug == slug
+    {
+      return Ok(true);
     }
   }
   Ok(false)
@@ -74,24 +76,12 @@ fn next_id(tasks: &Path) -> Result<u32> {
     {
       let entry = entry?;
       let path = entry.path();
-      if let Some(tf) = TaskFileName::parse(&path) {
-        if tf.id > max_id {
-          max_id = tf.id;
-        }
+      if let Some(tf) = TaskRef::from_task_file(&path)
+        && tf.id > max_id
+      {
+        max_id = tf.id;
       }
     }
   }
   Ok(max_id.saturating_add(1))
-}
-
-#[cfg(test)]
-mod tests {
-  use super::*;
-
-  #[test]
-  fn normalize_validates() {
-    assert!(normalize_and_validate_slug("märchen-test").is_ok());
-    assert!(normalize_and_validate_slug("").is_err());
-    assert!(normalize_and_validate_slug("bad/slug").is_err());
-  }
 }
