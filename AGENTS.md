@@ -43,21 +43,18 @@ Then committing, always follow these rules
 
 Add the files and commit in a single command, e.g. `git add file1.ts file2.ts && git commit -m "..."`
 
-## Rules
+## Code Formatting
 
 - Indent code always with 2 spaces
-- When committing, follow the conventional commits format
-- Prefer ASCII punctuation in docs and code. Avoid long dashes (—) and Unicode arrows (→, ↔); use `-`, `->`, `<->` instead.
-- Only add dependencies via `cargo add [pkg]` (exception: dependency already exists). Never modify Cargo.toml directly.
-- Make use of subagents via the `task` tool to keep the context concise
-- Use the `api-docs-expert` subagent when working with libraries
+- Prefer ASCII punctuation in docs and code. Avoid long dashes (—), semicolons (;) and Unicode arrows (→, ↔); use `-`, `->`, `<->` instead.
+- Never use single letter variable names if they span more than 3 lines
+
+## Dependencies
+
+- You MUST add dependencies via `cargo add [pkg]` -> Never modify Cargo.toml directly.
+- You SHOULD use the `api-docs-expert` subagent when working with libraries
   - Lookup new APIs before you use them
   - Check correct API use when encountering errors
-- Never use single letter variable names if they span more than 3 lines
-- You SHOULD use TDD then appropriate:
-  - Fixing bugs -> Write tests before implementation
-  - Implement new features, with unclear final solution -> Write tests after implementation
-- Before writing or editing Rust code, you MUST read `./docs/guides/RUST_BEST_PRACTICES.md` and follow it
 
 ## Testing
 
@@ -66,3 +63,10 @@ Add the files and commit in a single command, e.g. `git add file1.ts file2.ts &&
 - Prefer polling with bounded timeouts over fixed sleeps to reduce flakiness.
 - Use `git2` for local repositories instead of shelling out to `git`.
 - Avoid global env mutations; prefer per-command `.env()` or scoped guards.
+- You SHOULD use TDD then appropriate:
+  - Fixing bugs -> Write tests before implementation
+  - Implement new features, with unclear final solution -> Write tests after implementation
+
+## Other Docs
+
+- Before writing or editing Rust code, you MUST read `./docs/guides/RUST_BEST_PRACTICES.md` and follow it
