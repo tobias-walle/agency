@@ -50,7 +50,7 @@ Add Git-backed worktrees and branches for tasks and introduce `path`, `branch`, 
 
 HINT: Update checkboxes during the implementation
 
-1. [ ] Dependencies and modules
+1. [x] Dependencies and modules
    - crates/agency/Cargo.toml: add `git2`
    - crates/agency/src/utils/mod.rs: export `task`, add `git` and `term` modules
    - New file crates/agency/src/utils/git.rs:
@@ -58,7 +58,7 @@ HINT: Update checkboxes during the implementation
      - `ensure_branch(repo, name) -> Result<git2::Branch>`
      - `add_worktree(repo, wt_name, wt_path, branch_ref) -> Result<git2::Worktree>`
      - `remove_worktree_and_branch(repo, wt_name, branch_name) -> Result<()>`
-2. [ ] Centralize task resolution and validation
+2. [x] Centralize task resolution and validation
    - crates/agency/src/utils/task.rs:
      - Add `pub struct TaskRef { pub id: u32, pub slug: String }`
      - Add `impl TaskRef { pub fn from_task_file(path: &Path) -> Option<Self> }` (move logic from `TaskFileName::parse`)
@@ -66,9 +66,9 @@ HINT: Update checkboxes during the implementation
      - Add `pub fn resolve_id_or_slug(cfg: &AgencyConfig, ident: &str) -> Result<TaskRef>`
      - Add helpers: `branch_name(&TaskRef)`, `worktree_name(&TaskRef)`, `worktree_dir(&AgencyConfig, &TaskRef)`, `task_file(&AgencyConfig, &TaskRef)`
      - Remove `TaskFileName` type and update all references
-3. [ ] Config
+3. [x] Config
    - crates/agency/src/config.rs: add `pub fn worktrees_dir(&self) -> PathBuf`
-4. [ ] Commands wiring
+4. [x] Commands wiring
    - crates/agency/src/lib.rs:
      - Extend `Commands` with `Path { ident: String }`, `Branch { ident: String }`, `Rm { ident: String }`
      - Route to new modules
@@ -87,10 +87,10 @@ HINT: Update checkboxes during the implementation
      - Print colored summary then `utils::term::confirm(...)`
      - If confirmed: open main repo, prune worktree (force even if locked), delete branch, remove task file, print colored success
      - If not: print colored cancelled message
-6. [ ] Reusable confirmation
+6. [x] Reusable confirmation
    - New crates/agency/src/utils/term.rs:
      - `pub fn confirm(prompt: &str) -> Result<bool>`: y/Y => true; else false
-7. [ ] Tests (single file, enhanced env)
+7. [x] Tests (single file, enhanced env)
    - Replace tests with crates/agency/tests/cli.rs (merge existing)
    - crates/agency/tests/common/mod.rs:
      - Add `setup_git_repo(&self) -> Result<()>` (init repo, set HEAD to main)
@@ -101,11 +101,21 @@ HINT: Update checkboxes during the implementation
      - `branch_prints_branch_name_by_id_and_slug`
      - `rm_requires_confirmation_and_removes_all_on_y_or_Y`
      - `new_rejects_slugs_starting_with_digits`
-8. [ ] Checks
+8. [x] Checks
    - Run `just check`, `just test`, `just fmt`
    - Ensure interactive outputs use `anstream` and `owo-colors`, and fatal paths use `bail!`
 
 ## Notes
+
+- Used `git2` v0.20; worktrees created via `Repository::worktree` with `WorktreeAddOptions::reference(Some(&branch_ref))` and `checkout_existing(true)`.
+- Always operate from main repo using `Repository::discover` + `commondir()` when in a worktree (`open_main_repo`).
+- Ensured `.agency/worktrees` exists before adding worktree to avoid add errors.
+- Centralized slug rules: first char must be a letter; alnum/`-` allowed afterwards; digits-only input resolves as ID.
+- `path`/`branch` output is raw; interactive flows (`new`, `rm`) use `anstream` + `owo-colors` and `bail!` on fatal errors.
+- Tests consolidated in `crates/agency/tests/cli.rs`; legacy tests kept temporarily for backward coverage (can remove later).
+- Added `setup_git_repo` and `simulate_initial_commit` helpers with fixed commit msg `init`.
+- Confirm prompt accepts only `y`/`Y`; anything else cancels.
+
 
 - Always create worktrees from the main repository even if the CLI runs within a worktree.
 - Bypass ambiguity by treating digits-only input as ID and prohibiting slugs that start with digits.
