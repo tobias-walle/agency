@@ -1,4 +1,3 @@
-````md
 # Rust Readability Cheat Sheet
 
 > Assumes you already run **rustfmt** and **clippy**. Focused on examples and practical patterns.
@@ -390,4 +389,3 @@ local.run_until(async {}).await;
 - **Cancel explicitly** with `.abort()`; don’t rely on dropping the handle.
 - **Re-export** to flatten public APIs; **pub(crate)** for internals; **small modules** with co-located tests.
 - **Name things clearly**; getters without `get_`; use `as_/to_/into_` conventions.
-````

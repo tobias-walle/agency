@@ -1,4 +1,4 @@
-# ADR-2: Plan Format
+# Plan Format
 
 Date: 2025-09-25
 
@@ -22,4 +22,4 @@ Structure your plan into the following sections (replace placeholders in `[]`). 
 - `HINT: Update this section during the implementation with relevant changes to the plan, problems that arised or other noteworthy things.`
 - `[Notes for future readers of the plan.]`
 
-Strictly follow the format. Don't read old plans for the format, as the format changed over time.
+Strictly follow the format for plans. Don't read old plans to get the format, as the format changes over time.
