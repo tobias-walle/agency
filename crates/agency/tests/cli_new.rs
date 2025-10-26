@@ -1,7 +1,5 @@
 mod common;
 
-use std::process::Command;
-
 use anyhow::Result;
 use assert_cmd::prelude::*;
 
@@ -9,8 +7,7 @@ use assert_cmd::prelude::*;
 fn creates_tasks_dir() -> Result<()> {
   let env = common::TestEnv::new();
 
-  let mut cmd = Command::cargo_bin("agency")?;
-  cmd.current_dir(env.path());
+  let mut cmd = env.bin_cmd()?;
   cmd.arg("new").arg("märchen-test");
 
   cmd.assert().success();

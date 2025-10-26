@@ -1,4 +1,3 @@
-use std::ffi::OsStr;
 use std::fs;
 use std::path::Path;
 
@@ -6,6 +5,7 @@ use anyhow::{Context, Result, bail};
 use owo_colors::OwoColorize as _;
 
 use crate::config::AgencyConfig;
+use crate::utils::task::TaskFileName;
 
 pub fn run(cfg: &AgencyConfig, slug: &str) -> Result<()> {
   let slug = normalize_and_validate_slug(slug)?;
@@ -57,14 +57,8 @@ fn slug_exists(tasks: &Path, slug: &str) -> Result<bool> {
   for entry in fs::read_dir(tasks).with_context(|| format!("failed to read {}", tasks.display()))? {
     let entry = entry?;
     let path = entry.path();
-    if path.is_file()
-      && let Some(name) = path.file_name().and_then(OsStr::to_str)
-      && let Some((prefix, rest)) = name.split_once('-')
-      && prefix.chars().all(|c| c.is_ascii_digit())
-      && rest.ends_with(".md")
-    {
-      let slug_part = &rest[..rest.len() - 3];
-      if slug_part == slug {
+    if let Some(tf) = TaskFileName::parse(&path) {
+      if tf.slug == slug {
         return Ok(true);
       }
     }
@@ -80,14 +74,10 @@ fn next_id(tasks: &Path) -> Result<u32> {
     {
       let entry = entry?;
       let path = entry.path();
-      if path.is_file()
-        && let Some(name) = path.file_name().and_then(OsStr::to_str)
-        && let Some((prefix, rest)) = name.split_once('-')
-        && rest.ends_with(".md")
-        && let Ok(id) = prefix.parse::<u32>()
-        && id > max_id
-      {
-        max_id = id;
+      if let Some(tf) = TaskFileName::parse(&path) {
+        if tf.id > max_id {
+          max_id = tf.id;
+        }
       }
     }
   }

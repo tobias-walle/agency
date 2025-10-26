@@ -8,8 +8,9 @@ setup:
   cargo check
 
 # Start the app
-agency *ARGS:
-  cargo run -p agency -- {{ARGS}}
+[no-exit-message]
+@agency *ARGS:
+  cargo run -q -p agency -- {{ARGS}}
 
 # Run the tests with nextest
 test *ARGS:

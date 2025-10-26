@@ -86,6 +86,10 @@ println!("My number is {:#x}!", 10.green());
 println!("My number is not {}!", 4.on_red());
 ```
 
+## Async
+
+- You MUST NEVER use `Tokio`. We want to keep the code simple and prefer the use of threads.
+
 ## Other Docs
 
 - Before writing or editing Rust code, you MUST read `./docs/guides/RUST_BEST_PRACTICES.md` and follow it
