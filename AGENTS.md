@@ -10,7 +10,8 @@ The Agency tool orchestrates parallel-running AI CLI agents in isolated Git work
 ## Structure
 
 - `./docs/specs/SPEC-[id]-[slug].md` - Store for specifications. They include product and architecture decisions and should be kept up to date with changes.
-- `./docs/plans/PLN-[id]-[slug].md` - Concrete plans to add or modify features or to fix bugs. They follow the structure defined in `./docs/specs/SPEC-1-plan-format.md`. Plans always are a snapshot in time, and might not represent the current decision or project structure.
+- `./docs/plans/PLN-[id]-[slug].md` - Concrete plans to add or modify features or to fix bugs. They follow the structure defined in `./docs/rules/plan-format.md`. Plans always are a snapshot in time, and might not represent the current decision or project structure.
+- `./docs/rules/[slug].md` - Special rules for you, the AI Agent, to read if needed. See also [Conditional Rules](#conditional-rules).
 - `./justfile` - Project scripts
 - `./crates` - Contains all the rust crates (apps & libraries) used for this project
 
@@ -90,6 +91,13 @@ println!("My number is not {}!", 4.on_red());
 
 - You MUST NEVER use `Tokio`. We want to keep the code simple and prefer the use of threads.
 
-## Other Docs
+## Conditional Rules
 
-- Before writing or editing Rust code, you MUST read `./docs/guides/RUST_BEST_PRACTICES.md` and follow it
+- Not all rules are included in the `AGENTS.md` file (this file). Some rules are only relevant in specific scenarios.
+- You MUST read them before doing anything else, once they are becoming relevant for your task.
+- You MUST only read them once. If they are already in your context, don't read the again.
+
+In the following these conditional rule files are listed:
+
+- `./docs/rules/rust-best-practices.md`: You MUST read this file if you plan on writing or editing Rust (`.rs`) code. This also including creating plans that involve rust code.
+- `./docs/rules/plan-format.md`: You MUST read this file before creating plans to follow the correct format.
