@@ -14,6 +14,23 @@ The Agency tool orchestrates parallel-running AI CLI agents in isolated Git work
 - `./docs/rules/[slug].md` - Special rules for you, the AI Agent, to read if needed. See also [Conditional Rules](#conditional-rules).
 - `./justfile` - Project scripts
 - `./crates` - Contains all the rust crates (apps & libraries) used for this project
+- `./crates/agency/src/` - Source files for the CLI app
+  - `commands/` - Contains all commands of agency (each command one file)
+    - `new.rs`
+    - `path.rs`
+    - ...
+  - `utils/` - General utilities that are used throughout the app. Grouped by topic.
+    - `git.rs`
+    - `task.rs`
+    - `term.rs`
+    - ...
+  - `config.rs` - Single source of truth for all kinds of configuration for agency
+  - `lib.rs`
+  - `main.rs`
+- `./crates/agency/tests/` - Tests for the CLI app
+  - `common/`
+    - `mod.rs` - Common test helpers
+  - `cli.rs` - Integration tests for the cli apps
 
 ## Justfile
 
@@ -51,6 +68,24 @@ Add the files and commit in a single command, e.g. `git add file1.ts file2.ts &&
 - Never use single letter variable names if they span more than 3 lines
 
 ## Dependencies
+
+Currently installed crates:
+
+**Runtime:**
+
+- anstream
+- anyhow
+- clap (features: derive)
+- git2
+- owo-colors
+- regex
+
+**Dev:**
+
+- assert_cmd
+- expectrl
+- predicates
+- tempfile
 
 - You MUST add dependencies via `cargo add [pkg]` -> Never modify Cargo.toml directly.
 - You SHOULD use the `api-docs-expert` subagent when working with libraries
@@ -99,4 +134,3 @@ println!("My number is not {}!", 4.on_red());
 - You MUST only read them once. If they are already in your context, don't read the again.
 
 In the following these conditional rule files are listed:
-
