@@ -25,6 +25,8 @@ enum Commands {
   Branch { ident: String },
   /// Remove task file, worktree, and branch
   Rm { ident: String },
+  /// List tasks (ID and SLUG)
+  Ps {},
 }
 
 pub fn parse() -> Cli {
@@ -48,6 +50,9 @@ pub fn run() -> Result<()> {
     }
     Some(Commands::Rm { ident }) => {
       commands::rm::run(&cfg, &ident)?;
+    }
+    Some(Commands::Ps {}) => {
+      commands::ps::run(&cfg)?;
     }
     None => {}
   }

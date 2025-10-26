@@ -96,8 +96,26 @@ pub fn task_file(cfg: &AgencyConfig, task: &TaskRef) -> PathBuf {
     .join(format!("{}-{}.md", task.id, task.slug))
 }
 
+pub fn list_tasks(cfg: &AgencyConfig) -> Result<Vec<TaskRef>> {
+  let tasks_dir = cfg.tasks_dir();
+  if !tasks_dir.exists() {
+    return Ok(Vec::new());
+  }
+  let mut out = Vec::new();
+  for entry in std::fs::read_dir(&tasks_dir)
+    .with_context(|| format!("failed to read {}", tasks_dir.display()))?
+  {
+    let path = entry?.path();
+    if let Some(tf) = TaskRef::from_task_file(&path) {
+      out.push(tf);
+    }
+  }
+  Ok(out)
+}
+
 #[cfg(test)]
 mod tests {
+
   use super::*;
   use tempfile::TempDir;
 
@@ -121,7 +139,10 @@ mod tests {
 
   #[test]
   fn resolve_names_and_paths() {
-    let task = TaskRef { id: 7, slug: "alpha".to_string() };
+    let task = TaskRef {
+      id: 7,
+      slug: "alpha".to_string(),
+    };
     assert_eq!(branch_name(&task), "agency/7-alpha");
     assert_eq!(worktree_name(&task), "7-alpha");
 
