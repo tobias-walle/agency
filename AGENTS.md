@@ -72,7 +72,7 @@ Add the files and commit in a single command, e.g. `git add file1.ts file2.ts &&
 ## Terminal IO
 
 - Use `println!` and `eprintln!` from `anstream` for stdout/stderr to ensure TTY-aware behavior.
-- Always create aliase `use anstream::println` or `use anstream::eprintln` 
+- Always use the macro via the alias (`use anstream::println` and/or `use anstream::eprintln`)
 - Apply styles with `owo-colors::OwoColorize` and avoid asserting colors in tests as they depend on TTY.
 - You MUST use `bail!` for errors, if the should crash the program. They are automatically printed to stderr in red.
 
@@ -100,5 +100,3 @@ println!("My number is not {}!", 4.on_red());
 
 In the following these conditional rule files are listed:
 
-- `./docs/rules/rust-best-practices.md`: You MUST read this file if you plan on writing or editing Rust (`.rs`) code. This also including creating plans that involve rust code.
-- `./docs/rules/plan-format.md`: You MUST read this file before creating plans to follow the correct format.

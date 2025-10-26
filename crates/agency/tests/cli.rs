@@ -215,3 +215,45 @@ fn new_rejects_slugs_starting_with_digits() -> Result<()> {
 
   Ok(())
 }
+
+#[test]
+fn ps_lists_id_and_slug_in_order() -> Result<()> {
+  let env = common::TestEnv::new();
+  env.setup_git_repo()?;
+  env.simulate_initial_commit()?;
+
+  // Create two tasks
+  let mut cmd = env.bin_cmd()?;
+  cmd.arg("new").arg("alpha-task");
+  cmd.assert().success();
+  let mut cmd = env.bin_cmd()?;
+  cmd.arg("new").arg("beta-task");
+  cmd.assert().success();
+
+  // Run ps
+  let mut cmd = env.bin_cmd()?;
+  cmd.arg("ps");
+  cmd
+    .assert()
+    .success()
+    .stdout(predicates::str::diff("ID SLUG\n 1 alpha-task\n 2 beta-task\n").from_utf8());
+
+  Ok(())
+}
+
+#[test]
+fn ps_handles_empty_state() -> Result<()> {
+  let env = common::TestEnv::new();
+  env.setup_git_repo()?;
+  env.simulate_initial_commit()?;
+
+  // Run ps with no tasks
+  let mut cmd = env.bin_cmd()?;
+  cmd.arg("ps");
+  cmd
+    .assert()
+    .success()
+    .stdout(predicates::str::diff("ID SLUG\n").from_utf8());
+
+  Ok(())
+}
