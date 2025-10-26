@@ -71,7 +71,8 @@ Add the files and commit in a single command, e.g. `git add file1.ts file2.ts &&
 
 ## Terminal IO
 
-- Use `anstream::println!` and `anstream::eprintln!` for stdout/stderr to ensure TTY-aware behavior.
+- Use `println!` and `eprintln!` from `anstream` for stdout/stderr to ensure TTY-aware behavior.
+- Always create aliase `use anstream::println` or `use anstream::eprintln` 
 - Apply styles with `owo-colors::OwoColorize` and avoid asserting colors in tests as they depend on TTY.
 - You MUST use `bail!` for errors, if the should crash the program. They are automatically printed to stderr in red.
 
