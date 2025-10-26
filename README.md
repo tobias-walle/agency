@@ -9,15 +9,6 @@ Agency lets you run multiple AI CLI agents in parallel, each in its own isolated
 It uses a single Rust daemon with JSON-RPC and MCP interfaces to manage everything.
 Agency is designed for predictable task management, easy TUI attach/detach, and minimal overhead.
 
-## Features
-
-- Git worktree isolation with per-task branches
-- Single user daemon exposing JSON-RPC 2.0 over a Unix domain socket
-- MCP server bridging to the daemon task API
-- Reliable PTY backend for TUIs (e.g., Opencode, Neovim) with attach/detach and resize handling
-- Structured JSON logging with configurable verbosity
-- Global and per-project configuration
-
 ## Requirements
 
 - Rust >= 1.89
@@ -45,6 +36,10 @@ Basic CLI usage:
 # Initialize project scaffolding and config
 agency init
 
+# Show help / version
+agency --help
+agency --version
+
 # Daemon lifecycle (macOS launch agent is optional)
 agency daemon install
 agency daemon start
@@ -52,51 +47,18 @@ agency daemon status
 # agency daemon stop
 
 # Create and manage tasks
+agency status
 agency new <slug>
-agency edit <id|slug>
 agency start <id|slug>
 agency stop <id|slug>
 agency attach <id|slug>
-agency idle <id|slug>
-agency complete <id|slug>
-agency fail <id|slug>
-agency reviewed <id|slug>
-agency status
 
 # Merge workflow
 agency merge <id|slug> [--into <branch>]
 
 # Cleanup merged tasks
 agency gc
-
-# Utilities
-agency path <id|slug>
-agency shell-hook
-agency session set <id|slug> <session_id>
 ```
-
-Agency spawns the selected agent directly inside the task PTY when a task starts.
-`agency new` auto-attaches only when stdout is a TTY (unless `--no-attach`); non-interactive runs print the task status and return immediately.
-
-Helpful commands:
-
-```bash
-# Show help / version
-agency --help
-agency --version
-
-# Run tests / checks
-just test
-just check
-```
-
-## Task Lifecycle
-
-- `Running`: task process is active and attachable.
-- `Stopped`: daemon restarted a previously running task; run `agency start` to launch the agent again.
-- `Idle`: user paused the task without terminating the process.
-
-When the daemon restarts it marks every `Running` task as `Stopped` on disk and leaves the PTY offline until the task is started again.
 
 ## Configuration
 
@@ -121,12 +83,3 @@ start = ["sh"]
 
 Arguments support `$AGENCY_*` placeholders which are expanded before the process starts.
 The same keys (task id, slug, body, prompt, project root, worktree, optional session/message) are also exported as environment variables in the child process.
-
-## Logging
-
-- Structured JSON logs are written to `./.agency/logs.jsonl`
-- Each entry includes timestamp, level, task id/slug (when applicable), and event context
-
-## License
-
-MIT — see `LICENSE.md`.

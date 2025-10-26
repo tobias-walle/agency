@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/core", "crates/cli", "crates/mcp", "apps/agency", "crates/test-support"]
+members = ["crates/agency"]
 resolver = "2"
 
 [profile.dev]
