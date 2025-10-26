@@ -1,3 +1,6 @@
+use std::process::Command;
+
+use assert_cmd::prelude::*;
 use tempfile::TempDir;
 
 #[derive(Debug)]
@@ -14,5 +17,11 @@ impl TestEnv {
 
   pub fn path(&self) -> &std::path::Path {
     self.temp.path()
+  }
+
+  pub fn bin_cmd(&self) -> anyhow::Result<Command> {
+    let mut cmd = Command::cargo_bin("agency")?;
+    cmd.current_dir(self.path());
+    Ok(cmd)
   }
 }
