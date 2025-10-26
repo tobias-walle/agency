@@ -55,6 +55,7 @@ Add the files and commit in a single command, e.g. `git add file1.ts file2.ts &&
 - You SHOULD use the `api-docs-expert` subagent when working with libraries
   - Lookup new APIs before you use them
   - Check correct API use when encountering errors
+- You SHOULD use the `api-docs-expert` instead of the Context7 directly, even if the user tells you to use Context7/C7
 
 ## Testing
 
@@ -66,6 +67,24 @@ Add the files and commit in a single command, e.g. `git add file1.ts file2.ts &&
 - You SHOULD use TDD then appropriate:
   - Fixing bugs -> Write tests before implementation
   - Implement new features, with unclear final solution -> Write tests after implementation
+
+## Terminal IO
+
+- Use `anstream::println!` and `anstream::eprintln!` for stdout/stderr to ensure TTY-aware behavior.
+- Apply styles with `owo-colors::OwoColorize` and avoid asserting colors in tests as they depend on TTY.
+- You MUST use `bail!` for errors, if the should crash the program. They are automatically printed to stderr in red.
+
+Example:
+
+```rust
+use anstream::println;
+use owo_colors::OwoColorize as _;
+
+// Foreground colors
+println!("My number is {:#x}!", 10.green());
+// Background colors
+println!("My number is not {}!", 4.on_red());
+```
 
 ## Other Docs
 

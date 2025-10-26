@@ -19,8 +19,4 @@ agent: autoaccept
 `ls ./docs/plans`:
 !`ls ./docs/plans`
 
-## Plan Format
-
-Make sure to always follow the plan format described in @./docs/adr/ADR-2-plan-format.md
-
 $ARGUMENTS
