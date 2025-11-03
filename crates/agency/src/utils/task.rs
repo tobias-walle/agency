@@ -4,7 +4,7 @@ use std::sync::OnceLock;
 use anyhow::{Context, Result, bail};
 use regex::Regex;
 
-use crate::config::AgencyConfig;
+use crate::config::AgencyPaths;
 
 pub struct TaskRef {
   pub id: u32,
@@ -44,8 +44,8 @@ pub fn normalize_and_validate_slug(input: &str) -> Result<String> {
   Ok(lowered)
 }
 
-pub fn resolve_id_or_slug(cfg: &AgencyConfig, ident: &str) -> Result<TaskRef> {
-  let tasks = cfg.tasks_dir();
+pub fn resolve_id_or_slug(paths: &AgencyPaths, ident: &str) -> Result<TaskRef> {
+  let tasks = paths.tasks_dir();
   if !tasks.exists() {
     bail!("tasks dir not found at {}", tasks.display());
   }
@@ -86,18 +86,18 @@ pub fn worktree_name(task: &TaskRef) -> String {
   format!("{}-{}", task.id, task.slug)
 }
 
-pub fn worktree_dir(cfg: &AgencyConfig, task: &TaskRef) -> PathBuf {
-  cfg.worktrees_dir().join(worktree_name(task))
+pub fn worktree_dir(paths: &AgencyPaths, task: &TaskRef) -> PathBuf {
+  paths.worktrees_dir().join(worktree_name(task))
 }
 
-pub fn task_file(cfg: &AgencyConfig, task: &TaskRef) -> PathBuf {
-  cfg
+pub fn task_file(paths: &AgencyPaths, task: &TaskRef) -> PathBuf {
+  paths
     .tasks_dir()
     .join(format!("{}-{}.md", task.id, task.slug))
 }
 
-pub fn list_tasks(cfg: &AgencyConfig) -> Result<Vec<TaskRef>> {
-  let tasks_dir = cfg.tasks_dir();
+pub fn list_tasks(paths: &AgencyPaths) -> Result<Vec<TaskRef>> {
+  let tasks_dir = paths.tasks_dir();
   if !tasks_dir.exists() {
     return Ok(Vec::new());
   }
@@ -147,33 +147,33 @@ mod tests {
     assert_eq!(worktree_name(&task), "7-alpha");
 
     let dir = TempDir::new().expect("tmp");
-    let cfg = AgencyConfig::new(dir.path());
-    let wt_dir = worktree_dir(&cfg, &task);
+    let paths = AgencyPaths::new(dir.path());
+    let wt_dir = worktree_dir(&paths, &task);
     assert!(wt_dir.ends_with(".agency/worktrees/7-alpha"));
 
-    let tf_path = task_file(&cfg, &task);
+    let tf_path = task_file(&paths, &task);
     assert!(tf_path.ends_with(".agency/tasks/7-alpha.md"));
   }
 
   #[test]
   fn resolve_id_or_slug_by_id_and_slug() {
     let dir = TempDir::new().expect("tmp");
-    let cfg = AgencyConfig::new(dir.path());
-    let tasks = cfg.tasks_dir();
+    let paths = AgencyPaths::new(dir.path());
+    let tasks = paths.tasks_dir();
     std::fs::create_dir_all(&tasks).unwrap();
 
     std::fs::write(tasks.join("1-foo.md"), "# foo\n").unwrap();
     std::fs::write(tasks.join("2-bar.md"), "# bar\n").unwrap();
 
-    let r1 = resolve_id_or_slug(&cfg, "1").expect("id 1 present");
+    let r1 = resolve_id_or_slug(&paths, "1").expect("id 1 present");
     assert_eq!(r1.id, 1);
     assert_eq!(r1.slug, "foo");
 
-    let r2 = resolve_id_or_slug(&cfg, "bar").expect("slug bar present");
+    let r2 = resolve_id_or_slug(&paths, "bar").expect("slug bar present");
     assert_eq!(r2.id, 2);
     assert_eq!(r2.slug, "bar");
 
-    let not_found = resolve_id_or_slug(&cfg, "baz");
+    let not_found = resolve_id_or_slug(&paths, "baz");
     assert!(not_found.is_err());
   }
 }

@@ -58,7 +58,7 @@ fn format_table(headers: &[impl Display], rows: &[Vec<String>]) -> String {
     let hw = strip_ansi(&hdrs_raw[i]).len();
     let rw = rows
       .iter()
-       .map(|r| r.get(i).map(|c| strip_ansi(c).len()).unwrap_or(0))
+      .map(|r| r.get(i).map(|c| strip_ansi(c).len()).unwrap_or(0))
       .max()
       .unwrap_or(0);
     widths[i] = hw.max(rw);
@@ -82,11 +82,7 @@ fn format_table(headers: &[impl Display], rows: &[Vec<String>]) -> String {
     let pad = widths[i];
     let piece = if numeric[i] {
       let spaces = pad.saturating_sub(strip_ansi(&text).len());
-      if i == cols - 1 {
-        format!("{}{}", " ".repeat(spaces), text)
-      } else {
-        format!("{}{}", " ".repeat(spaces), text)
-      }
+      format!("{}{}", " ".repeat(spaces), text)
     } else {
       let spaces = pad.saturating_sub(strip_ansi(&text).len());
       if i == cols - 1 {
@@ -145,7 +141,7 @@ mod tests {
   fn formats_table_with_alignment() {
     let s = format_table(
       &["ID", "SLUG"],
-      &vec![
+      &[
         vec!["1".to_string(), "alpha-task".to_string()],
         vec!["12".to_string(), "beta".to_string()],
       ],

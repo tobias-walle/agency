@@ -2,10 +2,11 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 
 mod commands;
-mod config;
+pub mod config;
 mod utils;
 
-use crate::config::AgencyConfig;
+use crate::config::load_config;
+use crate::config::{AgencyPaths, AppContext};
 
 /// Agency - An AI agent manager and orchestrator in your command line.
 #[derive(Debug, Parser)]
@@ -36,23 +37,25 @@ pub fn parse() -> Cli {
 pub fn run() -> Result<()> {
   let cli = parse();
   let cwd = std::env::current_dir()?;
-  let cfg = AgencyConfig::new(cwd);
+  let paths = AgencyPaths::new(cwd.clone());
+  let config = load_config(&cwd)?;
+  let ctx = AppContext { paths, config };
 
   match cli.command {
     Some(Commands::New { slug }) => {
-      commands::new::run(&cfg, &slug)?;
+      commands::new::run(&ctx, &slug)?;
     }
     Some(Commands::Path { ident }) => {
-      commands::path::run(&cfg, &ident)?;
+      commands::path::run(&ctx, &ident)?;
     }
     Some(Commands::Branch { ident }) => {
-      commands::branch::run(&cfg, &ident)?;
+      commands::branch::run(&ctx, &ident)?;
     }
     Some(Commands::Rm { ident }) => {
-      commands::rm::run(&cfg, &ident)?;
+      commands::rm::run(&ctx, &ident)?;
     }
     Some(Commands::Ps {}) => {
-      commands::ps::run(&cfg)?;
+      commands::ps::run(&ctx)?;
     }
     None => {}
   }
