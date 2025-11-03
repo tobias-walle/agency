@@ -62,8 +62,14 @@ agency gc
 
 ## Configuration
 
-- Global: `~/.config/agency/config.toml`
-- Project: `./.agency/config.toml`
+- Global: `~/.config/agency/agency.toml`
+- Project: `./.agency/agency.toml`
+- Precedence: repository defaults < global (XDG) < project
+- Default file: `crates/agency/defaults/agency.toml`
+
+
+- Global: `~/.config/agency/agency.toml`
+- Project: `./.agency/agency.toml`
 - Socket: `AGENCY_SOCKET` controls the Unix socket path
 - Selected settings: log level (off|warn|info|debug|trace), idle timeout, concurrency limits, confirmation defaults
 

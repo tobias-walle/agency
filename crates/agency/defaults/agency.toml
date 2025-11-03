@@ -1,0 +1,6 @@
+# Agency default configuration
+# [agents.opencode]
+# The command used to invoke the opencode agent.
+# "$AGENCY_TASK" is a placeholder for the task text.
+[agents.opencode]
+cmd = ["opencode", "--prompt", "$AGENCY_TASK"]

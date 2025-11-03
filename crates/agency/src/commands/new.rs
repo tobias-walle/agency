@@ -5,14 +5,14 @@ use anstream::println;
 use anyhow::{Context, Result, bail};
 use owo_colors::OwoColorize as _;
 
-use crate::config::AgencyConfig;
+use crate::config::AppContext;
 use crate::utils::git::{add_worktree, ensure_branch, open_main_repo};
 use crate::utils::task::{TaskRef, normalize_and_validate_slug};
 
-pub fn run(cfg: &AgencyConfig, slug: &str) -> Result<()> {
+pub fn run(ctx: &AppContext, slug: &str) -> Result<()> {
   let slug = normalize_and_validate_slug(slug)?;
 
-  let tasks = cfg.tasks_dir();
+  let tasks = ctx.paths.tasks_dir();
   let created = ensure_dir(&tasks)?;
   if created {
     println!("Created folder {}", ".agency/tasks".cyan());
@@ -29,12 +29,12 @@ pub fn run(cfg: &AgencyConfig, slug: &str) -> Result<()> {
     .with_context(|| format!("failed to write {}", file_path.display()))?;
 
   // Git: open main repo, ensure branch, add worktree
-  let repo = open_main_repo(cfg.cwd())?;
+  let repo = open_main_repo(ctx.paths.cwd())?;
   let branch_name = format!("agency/{}-{}", id, slug);
   let branch = ensure_branch(&repo, &branch_name)?;
   let branch_ref = branch.into_reference();
   let wt_name = format!("{}-{}", id, slug);
-  let wt_root = cfg.worktrees_dir();
+  let wt_root = ctx.paths.worktrees_dir();
   let _ = ensure_dir(&wt_root)?;
   let wt_dir = wt_root.join(&wt_name);
   add_worktree(&repo, &wt_name, &wt_dir, &branch_ref)?;

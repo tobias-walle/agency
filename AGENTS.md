@@ -34,17 +34,9 @@ The Agency tool orchestrates parallel-running AI CLI agents in isolated Git work
 
 ## Justfile
 
-All common scripts life in `./justfile`.
-Prefer using the `just` commands over the direct `cargo` commands.
-
-Available recipes:
-
-- `just setup` - `cargo check`
-- `just agency *ARGS` - `cargo run -p agency -- {ARGS}`
-- `just test *ARGS` - `cargo nextest run {ARGS}`
-- `just check` - `cargo clippy --tests`
-- `just fmt` - `cargo fmt --all`
-- `just fix` - `cargo clippy --allow-dirty --allow-staged --tests --fix` then `just fmt`
+- All common scripts life in `./justfile`.
+- You MUST read it at the beginning of a chat
+- Prefer using the `just` commands over the direct `cargo` commands.
 
 ## Commit Rules
 
@@ -100,9 +92,17 @@ Currently installed crates:
 - Prefer polling with bounded timeouts over fixed sleeps to reduce flakiness.
 - Use `git2` for local repositories instead of shelling out to `git`.
 - Avoid global env mutations; prefer per-command `.env()` or scoped guards.
+- For tests that need environment variables, use the `temp-env` crate (closure APIs like `with_var`/`with_vars`) to set/unset variables temporarily and restore them automatically.
 - You SHOULD use TDD then appropriate:
   - Fixing bugs -> Write tests before implementation
   - Implement new features, with unclear final solution -> Write tests after implementation
+
+## Code Style
+
+- Do not use single letter variables, as they are hard to understand
+- After you finished all your tasks
+  - You MUST run `just check` and fix all warnings & errors
+  - Afterwards you MUST run `cargo fmt` to format the code correctly
 
 ## Terminal IO
 
