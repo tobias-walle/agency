@@ -3,6 +3,7 @@ use clap::{Parser, Subcommand};
 
 mod commands;
 pub mod config;
+pub mod pty;
 mod utils;
 
 use crate::config::load_config;
@@ -28,6 +29,10 @@ enum Commands {
   Rm { ident: String },
   /// List tasks (ID and SLUG)
   Ps {},
+  /// Start PTY daemon
+  Daemon {},
+  /// Attach to PTY daemon
+  Attach {},
 }
 
 pub fn parse() -> Cli {
@@ -56,6 +61,12 @@ pub fn run() -> Result<()> {
     }
     Some(Commands::Ps {}) => {
       commands::ps::run(&ctx)?;
+    }
+    Some(Commands::Daemon {}) => {
+      commands::daemon::run()?;
+    }
+    Some(Commands::Attach {}) => {
+      commands::attach::run()?;
     }
     None => {}
   }
