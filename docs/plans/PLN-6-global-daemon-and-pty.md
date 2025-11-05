@@ -1,21 +1,9 @@
-# Feedback
-- Rename `effective_socket_path()` to `socket_path()`. I don't like the word effective
-- Specify that `TaskRef` is either the `id` or the `slug` of the task
-- Don't include `daemon.socket_path` in the default config toml
-- Don't include `daemon.socket_path` in the default config toml
-- `Session::new_with_cmd(rows, cols, cmd: Vec<String>, env: Vec<(String, String)>)` should be `Session::new(rows, cols, cmd: Vec<String>, env: Vec<(String, String)>)` (replacing the existing implementation). If possible non owned values should be passed following rust best practices.
-- If `cmd` is empty `bail`  
-- Can $AGENCY_TASK be provided as env var and all env vars be replaced in the command? It should work like in Dockerfiles.
-- Renmae client/tty.rs to utils/tty.rs
-- Define a struct (New Type) for the `TaskRef` String (to increase clarity
-- Make sure to use `expectrl` for the tests
-- For the tests create `./scripts/fake_agent.py` which simulates an agent like claude code or opencode, but is much faster and don't produces any api costs. Avoid timeouts in the fake agent to keep the tests fast.
-
 # PLN-6: Global daemon and unified PTY attach
 
 Date: 2025-11-05
 
-Introduce a single, global daemon socket and a unified attach client that orchestrate one PTY session at a time. Extend the CLI with daemon subcommands and task-scoped attach/stop, wire `agency new` to start the daemon and attach.
+Introduce a single, global daemon socket and a unified attach client that orchestrate one PTY session at a time.
+Extend the CLI with daemon subcommands and task-scoped attach/stop, wire `agency new` to start the daemon and attach.
 
 ## Goals
 
@@ -26,6 +14,7 @@ Introduce a single, global daemon socket and a unified attach client that orches
 - Make daemon socket path configurable via Agency TOML with a secure default.
 - Prefix all PTY tests with `pty_` and adapt them to Agency.
 - Support only one PTY at a time through the global daemon.
+- Clarify `TaskRef` semantics: it is a newtype representing either the task `id` or `slug`.
 
 ## Non Goals
 
@@ -51,7 +40,8 @@ Introduce a single, global daemon socket and a unified attach client that orches
 
 ## Solution
 
-- Add a global daemon bound to one Unix socket path configurable via `[daemon] socket_path` in Agency TOML.
+- Add a global daemon bound to one Unix socket path configurable via optional `[daemon] socket_path` override in Agency TOML.
+  - Do not include `daemon.socket_path` in the default `defaults/agency.toml`; rely on a secure computed default when unset.
   - Sensitive default: prefer `XDG_RUNTIME_DIR/agency.sock`; fallback to a per-user path (e.g. `~/.local/run/agency.sock`) with parent directory permissions `0700`.
 - Lift PTY modules from `pty-demo` to `crates/agency/src/pty/` and adapt imports and IO style.
 - Centralize attach logic: `pty::client::run_attach(socket_path)` reused by `agency attach` and `agency new`.
@@ -59,7 +49,7 @@ Introduce a single, global daemon socket and a unified attach client that orches
   - `daemon` subcommands: `start`, `stop`, `restart`.
   - `attach {task}` and `stop {task}` (CLI field name `task`, internal identity `TaskRef`).
 - For `agency new <slug>`:
-  - Create task/worktree, then start global daemon with placeholder agent command and env `$AGENCY_TASK="Say Hello"` (resolved from config), then attach.
+  - Create task/worktree, then start global daemon with placeholder agent command and env, allow `$AGENCY_TASK` to be provided via env, then attach.
 - Keep single-client semantics and reject concurrent attaches.
 - Port PTY tests to Agency, rename files to `pty_*`, and adapt helpers to Agency paths and CLI.
 
@@ -67,31 +57,30 @@ Introduce a single, global daemon socket and a unified attach client that orches
 
 1. [ ] Add dependencies via `cargo add` in the `agency` crate
    - [ ] Runtime: `portable-pty`, `crossterm`, `vt100`, `crossbeam-channel`, `serde` (derive), `bincode` (serde), `log`, `env_logger`.
-   - [ ] Dev: `serial_test`.
-2. [ ] Extend configuration (`crates/agency/src/config.rs`, `crates/agency/defaults/agency.toml`)
+   - [ ] Dev: `serial_test`, `expectrl`.
+2. [ ] Extend configuration (`crates/agency/src/config.rs`)
    - [ ] Add `DaemonConfig { socket_path: Option<String> }` and include under `AgencyConfig { daemon: DaemonConfig }`.
    - [ ] Implement `fn default_socket_path() -> PathBuf`:
      - [ ] If `XDG_RUNTIME_DIR` is set, use `XDG_RUNTIME_DIR/agency.sock`.
      - [ ] Else fallback to per-user directory (e.g. `~/.local/run/`) and ensure parent directory exists with `0700` perms.
-   - [ ] Provide `fn effective_socket_path(cfg: &AgencyConfig) -> PathBuf` using config or default.
-   - [ ] Update `defaults/agency.toml` with:
-     - [ ] `[[agents.opencode]]` unchanged.
-     - [ ] Add `[daemon]` table with `socket_path = ""` (empty => use default).
+   - [ ] Provide `fn socket_path(cfg: &AgencyConfig) -> PathBuf` using config or default.
+   - [ ] Do not add a `[daemon]` table to `crates/agency/defaults/agency.toml`; the default path is computed when not set.
 3. [ ] Create PTY module structure under `crates/agency/src/pty/`
-   - [ ] `mod.rs` facade exposing `protocol`, `session`, `daemon`, `client`, `paths`.
+   - [ ] `mod.rs` facade exposing `protocol`, `session`, `daemon`, `client`, `paths`, `utils::tty`.
    - [ ] `protocol.rs`: copy from `pty-demo/src/protocol.rs` (adjust crate/module paths).
    - [ ] `session.rs`: copy from `pty-demo/src/session.rs`.
-     - [ ] Add `Session::new_with_cmd(rows, cols, cmd: Vec<String>, env: Vec<(String, String)>)` to support agent placeholder.
-     - [ ] Default to `sh` when `cmd` empty.
+     - [ ] Replace the existing constructor with `Session::new(rows, cols, cmd, env)`.
+     - [ ] Prefer borrowed parameters where possible (avoid unnecessary ownership per Rust best practices).
+     - [ ] If `cmd` is empty, `bail!` instead of defaulting to `sh`.
    - [ ] `daemon.rs`: copy from `pty-demo/src/daemon.rs`.
-     - [ ] Bind socket using `effective_socket_path(&ctx.config)`.
+     - [ ] Bind socket using `socket_path(&ctx.config)`.
      - [ ] Keep single session and single-client behavior.
-     - [ ] Integrate `Session::new_with_cmd` using agent command from config (with `$AGENCY_TASK` substitution) and env.
+     - [ ] Integrate `Session::new` using agent command with env-variable substitution (`$VAR`, `${VAR}`), including support for `$AGENCY_TASK` provided via the environment.
      - [ ] Ensure parent dir created with `0700` perms (`ensure_socket_dir_and_bind`).
    - [ ] `client.rs`: copy from `pty-demo/src/client.rs`.
      - [ ] Expose `pub fn run_attach(socket_path: &std::path::Path) -> anyhow::Result<()>`.
      - [ ] Use `anstream::eprintln` for user-facing errors.
-   - [ ] `client/tty.rs`: copy raw mode helpers, adjust imports.
+   - [ ] `utils/tty.rs`: copy raw mode helpers (renamed from `client/tty.rs`), adjust imports.
    - [ ] `paths.rs`: helpers for `socket_path(&AgencyConfig)`, and optionally a `pid_path(&AgencyConfig)`.
 4. [ ] CLI updates (`crates/agency/src/lib.rs`)
    - [ ] Update `Commands` enum:
@@ -103,16 +92,16 @@ Introduce a single, global daemon socket and a unified attach client that orches
 5. [ ] Implement `commands/daemon.rs`
    - [ ] `start(ctx: &AppContext)`:
      - [ ] If PID file exists and process is alive, print "Daemon already running" and return.
-     - [ ] Spawn daemon as detached child process bound to `effective_socket_path`.
+     - [ ] Spawn daemon as detached child process bound to `socket_path`.
      - [ ] Initialize `env_logger`, write PID file, and print success.
-     - [ ] Configure session to run agent placeholder command from config with `$AGENCY_TASK`.
+     - [ ] Configure session to run agent placeholder command with env-variable substitution (including `$AGENCY_TASK`).
    - [ ] `stop(ctx: &AppContext)`:
      - [ ] Read PID, send SIGTERM; remove socket and PID files; print confirmation.
    - [ ] `restart(ctx: &AppContext)`:
      - [ ] `stop` then `start`.
 6. [ ] Implement `commands/attach.rs`
    - [ ] Resolve `task: String` to `TaskRef` using `utils::task::resolve_id_or_slug` (internal identity).
-   - [ ] Compute socket path via `effective_socket_path(&ctx.config)`.
+   - [ ] Compute socket path via `socket_path(&ctx.config)`.
    - [ ] Call `pty::client::run_attach(&socket_path)`.
 7. [ ] Implement `commands/stop.rs` (task-scoped convenience)
    - [ ] Resolve `task` to `TaskRef`.
@@ -120,7 +109,7 @@ Introduce a single, global daemon socket and a unified attach client that orches
 8. [ ] Integrate `agency new <slug>` (`crates/agency/src/commands/new.rs`)
    - [ ] After writing task file and creating branch/worktree:
      - [ ] Stop any running daemon.
-     - [ ] Start daemon with agent placeholder env `AGENCY_TASK="Say Hello"` and command from config (substitute `$AGENCY_TASK`).
+     - [ ] Start daemon with agent placeholder command that supports env-variable substitution; allow providing `AGENCY_TASK` via env.
      - [ ] Attach using `pty::client::run_attach(&socket_path)`.
 9. [ ] Tests (prefix with `pty_`, under `crates/agency/tests/`, `#[cfg(unix)]` and `#[serial]`)
    - [ ] `pty_helpers.rs`:
@@ -131,6 +120,8 @@ Introduce a single, global daemon socket and a unified attach client that orches
      - [ ] `send_ctrl_c()` sends `\x03`.
      - [ ] Write per-test `.agency/agency.toml` with:
        - [ ] `[daemon] socket_path = "./tmp/daemon.sock"` (relative to temp dir).
+   - [ ] Use `expectrl` for terminal interaction in PTY tests.
+   - [ ] Add `./scripts/fake_agent.py` that simulates a fast agent (no network, no timeouts), and use it as the placeholder command in tests to avoid flakiness and API costs.
    - [ ] `pty_attach.rs` (from `attach.rs`):
      - [ ] Start daemon, attach, `echo READY`, expect `READY`, Ctrl-C, EOF, stop daemon.
    - [ ] `pty_slow_client.rs` (from `slow_client.rs`):
@@ -148,8 +139,9 @@ Introduce a single, global daemon socket and a unified attach client that orches
 ## Notes
 
 - Attach logic is defined in a single place: `pty::client::run_attach`, reused by `agency attach` and `agency new`.
-- We adopt a single global socket with a secure default (prefer `XDG_RUNTIME_DIR`). Tests override it per temp dir.
+- We adopt a single global socket with a secure default (prefer `XDG_RUNTIME_DIR`).
+  Tests override it per temp dir via a test-specific config.
 - One PTY session at a time for this phase; `agency new` restarts the daemon and attaches to the fresh session.
-- The agent placeholder command uses `agents.opencode.cmd` from config with `$AGENCY_TASK` substitution. If not set, default to running `sh` in the PTY.
-- For multi-PTY support later, extend the protocol with task lifecycle messages, maintain a task registry in the daemon, and route frames per task over the single socket.
+- The agent placeholder command uses `agents.opencode.cmd` (or test fake agent) with env-variable substitution like in Dockerfiles (supports `$VAR` and `${VAR}`), and honors `$AGENCY_TASK` when provided.
+- Define a `TaskRef` newtype to clearly represent either `id` or `slug`.
 - Use `bail!` for CLI errors to ensure TTY-aware stderr with `anstream`.
