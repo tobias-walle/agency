@@ -16,6 +16,9 @@ fn shell_exit_triggers_exited_and_restart() -> Result<()> {
   let td = tempdir()?;
   let workdir = td.path();
 
+  // Ensure fake agent is present for daemon
+  ensure_fake_agent(workdir)?;
+
   let bin = bin();
   let mut daemon = spawn_daemon(&bin, workdir)?;
   wait_for_socket(&workdir.join("tmp/agency.sock"), Duration::from_secs(5))?;

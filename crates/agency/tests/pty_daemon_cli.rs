@@ -18,6 +18,9 @@ fn daemon_start_stop_restart_creates_and_removes_socket() -> Result<()> {
   let workdir = td.path();
   let sock = workdir.join("tmp").join("agency.sock");
 
+  // Ensure fake agent is present for daemon
+  ensure_fake_agent(workdir)?;
+
   // start
   let mut cmd = std::process::Command::new(bin());
   cmd.arg("daemon").arg("start");

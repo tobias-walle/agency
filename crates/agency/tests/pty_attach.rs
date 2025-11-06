@@ -17,6 +17,9 @@ fn roundtrip_attach_and_detach() -> Result<()> {
   let td = tempdir()?;
   let workdir = td.path();
 
+  // Ensure fake agent is present for daemon
+  ensure_fake_agent(workdir)?;
+
   let bin = bin();
   let mut daemon = spawn_daemon(&bin, workdir)?;
 
@@ -48,6 +51,8 @@ fn roundtrip_attach_and_detach() -> Result<()> {
 fn reject_second_attach_while_busy() -> Result<()> {
   let td = tempdir()?;
   let workdir = td.path();
+
+  ensure_fake_agent(workdir)?;
 
   let bin = bin();
   let mut daemon = spawn_daemon(&bin, workdir)?;

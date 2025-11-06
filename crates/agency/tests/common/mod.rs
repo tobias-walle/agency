@@ -10,9 +10,33 @@ pub struct TestEnv {
 
 impl TestEnv {
   pub fn new() -> Self {
-    Self {
-      temp: TempDir::new().expect("temp dir"),
+    let temp = TempDir::new().expect("temp dir");
+    // Ensure the fake agent script is available relative to the temp workdir
+    // so the daemon (which uses relative ./scripts/fake_agent.py) can start.
+    let workdir = temp.path();
+    let scripts_dir = workdir.join("scripts");
+    let _ = std::fs::create_dir_all(&scripts_dir);
+    let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../scripts/fake_agent.py");
+    let dst = scripts_dir.join("fake_agent.py");
+    if let Err(err) = fs_extra::file::copy(&src, &dst, &fs_extra::file::CopyOptions::new()) {
+      panic!(
+        "failed to copy fake agent from {} to {}: {}",
+        src.display(),
+        dst.display(),
+        err
+      );
     }
+    #[cfg(unix)]
+    {
+      use std::os::unix::fs::PermissionsExt as _;
+      if let Ok(meta) = std::fs::metadata(&dst) {
+        let mut perms = meta.permissions();
+        perms.set_mode(0o755);
+        let _ = std::fs::set_permissions(&dst, perms);
+      }
+    }
+
+    Self { temp }
   }
 
   pub fn path(&self) -> &std::path::Path {
