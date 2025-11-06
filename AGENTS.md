@@ -10,7 +10,7 @@ The Agency tool orchestrates parallel-running AI CLI agents in isolated Git work
 ## Structure
 
 - `./docs/specs/SPEC-[id]-[slug].md` - Store for specifications. They include product and architecture decisions and should be kept up to date with changes.
-- `./docs/plans/PLN-[id]-[slug].md` - Concrete plans to add or modify features or to fix bugs. They follow the structure defined in `./docs/rules/plan-format.md`. Plans always are a snapshot in time, and might not represent the current decision or project structure.
+- `./docs/plans/PLN-[id]-[slug].md` - Concrete plans to add or modify features or to fix bugs.
 - `./docs/rules/[slug].md` - Special rules for you, the AI Agent, to read if needed. See also [Conditional Rules](#conditional-rules).
 - `./justfile` - Project scripts
 - `./crates` - Contains all the rust crates (apps & libraries) used for this project
@@ -152,9 +152,10 @@ Then implementing a plan use your TODO list tool to track the progress.
 
 ### Build Mode
 
-Everytime a prompt starts with `BUILD:` you must enter the plan mode. In the build mode, the user doesn't want you to plan, instead you should execute a plan and focus on building it.
+Everytime a prompt starts with `BUILD:` you must enter the build mode. 
+In the build mode, you fully focus on execution. This might be a plan or a direct task.
 
-Start by managing your TODO list and then continue until you are finished with all tasks.
+Start execution by managing your TODO list and then continue working on them until you are finished with all tasks.
 
 ## Conditional Rules
 
