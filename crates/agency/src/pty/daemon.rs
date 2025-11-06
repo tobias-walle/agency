@@ -367,16 +367,24 @@ impl Daemon {
                 let _ = control_tx.send_pong(nonce);
               }
               C2DControl::RestartSession { .. } => {
-                if let Some((rows_now, cols_now)) = registry_for_reader
+                // Determine current size without holding the lock for the send
+                let (rows_now, cols_now) = registry_for_reader
                   .lock()
                   .unwrap()
                   .snapshot(session_id)
                   .map(|(_, sz)| sz)
+                  .unwrap_or((24, 80));
+
+                // Restart the shell with the current size
+                let _ = registry_for_reader
+                  .lock()
+                  .unwrap()
+                  .restart_session(session_id, rows_now, cols_now);
+
+                // After restart, send a fresh snapshot to the attached client
+                if let Some((ansi, (sr, sc))) = registry_for_reader.lock().unwrap().snapshot(session_id)
                 {
-                  let _ = registry_for_reader
-                    .lock()
-                    .unwrap()
-                    .restart_session(session_id, rows_now, cols_now);
+                  let _ = control_tx.send_welcome(session_id, sr, sc, ansi);
                 }
               }
               C2DControl::StopSession { .. } => {
