@@ -61,29 +61,10 @@ Add the files and commit in a single command, e.g. `git add file1.ts file2.ts &&
 
 ## Dependencies
 
-Currently installed crates:
-
-**Runtime:**
-
-- anstream
-- anyhow
-- clap (features: derive)
-- git2
-- owo-colors
-- regex
-
-**Dev:**
-
-- assert_cmd
-- expectrl
-- predicates
-- tempfile
-
 - You MUST add dependencies via `cargo add [pkg]` -> Never modify Cargo.toml directly.
-- You SHOULD use the `api-docs-expert` subagent when working with libraries
+- You SHOULD use the `Contex7` mcp when working with libraries
   - Lookup new APIs before you use them
   - Check correct API use when encountering errors
-- You SHOULD use the `api-docs-expert` instead of the Context7 directly, even if the user tells you to use Context7/C7
 
 ## Testing
 
@@ -101,6 +82,7 @@ Currently installed crates:
 ## Code Style
 
 - Do not use single letter variables, as they are hard to understand
+- Favor readability, even if it is sometimes a bit more verbose. Avoid heavy nesting.
 - After you finished all your tasks
   - You MUST run `just check` and fix all warnings & errors
   - Afterwards you MUST run `cargo fmt` to format the code correctly
@@ -135,3 +117,6 @@ println!("My number is not {}!", 4.on_red());
 - You MUST only read them once. If they are already in your context, don't read the again.
 
 In the following these conditional rule files are listed:
+
+- `./docs/rules/rust-best-practices.md` - You MUST read this if you are working with Rust Code. Either if you are implementing rust code or planning to modify it.
+- `./docs/rules/plan-format.md` - You MUST read this then creating plans to understand the best practices.
