@@ -17,10 +17,11 @@ Introduce a global daemon that can host many sessions in parallel, allow multipl
 - On agent exit, broadcast exit and prompt clients to press enter to restart (pause raw mode; colored output).
 - `agency stop {id|slug}` stops all sessions for a task. `--session <id>` stops just one.
 - Remove sessions if a task is deleted by `agency rm`.
- - Add `agency sessions` to list running sessions.
+- Add `agency sessions` to list running sessions.
 
 ## Process Diagram (ASCII)
 
+```text
 Open new session (attach <task>)
 
 Client                          Daemon
@@ -71,6 +72,7 @@ Client                          Daemon
   |  Shutdown                     |
   |------------------------------>|
   |  close socket, stop sessions  |
+```
 
 ## Non Goals
 
@@ -180,4 +182,3 @@ Design a global daemon with a session registry and a richer protocol. Use reusab
   - Pass env map to the child process when spawning.
 - Session list rendering
   - Keep row formatting and table rendering inside the `sessions` CLI command; protocol only carries wire structs (`SessionInfo`).
-

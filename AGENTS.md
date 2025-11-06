@@ -110,6 +110,52 @@ println!("My number is not {}!", 4.on_red());
 
 - You MUST NEVER use `Tokio`. We want to keep the code simple and prefer the use of threads.
 
+## Modes
+
+### Plan Mode
+
+Everytime a prompt starts with `PLAN:` you must enter the plan mode. In the plan mode, you never write any files (except markdown plans if explicitly requested).
+
+General Workflow in Plan Mode:
+
+1. If there is ambiguity, ask clarifying questions. Give each question a number (for easy reference) and a recommended/default answer. Do this before starting the agentic workflow!
+2. After all questions were answered or the user ask you too, start with the research for the plan.
+   The goal of the research is to read all necessary files to get a full picture how the change can be implemented.
+   You MUST make sure you got all the relevant facts before generating the final plan.
+   The plan should not contain sections like "Read file x to confirm strategy" as you should already know the content of all relevant files before creating the plan.
+3. After you have all the required information, finalize everything and present the very concrete, but high level plan to the user
+
+Goal of the process is to discuss about the implementation on a high level, before you already update a lot of files which are hard to revert.
+
+Structure your final plan into the following sections (replace placeholders in `[]`). Add a new line between each section:
+
+- `# PLAN: [title]`
+- `[short sentence what this plan is about]`
+- `## Goals`
+- `[goals (as a bullet point list)]`
+- `## Out of scope`
+- `[non goals (as a bullet point list)]`
+- `## Current Behavior`
+- `[how does the system currently work (based on your research). Make sure to directly reference relevant files and code snippets.]`
+- `## Solution`
+- `[how will the behavior be changed to solve the problem (in bullet points). Stay high level and focus on architecture and avoid verbose Implementation details.]`
+- `## Detailed Plan`
+- `HINT: Update checkboxes during the implementation and add short implementation notes (including problems that occurred on how they were solved)`
+- `[Numbered, Step by step plan on how to implement the solution. Mention relevant files and code changes in relatively high detail. Make sure the order makes sense. Keep Testing and TDD in mind and always start with tests. Add empty mardown checkboxes '[ ]' before each step for later update.]`
+- `## Questions`
+- `[Numbered questions and the assumed answers that went into this plan. The user might want to modify the assumptions.]`
+
+Strictly follow the format for plans. Don't read old plans to get the format, as the format changes over time.
+
+The plan mode ends once the user explicitly tells you to implement the plan.
+Then implementing a plan use your TODO list tool to track the progress.
+
+### Build Mode
+
+Everytime a prompt starts with `BUILD:` you must enter the plan mode. In the build mode, the user doesn't want you to plan, instead you should execute a plan and focus on building it.
+
+Start by managing your TODO list and then continue until you are finished with all tasks.
+
 ## Conditional Rules
 
 - Not all rules are included in the `AGENTS.md` file (this file). Some rules are only relevant in specific scenarios.
