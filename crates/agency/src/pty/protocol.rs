@@ -4,6 +4,19 @@ use serde::{Deserialize, Serialize};
 use serde::{Serialize as SerdeSerialize, de::DeserializeOwned};
 use std::io::{Read, Write};
 
+/// Identifies a project by its canonical repository root directory.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProjectKey {
+  pub repo_root: String,
+}
+
+/// Identifies a task within a project.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TaskMeta {
+  pub id: u32,
+  pub slug: String,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct SessionStatsLite {
   /// Total number of bytes read from client and written to PTY.
@@ -14,22 +27,55 @@ pub struct SessionStatsLite {
   pub elapsed_ms: u64,
 }
 
+/// Command description used for launching sessions (serde-friendly).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WireCommand {
+  pub program: String,
+  pub args: Vec<String>,
+  pub cwd: String,
+  pub env: Vec<(String, String)>,
+}
+
+/// Open-session metadata sent by the client to the daemon.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SessionOpenMeta {
+  pub project: ProjectKey,
+  pub task: TaskMeta,
+  pub worktree_dir: String,
+  pub cmd: WireCommand,
+}
+
 /// Control messages sent from the client to the daemon.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum C2DControl {
-  /// Attach request with initial terminal size and optional client name.
-  Attach {
+  /// Create a new session for a task and attach as a client.
+  OpenSession {
+    meta: SessionOpenMeta,
     rows: u16,
     cols: u16,
-    client_name: Option<String>,
-    /// Optional task payload carried by the client for the daemon to run.
-    /// When present, the daemon may use it to configure the agent process.
-    task: Option<String>,
+  },
+  /// Join an existing session by id.
+  JoinSession {
+    session_id: u64,
+    rows: u16,
+    cols: u16,
   },
   /// Resize notification with new terminal rows/cols.
   Resize { rows: u16, cols: u16 },
-  /// Detach request to end the attachment.
+  /// Detach request to end this client attachment.
   Detach,
+  /// Request restart of the given session's shell.
+  RestartSession { session_id: u64 },
+  /// Stop and remove the given session.
+  StopSession { session_id: u64 },
+  /// Stop all sessions for a given task.
+  StopTask {
+    project: ProjectKey,
+    task_id: u32,
+    slug: String,
+  },
+  /// List sessions with optional project filter.
+  ListSessions { project: Option<ProjectKey> },
   /// Ping for liveness checks carrying a nonce echoed by the daemon.
   Ping { nonce: u64 },
   /// Request the daemon to shutdown gracefully.
@@ -47,19 +93,37 @@ pub enum C2D {
   Input { bytes: Vec<u8> },
 }
 
+/// Summary of a session for listing.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionInfo {
+  pub session_id: u64,
+  pub project: ProjectKey,
+  pub task: TaskMeta,
+  pub cwd: String,
+  pub status: String,
+  pub clients: u32,
+  pub created_at_ms: u64,
+  pub stats: SessionStatsLite,
+}
+
 /// Control messages sent from the daemon to the client.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum D2CControl {
-  /// Initial hello carrying the current PTY size.
-  Hello { pty_rows: u16, pty_cols: u16 },
-  /// ANSI snapshot of the current screen and its size.
-  Snapshot { ansi: Vec<u8>, rows: u16, cols: u16 },
+  /// Welcome message carrying session id, initial size and ANSI snapshot.
+  Welcome {
+    session_id: u64,
+    rows: u16,
+    cols: u16,
+    ansi: Vec<u8>,
+  },
   /// Notification that the shell process exited, with optional code/signal and stats.
   Exited {
     code: Option<i32>,
     signal: Option<i32>,
     stats: SessionStatsLite,
   },
+  /// List of sessions returned for a query.
+  Sessions { entries: Vec<SessionInfo> },
   /// Goodbye indicates the daemon acknowledges the detach and will close the connection.
   Goodbye,
   /// Error message explaining a protocol or lifecycle issue.
@@ -120,26 +184,24 @@ pub struct D2CControlChannel {
 }
 
 impl D2CControlChannel {
-  /// Sends a `Hello` control message with PTY size.
-  pub fn send_hello(
-    &self,
-    rows: u16,
-    cols: u16,
-  ) -> Result<(), crossbeam_channel::SendError<D2CControl>> {
-    self.tx.send(D2CControl::Hello {
-      pty_rows: rows,
-      pty_cols: cols,
-    })
+  /// Sends any control message (internal helper for broadcast paths).
+  pub fn send(&self, msg: D2CControl) -> Result<(), crossbeam_channel::SendError<D2CControl>> {
+    self.tx.send(msg)
   }
-
-  /// Sends a `Snapshot` control message with ANSI and size.
-  pub fn send_snapshot(
+  /// Sends a `Welcome` control message with session id and initial snapshot.
+  pub fn send_welcome(
     &self,
-    ansi: Vec<u8>,
+    session_id: u64,
     rows: u16,
     cols: u16,
+    ansi: Vec<u8>,
   ) -> Result<(), crossbeam_channel::SendError<D2CControl>> {
-    self.tx.send(D2CControl::Snapshot { ansi, rows, cols })
+    self.tx.send(D2CControl::Welcome {
+      session_id,
+      rows,
+      cols,
+      ansi,
+    })
   }
 
   /// Sends an `Exited` control message with stats.
@@ -154,6 +216,14 @@ impl D2CControlChannel {
       signal,
       stats,
     })
+  }
+
+  /// Sends a `Sessions` control message.
+  pub fn send_sessions(
+    &self,
+    entries: Vec<SessionInfo>,
+  ) -> Result<(), crossbeam_channel::SendError<D2CControl>> {
+    self.tx.send(D2CControl::Sessions { entries })
   }
 
   /// Sends a `Goodbye` control message.
@@ -201,19 +271,27 @@ pub struct C2DControlChannel {
 }
 
 impl C2DControlChannel {
-  /// Sends an `Attach` request with initial size and optional client name.
-  pub fn send_attach(
+  /// Sends an `OpenSession` request with metadata and initial size.
+  pub fn send_open_session(
     &self,
+    meta: SessionOpenMeta,
     rows: u16,
     cols: u16,
-    client_name: Option<String>,
-    task: Option<String>,
   ) -> Result<(), crossbeam_channel::SendError<C2DControl>> {
-    self.tx.send(C2DControl::Attach {
+    self.tx.send(C2DControl::OpenSession { meta, rows, cols })
+  }
+
+  /// Sends a `JoinSession` request for an existing session id.
+  pub fn send_join_session(
+    &self,
+    session_id: u64,
+    rows: u16,
+    cols: u16,
+  ) -> Result<(), crossbeam_channel::SendError<C2DControl>> {
+    self.tx.send(C2DControl::JoinSession {
+      session_id,
       rows,
       cols,
-      client_name,
-      task,
     })
   }
 
@@ -229,6 +307,44 @@ impl C2DControlChannel {
     cols: u16,
   ) -> Result<(), crossbeam_channel::SendError<C2DControl>> {
     self.tx.send(C2DControl::Resize { rows, cols })
+  }
+
+  /// Sends a `RestartSession` request.
+  pub fn send_restart_session(
+    &self,
+    session_id: u64,
+  ) -> Result<(), crossbeam_channel::SendError<C2DControl>> {
+    self.tx.send(C2DControl::RestartSession { session_id })
+  }
+
+  /// Sends a `StopSession` request.
+  pub fn send_stop_session(
+    &self,
+    session_id: u64,
+  ) -> Result<(), crossbeam_channel::SendError<C2DControl>> {
+    self.tx.send(C2DControl::StopSession { session_id })
+  }
+
+  /// Sends a `StopTask` request.
+  pub fn send_stop_task(
+    &self,
+    project: ProjectKey,
+    task_id: u32,
+    slug: String,
+  ) -> Result<(), crossbeam_channel::SendError<C2DControl>> {
+    self.tx.send(C2DControl::StopTask {
+      project,
+      task_id,
+      slug,
+    })
+  }
+
+  /// Sends a `ListSessions` request.
+  pub fn send_list_sessions(
+    &self,
+    project: Option<ProjectKey>,
+  ) -> Result<(), crossbeam_channel::SendError<C2DControl>> {
+    self.tx.send(C2DControl::ListSessions { project })
   }
 
   /// Sends a `Ping` with the given nonce.

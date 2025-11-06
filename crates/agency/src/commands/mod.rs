@@ -5,3 +5,5 @@ pub mod new;
 pub mod path;
 pub mod ps;
 pub mod rm;
+pub mod sessions;
+pub mod stop;

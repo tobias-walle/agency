@@ -10,7 +10,6 @@ use owo_colors::OwoColorize as _;
 use crate::config::{compute_socket_path, load_config};
 use crate::pty::daemon as pty_daemon;
 use crate::pty::protocol::{C2D, C2DControl, write_frame};
-use crate::utils::command::Command as AgentCommand;
 
 pub fn run_blocking() -> Result<()> {
   // Initialize env_logger similar to pty-demo main
@@ -23,16 +22,7 @@ pub fn run_blocking() -> Result<()> {
   let cfg = load_config(&cwd)?;
   let socket = compute_socket_path(&cfg);
 
-  // Resolve agent command template
-  let agent_cmd: AgentCommand = cfg
-    .agents
-    .get("fake")
-    .context("Fake agent expected")?
-    .get_cmd("fake")?;
-
-  // dbg!(&agent_cmd);
-
-  pty_daemon::run_daemon(&socket, agent_cmd)
+  pty_daemon::run_daemon(&socket)
 }
 
 pub fn start() -> Result<()> {

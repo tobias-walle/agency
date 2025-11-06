@@ -1,11 +1,14 @@
 use anyhow::{Result, bail};
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::path::PathBuf;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Command {
   pub program: String,
   pub args: Vec<String>,
   pub cwd: PathBuf,
+  pub env: Vec<(String, String)>,
 }
 
 impl Command {
@@ -24,8 +27,53 @@ impl Command {
       Vec::new()
     };
     let cwd = std::env::current_dir()?;
-    Ok(Self { program, args, cwd })
+    Ok(Self {
+      program,
+      args,
+      cwd,
+      env: Vec::new(),
+    })
   }
+}
+
+/// Expand "$VAR" references in argv using the given env map. Does not support ${} forms.
+pub fn expand_vars_in_argv(argv: &[String], env: &HashMap<String, String>) -> Vec<String> {
+  argv
+    .iter()
+    .map(|s| {
+      let mut out = String::new();
+      let bytes = s.as_bytes();
+      let mut i = 0;
+      while i < bytes.len() {
+        if bytes[i] == b'$' {
+          // capture variable name [A-Za-z_][A-Za-z0-9_]*
+          let mut j = i + 1;
+          while j < bytes.len() {
+            let c = bytes[j] as char;
+            if j == i + 1 {
+              if !(c.is_ascii_alphabetic() || c == '_') {
+                break;
+              }
+            } else if !(c.is_ascii_alphanumeric() || c == '_') {
+              break;
+            }
+            j += 1;
+          }
+          if j > i + 1 {
+            let key = &s[i + 1..j];
+            if let Some(val) = env.get(key) {
+              out.push_str(val);
+            }
+            i = j;
+            continue;
+          }
+        }
+        out.push(bytes[i] as char);
+        i += 1;
+      }
+      out
+    })
+    .collect()
 }
 
 #[cfg(test)]

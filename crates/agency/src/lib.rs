@@ -39,9 +39,19 @@ enum Commands {
     cmd: DaemonCmd,
   },
   /// Attach to task via PTY daemon
-  Attach { task: String },
-  /// Stop the active task session via daemon
-  Stop { task: String },
+  Attach {
+    task: Option<String>,
+    #[arg(long)]
+    session: Option<u64>,
+  },
+  /// Stop a task's sessions or a specific session
+  Stop {
+    task: Option<String>,
+    #[arg(long)]
+    session: Option<u64>,
+  },
+  /// List running sessions in this project
+  Sessions {},
 }
 
 #[derive(Debug, Subcommand)]
@@ -94,12 +104,16 @@ pub fn run() -> Result<()> {
       DaemonCmd::Restart {} => commands::daemon::restart()?,
       DaemonCmd::Run {} => commands::daemon::run_blocking()?,
     },
-    Some(Commands::Attach { task }) => {
-      commands::attach::run_with_task(&ctx, &task)?;
+    Some(Commands::Attach { task, session }) => match (task, session) {
+      (Some(t), None) => commands::attach::run_with_task(&ctx, &t)?,
+      (None, Some(sid)) => commands::attach::run_join_session(&ctx, sid)?,
+      _ => anyhow::bail!("attach requires either a task or --session <id>"),
+    },
+    Some(Commands::Stop { task, session }) => {
+      commands::stop::run(&ctx, task.as_deref(), session)?;
     }
-    Some(Commands::Stop { task: _task }) => {
-      // Task validation can be added; currently stop daemon globally
-      commands::daemon::stop()?;
+    Some(Commands::Sessions {}) => {
+      commands::sessions::run(&ctx)?;
     }
     None => {}
   }
