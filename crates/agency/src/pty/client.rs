@@ -58,6 +58,8 @@ struct Client {
   join_session: Option<u64>,
   /// Remembered session id from Welcome.
   session_id: Option<u64>,
+  /// Indicates we should swallow input until Enter and then request a restart.
+  waiting_for_restart: Arc<AtomicBool>,
 }
 
 impl Client {
@@ -74,6 +76,7 @@ impl Client {
       open_meta: open,
       join_session,
       session_id: None,
+      waiting_for_restart: Arc::new(AtomicBool::new(false)),
     }
   }
 
@@ -159,6 +162,8 @@ impl Client {
     let send_input = self.input_tx.as_ref().unwrap().clone();
     let send_control = self.control_tx.as_ref().unwrap().clone();
     let running_flag = self.running.clone();
+    let waiting_flag = self.waiting_for_restart.clone();
+    let session_id_for_restart = self.session_id;
     thread::spawn(move || {
       let mut stdin = std::io::stdin().lock();
       let mut buffer = [0u8; 8192];
@@ -166,16 +171,32 @@ impl Client {
         match stdin.read(&mut buffer) {
           Ok(0) => continue, // timeout tick
           Ok(count) => {
+            // Ctrl-Q (0x11) always detaches immediately
             if let Some(ctrl_pos) = buffer[..count].iter().position(|&b| b == 0x11) {
-              if ctrl_pos > 0 {
+              if ctrl_pos > 0 && !waiting_flag.load(Ordering::Relaxed) {
                 let _ = send_input.send_input(&buffer[..ctrl_pos]);
               }
               let _ = send_control.send_detach();
               running_flag.store(false, Ordering::Relaxed);
               break;
-            } else {
-              let _ = send_input.send_input(&buffer[..count]);
             }
+
+            // If we're waiting for restart, swallow input until Enter and trigger restart
+            if waiting_flag.load(Ordering::Relaxed) {
+              let has_cr = buffer[..count].contains(&0x0D);
+              let has_lf = buffer[..count].contains(&0x0A);
+              if (has_cr || has_lf) && session_id_for_restart.is_some() {
+                if let Some(sid) = session_id_for_restart {
+                  let _ = send_control.send_restart_session(sid);
+                }
+                waiting_flag.store(false, Ordering::Relaxed);
+              }
+              // Swallow all bytes while waiting; do not forward to PTY
+              continue;
+            }
+
+            // Normal path: forward bytes to PTY
+            let _ = send_input.send_input(&buffer[..count]);
           }
           Err(_) => break,
         }
@@ -205,8 +226,7 @@ impl Client {
   /// Logs session stats on `Exited`, and breaks on `Goodbye` or errors.
   fn spawn_output_thread(&self, mut stream_reader: UnixStream) -> JoinHandle<()> {
     let running_flag = self.running.clone();
-    let control_for_restart = self.control_tx.clone();
-    let session_id_for_restart = self.session_id;
+    let wait_restart = self.waiting_for_restart.clone();
     thread::spawn(move || {
       let mut stdout = std::io::stdout().lock();
       let mut printed_exited = bool::default();
@@ -223,25 +243,29 @@ impl Client {
               eprintln!("Daemon error: {}", message);
               break;
             }
+            D2CControl::Welcome { .. } => {
+              // After (re)start, allow next Exited to re-arm the restart prompt
+              printed_exited = false;
+            }
             D2CControl::Exited { stats, .. } => {
               if !printed_exited {
-                let _pause = RawModePauseGuard::pause();
-                eprintln!(
-                  "\nAgent exited. Stats: in={} out={} elapsed={}ms",
-                  stats.bytes_in, stats.bytes_out, stats.elapsed_ms
-                );
-                eprintln!("Press Enter to restart the session...");
-                let mut s = String::new();
-                let _ = std::io::stdin().read_line(&mut s);
-                if let (Some(tx), Some(sid)) = (control_for_restart.clone(), session_id_for_restart)
                 {
-                  let _ = tx.send_restart_session(sid);
+                  let _pause = RawModePauseGuard::pause();
+                  anstream::eprintln!(
+                    "\nAgent exited. Stats: in={} out={} elapsed={}ms",
+                    stats.bytes_in,
+                    stats.bytes_out,
+                    stats.elapsed_ms
+                  );
+                  anstream::eprintln!("Press Enter to restart the session...");
                 }
+                // Arm restart: input thread will swallow bytes until Enter and trigger restart
+                wait_restart.store(true, Ordering::Relaxed);
                 printed_exited = true;
               }
             }
             D2CControl::Goodbye => break,
-            D2CControl::Welcome { .. } | D2CControl::Sessions { .. } | D2CControl::Pong { .. } => {}
+            D2CControl::Sessions { .. } | D2CControl::Pong { .. } => {}
           },
         }
       }
