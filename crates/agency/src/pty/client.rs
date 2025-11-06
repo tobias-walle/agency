@@ -1,6 +1,6 @@
 use crate::pty::protocol::{
-  C2D, C2DControl, C2DControlChannel, C2DInputChannel, D2C, D2CControl, make_c2d_control_channel,
-  make_c2d_input_channel, read_frame, write_frame,
+  C2D, C2DControl, C2DControlChannel, C2DInputChannel, D2C, D2CControl, SessionOpenMeta,
+  make_c2d_control_channel, make_c2d_input_channel, read_frame, write_frame,
 };
 use anyhow::{Context, Result, anyhow};
 use crossbeam_channel::Receiver;
@@ -21,12 +21,16 @@ use tty::{RawModeGuard, RawModePauseGuard};
 /// This public entrypoint remains stable for CLI and tests.
 /// It sets raw mode and timed reads, connects to the daemon socket, constructs the
 /// `Client` orchestrator, and runs it with a single stream (split internally).
-pub fn run_attach(socket_path: &Path, task: Option<String>) -> Result<()> {
+pub fn run_attach(
+  socket_path: &Path,
+  open: SessionOpenMeta,
+  join_session_id: Option<u64>,
+) -> Result<()> {
   let _raw = RawModeGuard::enable()?;
 
   let stream = UnixStream::connect(socket_path).context("failed to connect to daemon socket")?;
 
-  let mut client = Client::new(task);
+  let mut client = Client::new(open, join_session_id);
   client.run(stream)
 }
 
@@ -48,13 +52,17 @@ struct Client {
   input_rx: Receiver<Vec<u8>>,
   /// Shared flag to coordinate shutdown across threads.
   running: Arc<AtomicBool>,
-  /// Optional task payload to send with Attach.
-  initial_task: Option<String>,
+  /// Open-session metadata to send when creating a new session.
+  open_meta: SessionOpenMeta,
+  /// Optional session id to join instead of creating one.
+  join_session: Option<u64>,
+  /// Remembered session id from Welcome.
+  session_id: Option<u64>,
 }
 
 impl Client {
   /// Constructs a new attached-only client orchestrator and its internal channels.
-  fn new(task: Option<String>) -> Self {
+  fn new(open: SessionOpenMeta, join_session: Option<u64>) -> Self {
     let (control_tx, control_rx) = make_c2d_control_channel();
     let (input_tx, input_rx) = make_c2d_input_channel();
     Self {
@@ -63,70 +71,45 @@ impl Client {
       control_rx,
       input_rx,
       running: Arc::new(AtomicBool::new(true)),
-      initial_task: task,
+      open_meta: open,
+      join_session,
+      session_id: None,
     }
   }
 
   /// Performs the initial handshake:
-  /// - Sends `Attach` via the control channel.
-  /// - Reads `Hello` followed by `Snapshot` from the daemon and writes the ANSI snapshot to stdout.
-  fn handshake(&self, stream_reader: &mut UnixStream, rows: u16, cols: u16) -> Result<()> {
+  /// - Sends `OpenSession` or `JoinSession` via the control channel.
+  /// - Reads `Welcome` from the daemon and writes the ANSI snapshot to stdout.
+  fn handshake(&mut self, stream_reader: &mut UnixStream, rows: u16, cols: u16) -> Result<()> {
     if let Some(ref tx) = self.control_tx {
-      let _ = tx.send_attach(
-        rows,
-        cols,
-        Some("client".to_string()),
-        self.initial_task.clone(),
-      );
-    }
-
-    // Expect Hello then Snapshot
-    let hello: D2C = read_frame(&mut *stream_reader)?;
-    match hello {
-      D2C::Control(cm) => match cm {
-        D2CControl::Error { message } => {
-          if message.contains("Already attached") {
-            eprintln!("Another client is attached. Detach there first.");
-            return Err(anyhow!("busy: already attached"));
-          } else {
-            eprintln!("Daemon error: {}", message);
-            return Err(anyhow!(message));
-          }
-        }
-        D2CControl::Hello { .. } => {}
-        _ => {
-          eprintln!("Protocol error: expected Hello");
-          return Err(anyhow!("protocol: expected Hello"));
-        }
-      },
-      _ => {
-        eprintln!("Protocol error: expected Hello");
-        return Err(anyhow!("protocol: expected Hello"));
+      if let Some(session_id) = self.join_session {
+        let _ = tx.send_join_session(session_id, rows, cols);
+      } else {
+        let _ = tx.send_open_session(self.open_meta.clone(), rows, cols);
       }
     }
 
-    let snap: D2C = read_frame(&mut *stream_reader)?;
-    if let D2C::Control(cm) = snap {
-      match cm {
-        D2CControl::Snapshot { ansi, .. } => {
-          let mut stdout = std::io::stdout().lock();
-          let _ = stdout.write_all(&ansi);
-          let _ = stdout.flush();
-        }
-        D2CControl::Error { message } => {
-          if message.contains("Already attached") {
-            eprintln!("Another client is attached. Detach there first.");
-            return Err(anyhow!("busy: already attached"));
-          } else {
-            eprintln!("Daemon error: {}", message);
-            return Err(anyhow!(message));
-          }
-        }
-        _ => {}
+    let msg: D2C = read_frame(&mut *stream_reader)?;
+    match msg {
+      D2C::Control(D2CControl::Welcome {
+        session_id, ansi, ..
+      }) => {
+        self.session_id = Some(session_id);
+        let mut stdout = std::io::stdout().lock();
+        let _ = stdout.write_all(&ansi);
+        let _ = stdout.flush();
+        Ok(())
+      }
+      D2C::Control(D2CControl::Error { message }) => {
+        eprintln!("Daemon error: {}", message);
+        Err(anyhow!(message))
+      }
+      other => {
+        let _ = other;
+        eprintln!("Protocol error: expected Welcome");
+        Err(anyhow!("protocol: expected Welcome"))
       }
     }
-
-    Ok(())
   }
 
   /// Spawns the client writer thread with control priority and owned stream.
@@ -222,6 +205,8 @@ impl Client {
   /// Logs session stats on `Exited`, and breaks on `Goodbye` or errors.
   fn spawn_output_thread(&self, mut stream_reader: UnixStream) -> JoinHandle<()> {
     let running_flag = self.running.clone();
+    let control_for_restart = self.control_tx.clone();
+    let session_id_for_restart = self.session_id;
     thread::spawn(move || {
       let mut stdout = std::io::stdout().lock();
       let mut printed_exited = bool::default();
@@ -235,26 +220,28 @@ impl Client {
           }
           D2C::Control(cm) => match cm {
             D2CControl::Error { message } => {
-              if message.contains("Already attached") {
-                eprintln!("Another client is attached. Detach there first.");
-                break;
-              } else {
-                eprintln!("Daemon error: {}", message);
-                break;
-              }
+              eprintln!("Daemon error: {}", message);
+              break;
             }
             D2CControl::Exited { stats, .. } => {
               if !printed_exited {
                 let _pause = RawModePauseGuard::pause();
-                eprintln!("\n===== Session Stats =====");
-                eprintln!("Bytes in  : {}", stats.bytes_in);
-                eprintln!("Bytes out : {}", stats.bytes_out);
-                eprintln!("Elapsed   : {} ms", stats.elapsed_ms);
+                eprintln!(
+                  "\nAgent exited. Stats: in={} out={} elapsed={}ms",
+                  stats.bytes_in, stats.bytes_out, stats.elapsed_ms
+                );
+                eprintln!("Press Enter to restart the session...");
+                let mut s = String::new();
+                let _ = std::io::stdin().read_line(&mut s);
+                if let (Some(tx), Some(sid)) = (control_for_restart.clone(), session_id_for_restart)
+                {
+                  let _ = tx.send_restart_session(sid);
+                }
                 printed_exited = true;
               }
             }
             D2CControl::Goodbye => break,
-            D2CControl::Hello { .. } | D2CControl::Snapshot { .. } | D2CControl::Pong { .. } => {}
+            D2CControl::Welcome { .. } | D2CControl::Sessions { .. } | D2CControl::Pong { .. } => {}
           },
         }
       }

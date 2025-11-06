@@ -31,7 +31,7 @@ pub struct Session {
   bytes_in: Arc<AtomicU64>,
   pub bytes_out: Arc<AtomicU64>,
   pub start: Instant,
-  output_sink: Arc<Mutex<Option<D2COutputChannel>>>,
+  output_sinks: Arc<Mutex<Vec<D2COutputChannel>>>,
   cmd: Command,
 }
 
@@ -61,7 +61,7 @@ impl Session {
     let master = Arc::new(Mutex::new(master));
     let writer = Arc::new(Mutex::new(writer));
 
-    let output_sink: Arc<Mutex<Option<D2COutputChannel>>> = Arc::new(Mutex::new(None));
+    let output_sinks: Arc<Mutex<Vec<D2COutputChannel>>> = Arc::new(Mutex::new(Vec::new()));
 
     let sess = Self {
       master,
@@ -71,7 +71,7 @@ impl Session {
       bytes_in,
       bytes_out,
       start,
-      output_sink,
+      output_sinks,
       cmd,
     };
     sess.start_read_pump();
@@ -125,6 +125,10 @@ impl Session {
     // Ensure the child process resolves relative paths based on the original cwd
     // captured when the Command was created.
     builder.cwd(&cmd.cwd);
+    // Provide environment variables to the child process
+    for (k, v) in &cmd.env {
+      builder.env(k, v);
+    }
     builder
   }
 
@@ -134,7 +138,7 @@ impl Session {
     let master_for_read = self.master.clone();
     let parser = self.parser.clone();
     let bytes_out = self.bytes_out.clone();
-    let output_sink = self.output_sink.clone();
+    let sinks = self.output_sinks.clone();
 
     thread::spawn(move || {
       let mut reader = match master_for_read.lock() {
@@ -150,10 +154,11 @@ impl Session {
               p.process(&buf[..n]);
             }
             bytes_out.fetch_add(n as u64, Ordering::Relaxed);
-            // Forward to client if attached (non-blocking, lossy)
-            let opt = output_sink.lock().ok().and_then(|g| g.as_ref().cloned());
-            if let Some(out) = opt {
-              let _ = out.try_send_bytes(&buf[..n]);
+            // Forward to all attached clients (non-blocking, lossy)
+            if let Ok(guard) = sinks.lock() {
+              for out in guard.iter() {
+                let _ = out.try_send_bytes(&buf[..n]);
+              }
             }
           }
           Err(_) => break,
@@ -226,12 +231,30 @@ impl Session {
     }
   }
 
-  /// Sets or clears the output sink. The provided channel is cloned under
-  /// a mutex and used by the read pump outside of any locks to avoid
-  /// lock-held blocking.
-  pub fn set_output_sink(&self, sink: Option<D2COutputChannel>) {
-    if let Ok(mut guard) = self.output_sink.lock() {
-      *guard = sink;
+  /// Add a new output sink for a client attachment.
+  pub fn add_output_sink(&mut self, sink: D2COutputChannel) {
+    if let Ok(mut guard) = self.output_sinks.lock() {
+      guard.push(sink);
     }
+  }
+
+  /// Remove an output sink for a client detachment.
+  pub fn remove_output_sink(&mut self, sink: &D2COutputChannel) {
+    if let Ok(mut guard) = self.output_sinks.lock() {
+      guard.retain(|s| !std::ptr::eq(s, sink));
+    }
+  }
+
+  /// Clear all output sinks (used when last client detaches or on restart).
+  pub fn clear_all_sinks(&mut self) {
+    if let Ok(mut guard) = self.output_sinks.lock() {
+      guard.clear();
+    }
+  }
+
+  /// Attempt to stop the child process.
+  pub fn stop(&mut self) -> anyhow::Result<()> {
+    let _ = self.child.kill();
+    Ok(())
   }
 }

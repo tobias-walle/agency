@@ -4,6 +4,8 @@ use anyhow::{Context, Result};
 use owo_colors::OwoColorize as _;
 
 use crate::config::AppContext;
+use crate::config::compute_socket_path;
+use crate::pty::protocol::{C2D, C2DControl, ProjectKey, write_frame};
 use crate::utils::git::{open_main_repo, remove_worktree_and_branch};
 use crate::utils::task::{branch_name, resolve_id_or_slug, task_file, worktree_dir, worktree_name};
 use crate::utils::term::confirm;
@@ -30,6 +32,22 @@ pub fn run(ctx: &AppContext, ident: &str) -> Result<()> {
       fs::remove_file(&file).with_context(|| format!("failed to remove {}", file.display()))?;
     }
     anstream::println!("{}", "Removed task, branch, and worktree".green());
+
+    // Best-effort notify daemon to stop sessions for this task
+    let socket = compute_socket_path(&ctx.config);
+    if let Ok(mut stream) = std::os::unix::net::UnixStream::connect(&socket) {
+      let repo_root = repo
+        .workdir()
+        .map(|p| p.canonicalize().unwrap_or_else(|_| p.to_path_buf()))
+        .unwrap_or(ctx.paths.cwd().clone());
+      let project = ProjectKey { repo_root: repo_root.display().to_string() };
+      let _ = write_frame(&mut stream, &C2D::Control(C2DControl::StopTask {
+        project,
+        task_id: tref.id,
+        slug: tref.slug.clone(),
+      }));
+      let _ = stream.shutdown(std::net::Shutdown::Both);
+    }
   } else {
     anstream::println!("{}", "Cancelled".yellow());
   }
