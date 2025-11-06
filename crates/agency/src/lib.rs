@@ -20,7 +20,11 @@ pub struct Cli {
 #[derive(Debug, Subcommand)]
 enum Commands {
   /// Create a new task under .agency/tasks
-  New { slug: String },
+  New {
+    slug: String,
+    #[arg(long)]
+    attach: bool,
+  },
   /// Print the absolute worktree path
   Path { ident: String },
   /// Print the branch name
@@ -29,10 +33,28 @@ enum Commands {
   Rm { ident: String },
   /// List tasks (ID and SLUG)
   Ps {},
-  /// Start PTY daemon
-  Daemon {},
-  /// Attach to PTY daemon
-  Attach {},
+  /// Daemon control commands
+  Daemon {
+    #[command(subcommand)]
+    cmd: DaemonCmd,
+  },
+  /// Attach to task via PTY daemon
+  Attach { task: String },
+  /// Stop the active task session via daemon
+  Stop { task: String },
+}
+
+#[derive(Debug, Subcommand)]
+enum DaemonCmd {
+  /// Start the daemon as a background service
+  Start {},
+  /// Stop the daemon gracefully
+  Stop {},
+  /// Restart the daemon
+  Restart {},
+  /// Run the daemon in the foreground (internal)
+  #[command(hide = true)]
+  Run {},
 }
 
 pub fn parse() -> Cli {
@@ -47,8 +69,12 @@ pub fn run() -> Result<()> {
   let ctx = AppContext { paths, config };
 
   match cli.command {
-    Some(Commands::New { slug }) => {
+    Some(Commands::New { slug, attach }) => {
       commands::new::run(&ctx, &slug)?;
+      if attach {
+        commands::daemon::start()?;
+        commands::attach::run_with_task(&ctx, &slug)?;
+      }
     }
     Some(Commands::Path { ident }) => {
       commands::path::run(&ctx, &ident)?;
@@ -62,11 +88,18 @@ pub fn run() -> Result<()> {
     Some(Commands::Ps {}) => {
       commands::ps::run(&ctx)?;
     }
-    Some(Commands::Daemon {}) => {
-      commands::daemon::run()?;
+    Some(Commands::Daemon { cmd }) => match cmd {
+      DaemonCmd::Start {} => commands::daemon::start()?,
+      DaemonCmd::Stop {} => commands::daemon::stop()?,
+      DaemonCmd::Restart {} => commands::daemon::restart()?,
+      DaemonCmd::Run {} => commands::daemon::run_blocking()?,
+    },
+    Some(Commands::Attach { task }) => {
+      commands::attach::run_with_task(&ctx, &task)?;
     }
-    Some(Commands::Attach {}) => {
-      commands::attach::run()?;
+    Some(Commands::Stop { task: _task }) => {
+      // Task validation can be added; currently stop daemon globally
+      commands::daemon::stop()?;
     }
     None => {}
   }

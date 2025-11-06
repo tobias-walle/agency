@@ -15,19 +15,19 @@ use crate::pty::protocol::{
   make_output_channel, read_frame, write_frame,
 };
 use crate::pty::session::Session;
+use crate::utils::command::Command;
 use anyhow::Context;
 use log::{debug, error, info, warn};
 use std::fs;
 use std::io::ErrorKind;
 use std::os::unix::fs::PermissionsExt;
 use std::os::unix::net::{UnixListener, UnixStream};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
-pub fn run_daemon() -> anyhow::Result<()> {
-  let socket_path = Path::new(crate::pty::config::DEFAULT_SOCKET_PATH);
+pub fn run_daemon(socket_path: &Path, cmd: Command) -> anyhow::Result<()> {
   info!("Starting daemon. Socket path: {}", socket_path.display());
   // If another daemon is already running, bail early by attempting a connect.
   if std::os::unix::net::UnixStream::connect(socket_path).is_ok() {
@@ -36,7 +36,7 @@ pub fn run_daemon() -> anyhow::Result<()> {
   }
 
   let (cols, rows) = crossterm::terminal::size().unwrap_or((80, 24));
-  let daemon = Daemon::new(socket_path, rows, cols)?;
+  let daemon = Daemon::new(socket_path, rows, cols, cmd)?;
   daemon.run()
 }
 
@@ -82,6 +82,10 @@ pub struct Daemon {
   session: Arc<Mutex<Session>>,
   /// Current daemon state (Idle or Attached).
   state: Arc<Mutex<DaemonState>>,
+  /// Path to the bound Unix socket for cleanup.
+  socket_path: PathBuf,
+  /// Shutdown flag set when a `Shutdown` control is received.
+  shutdown: Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl Daemon {
@@ -89,14 +93,16 @@ impl Daemon {
   ///
   /// Binds the socket at `socket_path`, creates a `Session` with initial
   /// rows/cols, and sets the listener to non-blocking.
-  pub fn new(socket_path: &Path, rows: u16, cols: u16) -> anyhow::Result<Self> {
+  pub fn new(socket_path: &Path, rows: u16, cols: u16, cmd: Command) -> anyhow::Result<Self> {
     let listener = ensure_socket_dir_and_bind(socket_path)?;
     listener.set_nonblocking(true)?;
-    let session = Arc::new(Mutex::new(Session::new(rows, cols)?));
+    let session = Arc::new(Mutex::new(Session::new(rows, cols, cmd)?));
     Ok(Self {
       listener,
       session,
       state: Arc::new(Mutex::new(DaemonState::Idle)),
+      socket_path: socket_path.to_path_buf(),
+      shutdown: Arc::new(std::sync::atomic::AtomicBool::new(false)),
     })
   }
 
@@ -145,7 +151,7 @@ impl Daemon {
   /// Runs the main accept loop interleaving child exit checks with accepts.
   pub fn run(&self) -> anyhow::Result<()> {
     info!("Daemon running");
-    loop {
+    while !self.shutdown.load(std::sync::atomic::Ordering::Relaxed) {
       // Handle child exit and possible restart + notifications.
       self.poll_child_exit()?;
 
@@ -157,6 +163,10 @@ impl Daemon {
       // Small sleep to avoid busy-spin.
       thread::sleep(Duration::from_millis(50));
     }
+    // Best-effort: remove socket on shutdown
+    let _ = fs::remove_file(&self.socket_path);
+    info!("Daemon shutting down");
+    Ok(())
   }
 
   /// Checks whether the shell child exited, and if so, performs restart.
@@ -204,25 +214,45 @@ impl Daemon {
   /// Handles a newly accepted connection, performing busy-check and handshake,
   /// then attaching the client if valid.
   fn handle_new_connection(&self, mut stream: UnixStream) -> anyhow::Result<()> {
-    // Busy: reject immediately.
-    if self.is_attached() {
-      warn!("Client attempted attach while another is already attached");
-      self.reject_busy(&mut stream)?;
-      return Ok(());
-    }
-
-    // Perform handshake expecting `Attach`.
-    let (rows, cols) = match self.perform_handshake(&mut stream) {
-      Ok((r, c)) => (r, c),
-      Err(e) => {
-        error!("Handshake error: {}", e);
-        return Ok(());
+    // Read first frame which can be Attach or Shutdown
+    match read_frame::<_, C2D>(&mut stream) {
+      Ok(C2D::Control(C2DControl::Attach {
+        rows,
+        cols,
+        task: _,
+        ..
+      })) => {
+        if self.is_attached() {
+          warn!("Client attempted attach while another is already attached");
+          self.reject_busy(&mut stream)?;
+          return Ok(());
+        }
+        self.attach_client(stream, rows, cols)?;
+        Ok(())
       }
-    };
-
-    // Attach
-    self.attach_client(stream, rows, cols)?;
-    Ok(())
+      Ok(C2D::Control(C2DControl::Shutdown)) => {
+        info!("Received Shutdown; stopping daemon loop");
+        self
+          .shutdown
+          .store(true, std::sync::atomic::Ordering::Relaxed);
+        let _ = stream.shutdown(std::net::Shutdown::Both);
+        Ok(())
+      }
+      Ok(other) => {
+        warn!("Unexpected first frame: {:?}", other);
+        let _ = write_frame(
+          &mut stream,
+          &D2C::Control(D2CControl::Error {
+            message: "First frame must be Attach or Shutdown".to_string(),
+          }),
+        );
+        Ok(())
+      }
+      Err(e) => {
+        error!("Handshake read error: {}", e);
+        Ok(())
+      }
+    }
   }
 
   /// Sends a busy error and closes the stream.
@@ -246,6 +276,7 @@ impl Daemon {
         rows,
         cols,
         client_name,
+        ..
       }) => {
         info!(
           "Received Attach: client={:?} size={}x{}",
@@ -400,6 +431,11 @@ impl Daemon {
               }
               C2DControl::Ping { nonce } => {
                 let _ = control_tx.send_pong(nonce);
+              }
+              C2DControl::Shutdown => {
+                // Treat as a detach at the connection level
+                let _ = control_tx.send_goodbye();
+                break;
               }
             },
           }

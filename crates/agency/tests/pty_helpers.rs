@@ -17,7 +17,9 @@ pub fn spawn_daemon(bin: &Path, workdir: &Path) -> anyhow::Result<Child> {
   let mut cmd = Command::new(bin);
   cmd
     .arg("daemon")
+    .arg("run")
     .env("RUST_LOG", "debug")
+    .env("XDG_RUNTIME_DIR", workdir.join("tmp"))
     .current_dir(workdir);
   let child = cmd.spawn().context("failed to spawn daemon")?;
   Ok(child)
@@ -34,13 +36,13 @@ pub fn wait_for_socket(sock: &Path, timeout: Duration) -> anyhow::Result<()> {
   anyhow::bail!("socket not created at {}", sock.display());
 }
 
-pub fn spawn_attach_pty(bin: &Path, workdir: &Path) -> anyhow::Result<Session> {
+pub fn spawn_attach_pty(bin: &Path, workdir: &Path, task_ident: &str) -> anyhow::Result<Session> {
   // Ensure attach runs in the same temp working directory as the daemon
   // so it resolves `./tmp/daemon.sock` correctly.
   let prev = std::env::current_dir()?;
   std::env::set_current_dir(workdir)?;
 
-  let cmd = format!("{} attach", bin.display());
+  let cmd = format!("{} attach {}", bin.display(), task_ident);
   let mut sess = expectrl::spawn(cmd).context("failed to spawn attach client")?;
   sess.set_expect_timeout(Some(Duration::from_secs(2)));
 

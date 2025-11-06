@@ -22,6 +22,9 @@ pub enum C2DControl {
     rows: u16,
     cols: u16,
     client_name: Option<String>,
+    /// Optional task payload carried by the client for the daemon to run.
+    /// When present, the daemon may use it to configure the agent process.
+    task: Option<String>,
   },
   /// Resize notification with new terminal rows/cols.
   Resize { rows: u16, cols: u16 },
@@ -29,6 +32,8 @@ pub enum C2DControl {
   Detach,
   /// Ping for liveness checks carrying a nonce echoed by the daemon.
   Ping { nonce: u64 },
+  /// Request the daemon to shutdown gracefully.
+  Shutdown,
 }
 
 /// Top-level client-to-daemon protocol frames.
@@ -202,11 +207,13 @@ impl C2DControlChannel {
     rows: u16,
     cols: u16,
     client_name: Option<String>,
+    task: Option<String>,
   ) -> Result<(), crossbeam_channel::SendError<C2DControl>> {
     self.tx.send(C2DControl::Attach {
       rows,
       cols,
       client_name,
+      task,
     })
   }
 
@@ -228,6 +235,11 @@ impl C2DControlChannel {
   #[allow(dead_code)]
   pub fn send_ping(&self, nonce: u64) -> Result<(), crossbeam_channel::SendError<C2DControl>> {
     self.tx.send(C2DControl::Ping { nonce })
+  }
+
+  /// Sends a `Shutdown` control.
+  pub fn send_shutdown(&self) -> Result<(), crossbeam_channel::SendError<C2DControl>> {
+    self.tx.send(C2DControl::Shutdown)
   }
 }
 

@@ -1,6 +1,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use crate::utils::command::Command;
 use anyhow::{Context, Result};
 use serde::Deserialize;
 use std::collections::BTreeMap;
@@ -16,10 +17,28 @@ pub struct AgentConfig {
   pub cmd: Vec<String>,
 }
 
+impl AgentConfig {
+  /// Returns the agent command argv, failing if undefined or empty.
+  pub fn get_cmd(&self, name: &str) -> anyhow::Result<Command> {
+    if self.cmd.is_empty() {
+      anyhow::bail!("{name} not defined or empty")
+    }
+    Command::new(&self.cmd)
+  }
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct DaemonConfig {
+  #[serde(default)]
+  pub socket_path: Option<String>,
+}
+
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct AgencyConfig {
   #[serde(default)]
   pub agents: BTreeMap<String, AgentConfig>,
+  #[serde(default)]
+  pub daemon: Option<DaemonConfig>,
 }
 
 #[derive(Debug, Clone)]
@@ -99,4 +118,51 @@ pub fn load_config(cwd: &Path) -> Result<AgencyConfig> {
   let merged_str = toml::to_string(&merged).context("failed to serialize merged config")?;
   let cfg: AgencyConfig = toml::from_str(&merged_str).context("failed to parse merged config")?;
   Ok(cfg)
+}
+
+/// Compute the daemon socket path based on config and environment.
+///
+/// Precedence:
+/// 1) `config.daemon.socket_path` if set
+/// 2) `$XDG_RUNTIME_DIR/agency.sock` if the env var is set
+/// 3) Fallback to `~/.local/run/agency.sock`
+///
+/// Ensures the parent directory exists with 0700 permissions.
+pub fn compute_socket_path(cfg: &AgencyConfig) -> std::path::PathBuf {
+  use std::os::unix::fs::PermissionsExt;
+  use std::path::PathBuf;
+
+  if let Some(ref daemon) = cfg.daemon {
+    if let Some(ref p) = daemon.socket_path {
+      let path = PathBuf::from(p);
+      if let Some(dir) = path.parent() {
+        let _ = std::fs::create_dir_all(dir);
+        let _ = std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700));
+      }
+      return path;
+    }
+  }
+
+  if let Ok(xdg_runtime) = std::env::var("XDG_RUNTIME_DIR") {
+    let mut path = PathBuf::from(xdg_runtime);
+    path.push("agency.sock");
+    if let Some(dir) = path.parent() {
+      let _ = std::fs::create_dir_all(dir);
+      let _ = std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700));
+    }
+    return path;
+  }
+
+  // Fallback: ~/.local/run/agency.sock
+  let mut path = if let Ok(home) = std::env::var("HOME") {
+    PathBuf::from(home)
+  } else {
+    PathBuf::from(".")
+  };
+  path.push(".local");
+  path.push("run");
+  let _ = std::fs::create_dir_all(&path);
+  let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o700));
+  path.push("agency.sock");
+  path
 }

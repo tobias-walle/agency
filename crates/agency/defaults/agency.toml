@@ -4,3 +4,8 @@
 # "$AGENCY_TASK" is a placeholder for the task text.
 [agents.opencode]
 cmd = ["opencode", "--prompt", "$AGENCY_TASK"]
+
+# A minimal, deterministic agent used in local dev and CI.
+# It echoes input back with a prefix and prints a small header.
+[agents.fake]
+cmd = ["./scripts/fake_agent.py", "$AGENCY_TASK"]

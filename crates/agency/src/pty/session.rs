@@ -12,6 +12,7 @@
 //! sent separately during handshake.
 
 use crate::pty::protocol::D2COutputChannel;
+use crate::utils::command::Command;
 use anyhow::Context;
 use portable_pty::{CommandBuilder, ExitStatus, MasterPty, PtySize, native_pty_system};
 use std::io::{Read, Write};
@@ -31,11 +32,12 @@ pub struct Session {
   pub bytes_out: Arc<AtomicU64>,
   pub start: Instant,
   output_sink: Arc<Mutex<Option<D2COutputChannel>>>,
+  cmd: Command,
 }
 
 impl Session {
   /// Create a new session running a shell in a PTY with the given size.
-  pub fn new(rows: u16, cols: u16) -> anyhow::Result<Self> {
+  pub fn new(rows: u16, cols: u16, cmd: Command) -> anyhow::Result<Self> {
     let pty_size = PtySize {
       rows,
       cols,
@@ -45,8 +47,8 @@ impl Session {
     let pty_system = native_pty_system();
     let pair = pty_system.openpty(pty_size)?;
 
-    let cmd = CommandBuilder::new("sh");
-    let child = pair.slave.spawn_command(cmd)?;
+    let builder = Self::build_pty_command_for(&cmd);
+    let child = pair.slave.spawn_command(builder)?;
     drop(pair.slave);
 
     let parser = Arc::new(Mutex::new(vt100::Parser::new(rows, cols, 10_000)));
@@ -70,6 +72,7 @@ impl Session {
       bytes_out,
       start,
       output_sink,
+      cmd,
     };
     sess.start_read_pump();
     Ok(sess)
@@ -88,8 +91,8 @@ impl Session {
     let pty_system = native_pty_system();
     let pair = pty_system.openpty(pty_size)?;
 
-    let cmd = CommandBuilder::new("sh");
-    let child = pair.slave.spawn_command(cmd)?;
+    let builder = Self::build_pty_command_for(&self.cmd);
+    let child = pair.slave.spawn_command(builder)?;
     drop(pair.slave);
 
     let master: Box<dyn MasterPty + Send> = pair.master;
@@ -111,6 +114,18 @@ impl Session {
     self.start_read_pump();
 
     Ok(())
+  }
+
+  /// Build a portable_pty::CommandBuilder from our Command
+  fn build_pty_command_for(cmd: &Command) -> CommandBuilder {
+    let mut builder = CommandBuilder::new(&cmd.program);
+    for a in &cmd.args {
+      builder.arg(a);
+    }
+    // Ensure the child process resolves relative paths based on the original cwd
+    // captured when the Command was created.
+    builder.cwd(&cmd.cwd);
+    builder
   }
 
   /// Spawn a background thread that reads raw bytes from the PTY, updates the
