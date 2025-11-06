@@ -64,6 +64,53 @@ impl SessionRegistry {
     }
   }
 
+  /// Find the most recently created session id for the given project/task tuple.
+  /// Returns `None` if no session exists.
+  pub fn find_latest_session_for_task(
+    &self,
+    project: &ProjectKey,
+    task_id: u32,
+    slug: &str,
+  ) -> Option<u64> {
+    let mut best: Option<(u64, std::time::SystemTime)> = None;
+    for (sid, entry) in self.sessions.iter() {
+      if &entry.meta.project != project
+        || entry.meta.task.id != task_id
+        || entry.meta.task.slug != slug
+      {
+        continue;
+      }
+      let created = entry.meta.created_at;
+      match best {
+        None => best = Some((*sid, created)),
+        Some((_bid, btime)) => {
+          if created > btime {
+            best = Some((*sid, created));
+          }
+        }
+      }
+    }
+    best.map(|(sid, _)| sid)
+  }
+
+  /// Ensure a session is ready to attach.
+  /// If the session has previously exited and has no clients, restart its shell
+  /// with the provided size before attaching.
+  pub fn ensure_running_for_attach(
+    &mut self,
+    session_id: u64,
+    rows: u16,
+    cols: u16,
+  ) -> anyhow::Result<()> {
+    if let Some(entry) = self.sessions.get_mut(&session_id) {
+      if entry.exited_notified && entry.clients.is_empty() {
+        entry.session.restart_shell(rows, cols)?;
+        entry.exited_notified = false;
+      }
+    }
+    Ok(())
+  }
+
   pub fn create_session(
     &mut self,
     meta: SessionOpenMeta,

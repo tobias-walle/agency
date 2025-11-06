@@ -11,8 +11,8 @@
 //!   the shell, and send a fresh `Hello` + `Snapshot`.
 
 use crate::pty::protocol::{
-  C2D, C2DControl, D2C, D2CControl, D2CControlChannel, D2COutputChannel, SessionOpenMeta,
-  make_d2c_control_channel, make_output_channel, read_frame, write_frame,
+  C2D, C2DControl, D2C, D2CControl, D2CControlChannel, SessionOpenMeta, make_d2c_control_channel,
+  make_output_channel, read_frame, write_frame,
 };
 use crate::pty::registry::SessionRegistry;
 use anyhow::Context;
@@ -196,9 +196,18 @@ impl Daemon {
     rows: u16,
     cols: u16,
   ) -> anyhow::Result<()> {
+    // Attempt to find an existing session for the same project/task and reuse it.
     let session_id = {
       let mut reg = self.registry.lock().unwrap();
-      reg.create_session(meta, rows, cols)?
+      if let Some(existing) =
+        reg.find_latest_session_for_task(&meta.project, meta.task.id, &meta.task.slug)
+      {
+        // If the existing session was previously exited and has no clients, restart it.
+        let _ = reg.ensure_running_for_attach(existing, rows, cols);
+        existing
+      } else {
+        reg.create_session(meta, rows, cols)?
+      }
     };
     self.attach_to_session(stream, session_id, rows, cols)
   }
