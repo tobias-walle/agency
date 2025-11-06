@@ -171,7 +171,7 @@ impl Client {
   }
 
   /// Spawns the stdin reader thread that forwards bytes via the input channel.
-  /// Detects Ctrl-C (0x03) to send `Detach` and initiate shutdown.
+  /// Detects Ctrl-Q (0x11) to send `Detach` and initiate shutdown.
   fn spawn_input_thread(&self) -> JoinHandle<()> {
     let send_input = self.input_tx.as_ref().unwrap().clone();
     let send_control = self.control_tx.as_ref().unwrap().clone();
@@ -183,7 +183,7 @@ impl Client {
         match stdin.read(&mut buffer) {
           Ok(0) => continue, // timeout tick
           Ok(count) => {
-            if let Some(ctrl_pos) = buffer[..count].iter().position(|&b| b == 0x03) {
+            if let Some(ctrl_pos) = buffer[..count].iter().position(|&b| b == 0x11) {
               if ctrl_pos > 0 {
                 let _ = send_input.send_input(&buffer[..ctrl_pos]);
               }

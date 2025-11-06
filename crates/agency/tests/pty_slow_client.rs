@@ -31,7 +31,7 @@ fn control_priority_under_heavy_output() -> Result<()> {
   sess.send_line("yes X | head -c 1000000")?;
 
   // Quickly request detach while output is streaming
-  send_ctrl_c(&mut sess)?;
+  send_ctrl_q(&mut sess)?;
 
   // Expect the client to exit promptly (Goodbye processed despite heavy output)
   sess.expect(expectrl::Eof)?;
