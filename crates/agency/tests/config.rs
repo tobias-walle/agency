@@ -87,14 +87,14 @@ fn missing_keys_default_to_empty() -> Result<()> {
   // Provide an empty table to ensure defaulting works
   fs::write(
     project_dir.join("agency.toml"),
-    r#"[agents.fake]
+    r#"[agents.custom]
 "#,
   )?;
 
   let cfg = load_config(dir.path())?;
   // Unknown keys preserved but ignored; ensure array defaults
-  let fake = cfg.agents.get("fake").expect("fake agent present");
-  assert!(fake.cmd.is_empty(), "cmd should default to empty array");
+  let custom = cfg.agents.get("custom").expect("custom agent present");
+  assert!(custom.cmd.is_empty(), "cmd should default to empty array");
   Ok(())
 }
 

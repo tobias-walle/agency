@@ -18,9 +18,14 @@ fn shell_exit_triggers_exited_and_restart() -> Result<()> {
 
   let bin = bin();
   let mut daemon = spawn_daemon(&bin, workdir)?;
-  wait_for_socket(&workdir.join("tmp/daemon.sock"), Duration::from_secs(5))?;
+  wait_for_socket(&workdir.join("tmp/agency.sock"), Duration::from_secs(5))?;
 
-  let mut sess = spawn_attach_pty(&bin, workdir)?;
+  // Prepare a minimal task file
+  let tasks_dir = workdir.join(".agency").join("tasks");
+  std::fs::create_dir_all(&tasks_dir)?;
+  std::fs::write(tasks_dir.join("1-alpha.md"), "# Task 1: alpha\n")?;
+
+  let mut sess = spawn_attach_pty(&bin, workdir, "alpha")?;
   // Allow more time for restart synchronization in this test
   sess.set_expect_timeout(Some(Duration::from_secs(5)));
 

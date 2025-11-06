@@ -87,6 +87,7 @@ Currently installed crates:
 
 ## Testing
 
+- Run tests with `just test`. Don't pass `-q`, it will fail.
 - Keep tests readable and focused on behavior. Extract common functionality into helpers to keep the tests high signal.
 - Highly emphasize actionable assertion output (what, why, actual vs expected).
 - Prefer polling with bounded timeouts over fixed sleeps to reduce flakiness.

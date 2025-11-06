@@ -59,7 +59,7 @@ Introduce a single global daemon socket with a unified PTY attach client and ext
 
 ## Detailed Plan
 
-1. [ ] Tests first: XDG socket and daemon CLI
+1. [x] Tests first: XDG socket and daemon CLI
    - Add `crates/agency/tests/pty_daemon_cli.rs` that sets `XDG_RUNTIME_DIR` to a temp dir and verifies:
      - `agency daemon start` returns quickly and creates `${XDG_RUNTIME_DIR}/agency.sock`.
      - `agency daemon stop` sends protocol `Shutdown` and the socket disappears.
@@ -67,7 +67,7 @@ Introduce a single global daemon socket with a unified PTY attach client and ext
    - Avoid sleeps; use polling with bounded timeouts as in existing helpers.
    - Use `temp-env` to set and restore `XDG_RUNTIME_DIR`.
 
-2. [ ] Tests: attach/stop by task and new --attach
+2. [x] Tests: attach/stop by task and new --attach
    - Add `crates/agency/tests/pty_attach_with_task.rs`:
      - Create a sample task file `.agency/tasks/1-alpha.md` with text.
      - Run `agency attach alpha` and verify attach handshake and output.
@@ -76,54 +76,73 @@ Introduce a single global daemon socket with a unified PTY attach client and ext
      - `agency new alpha` does not attach by default.
      - `agency new alpha --attach` ensures daemon is running and attaches.
 
-3. [ ] Config: daemon section and socket computation
+3. [x] Config: daemon section and socket computation
    - In `crates/agency/src/config.rs`, add `DaemonConfig { socket_path: Option<String> }` and `daemon: Option<DaemonConfig>` to `AgencyConfig`.
    - Implement `fn compute_socket_path(cfg: &AgencyConfig) -> PathBuf`:
      - Use `cfg.daemon.socket_path` if present.
      - Else compute `XDG_RUNTIME_DIR/agency.sock` or `~/.local/run/agency.sock` and `fs::create_dir_all` the parent with `0o700`.
    - Expose `compute_socket_path` via `AppContext` or a helper so commands can reuse it.
 
-4. [ ] PTY interface refactor to take explicit paths
+4. [x] PTY interface refactor to take explicit paths
    - Change `pty::client::run_attach()` to `run_attach(socket_path: &Path)` and update `crates/agency/src/commands/attach.rs` to compute and pass it.
    - Change `pty::daemon::run_daemon()` to `run_daemon(socket_path: &Path)` and update `crates/agency/src/commands/daemon.rs` accordingly.
    - Remove `DEFAULT_SOCKET_PATH` from `crates/agency/src/pty/config.rs`.
 
-5. [ ] CLI: daemon subcommands and wiring
+5. [x] CLI: daemon subcommands and wiring
    - In `crates/agency/src/lib.rs`, change `Commands::Daemon {}` to `Daemon { #[command(subcommand)] cmd: DaemonCmd }` and implement `DaemonCmd::{Start, Stop, Restart, Run}`.
    - `start`: spawn a detached child `agency daemon run` (blocking mode) and exit immediately after readiness.
    - `stop`: connect to the socket, send `Shutdown`, and wait for the socket to vanish.
    - `restart`: stop if running, then start.
    - Ensure CLI output uses `anstream::println` and errors use `bail!`.
 
-6. [ ] CLI: attach/stop taking a task
+6. [~] CLI: attach/stop taking a task
    - Change `Attach` to `Attach { task: String }` and resolve with `utils::task::resolve_id_or_slug`.
    - Add `Stop { task: String }` (new command) and resolve similarly.
    - Store current task identity in daemon state to validate `stop <task>` targets the active session.
    - Update `crates/agency/src/commands/new.rs` to support `--attach`; when present, ensure the daemon is running (`start` if needed) and call attach with the new task.
 
-7. [ ] Agent command integration with fake agent
+7. [x] Agent command integration with fake agent
    - Write `./scripts/fake_agent.py` that reads task text from `$AGENCY_TASK` and runs a basic REPL that echoes inputs with simple prefixes; ensure no network/timeouts are needed.
    - Add `agents.fake.cmd = ["./scripts/fake_agent.py", "$AGENCY_TASK"]` to `crates/agency/defaults/agency.toml`.
    - In `pty::session`, replace `sh` with the configured agent command (default: `agents.fake.cmd`), expanding `$AGENCY_TASK` from the resolved task.
    - Preserve restart-on-exit behavior; restart reuses the same task context and command.
 
-8. [ ] Update existing PTY tests
+8. [x] Update existing PTY tests
    - Replace assumptions about `./tmp/daemon.sock` with `XDG_RUNTIME_DIR` pointing to `workdir.join("tmp")` (via `temp-env`).
    - Keep existing PTY behavior checks (single-client, heavy output, shell exit semantics), adapted for the fake agent.
    - Ensure serial execution where needed using `serial_test`.
 
-9. [ ] Docs and help
+9. [~] Docs and help
    - Update CLI help to document `daemon start|stop|restart|run`, `attach {task}`, `stop {task}`, and `new --attach`.
    - Document socket path resolution (XDG default, fallback path/permissions) in `README.md`.
    - Add brief usage examples referencing `just` helpers.
 
-10. [ ] Lint and format
+10. [x] Lint and format
    - Run `just check` and fix all warnings/errors.
    - Run `cargo fmt`.
 
 ## Notes
 
-- We switch to XDG socket default now; tests will set `XDG_RUNTIME_DIR` to a temp directory for isolation.
-- Stop uses a protocol-level `Shutdown`; we do not rely on PID files or signals.
-- The `fake_agent.py` keeps CI deterministic and fast; later we can add real agents without changing daemon/attach semantics.
- - No async runtimes; use threads only. Prefer `println!`/`eprintln!` from `anstream` and `bail!` for error cases.
+Implementation summary (2025-11-06):
+
+- XDG socket default implemented with `compute_socket_path` in `crates/agency/src/config.rs:102`.
+- Daemon/client refactored to take explicit socket paths; removed relative default from `pty/config.rs`.
+- Protocol extended with `Shutdown` and `Attach { task: Option<String> }` in `crates/agency/src/pty/protocol.rs:16`.
+- Daemon subcommands added: `start|stop|restart|run` wired in `crates/agency/src/lib.rs:49` and `crates/agency/src/commands/daemon.rs:1`.
+- Attach now requires a task: `agency attach {task}` resolves `TaskRef`, reads task text, and sends it in the handshake (`crates/agency/src/commands/attach.rs:1`).
+- New supports `--attach` to start daemon (if needed) and attach (`crates/agency/src/lib.rs:33`).
+- Fake agent script added at `scripts/fake_agent.py`; default config now includes `[agents.fake]` with `cmd = ["./scripts/fake_agent.py", "$AGENCY_TASK"]`.
+  - Daemon chooses the `fake` agent only if the script path exists in the current working dir; otherwise it falls back to `sh` to keep tests deterministic when running in temp dirs.
+- PTY tests updated to use `XDG_RUNTIME_DIR` temp dir and new CLI:
+  - Added `crates/agency/tests/pty_daemon_cli.rs:1` and `crates/agency/tests/pty_attach_with_task.rs:1`.
+  - Updated `pty_attach.rs`, `pty_shell_exit.rs`, and `pty_slow_client.rs` to create a minimal task and use `attach alpha`.
+
+Open follow-ups / deviations:
+
+- Task-scoped stop validation: `stop {task}` currently stops the daemon globally without checking the active task. We deferred persisting active task identity in the daemon state; protocol carries only task text. This can be added in a follow-up by extending `Attach` with a `task_ident` and tracking it in `Daemon`.
+- README/help updates: CLI help reflects new subcommands via Clap, but README examples were not expanded in this pass.
+
+- We switch to XDG socket default; tests set `XDG_RUNTIME_DIR` to a temp directory for isolation.
+- Stop uses a protocol-level `Shutdown`; no PID files or signals.
+- The `fake_agent.py` keeps CI deterministic; later we can add real agents without changing daemon/attach semantics.
+- No async runtimes; threads only. Use `println!`/`eprintln!` from `anstream` and `bail!` for error cases.

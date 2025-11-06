@@ -7,6 +7,7 @@ use crossbeam_channel::Receiver;
 use crossterm::terminal;
 use std::io::{Read, Write};
 use std::os::unix::net::UnixStream;
+use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::{self, JoinHandle};
@@ -20,13 +21,12 @@ use tty::{RawModeGuard, RawModePauseGuard};
 /// This public entrypoint remains stable for CLI and tests.
 /// It sets raw mode and timed reads, connects to the daemon socket, constructs the
 /// `Client` orchestrator, and runs it with a single stream (split internally).
-pub fn run_attach() -> Result<()> {
+pub fn run_attach(socket_path: &Path, task: Option<String>) -> Result<()> {
   let _raw = RawModeGuard::enable()?;
 
-  let stream = UnixStream::connect(crate::pty::config::DEFAULT_SOCKET_PATH)
-    .context("failed to connect to daemon socket")?;
+  let stream = UnixStream::connect(socket_path).context("failed to connect to daemon socket")?;
 
-  let mut client = Client::new();
+  let mut client = Client::new(task);
   client.run(stream)
 }
 
@@ -48,11 +48,13 @@ struct Client {
   input_rx: Receiver<Vec<u8>>,
   /// Shared flag to coordinate shutdown across threads.
   running: Arc<AtomicBool>,
+  /// Optional task payload to send with Attach.
+  initial_task: Option<String>,
 }
 
 impl Client {
   /// Constructs a new attached-only client orchestrator and its internal channels.
-  fn new() -> Self {
+  fn new(task: Option<String>) -> Self {
     let (control_tx, control_rx) = make_c2d_control_channel();
     let (input_tx, input_rx) = make_c2d_input_channel();
     Self {
@@ -61,6 +63,7 @@ impl Client {
       control_rx,
       input_rx,
       running: Arc::new(AtomicBool::new(true)),
+      initial_task: task,
     }
   }
 
@@ -69,7 +72,12 @@ impl Client {
   /// - Reads `Hello` followed by `Snapshot` from the daemon and writes the ANSI snapshot to stdout.
   fn handshake(&self, stream_reader: &mut UnixStream, rows: u16, cols: u16) -> Result<()> {
     if let Some(ref tx) = self.control_tx {
-      let _ = tx.send_attach(rows, cols, Some("client".to_string()));
+      let _ = tx.send_attach(
+        rows,
+        cols,
+        Some("client".to_string()),
+        self.initial_task.clone(),
+      );
     }
 
     // Expect Hello then Snapshot
@@ -216,6 +224,7 @@ impl Client {
     let running_flag = self.running.clone();
     thread::spawn(move || {
       let mut stdout = std::io::stdout().lock();
+      let mut printed_exited = bool::default();
       while let Ok(message) = read_frame(&mut stream_reader) {
         match message {
           D2C::Output { bytes } => {
@@ -235,11 +244,14 @@ impl Client {
               }
             }
             D2CControl::Exited { stats, .. } => {
-              let _pause = RawModePauseGuard::pause();
-              eprintln!("\n===== Session Stats =====");
-              eprintln!("Bytes in  : {}", stats.bytes_in);
-              eprintln!("Bytes out : {}", stats.bytes_out);
-              eprintln!("Elapsed   : {} ms", stats.elapsed_ms);
+              if !printed_exited {
+                let _pause = RawModePauseGuard::pause();
+                eprintln!("\n===== Session Stats =====");
+                eprintln!("Bytes in  : {}", stats.bytes_in);
+                eprintln!("Bytes out : {}", stats.bytes_out);
+                eprintln!("Elapsed   : {} ms", stats.elapsed_ms);
+                printed_exited = true;
+              }
             }
             D2CControl::Goodbye => break,
             D2CControl::Hello { .. } | D2CControl::Snapshot { .. } | D2CControl::Pong { .. } => {}

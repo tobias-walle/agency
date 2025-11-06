@@ -1,12 +1,99 @@
-use anyhow::Result;
+use std::os::unix::net::UnixStream;
+use std::process::Command as ProcCommand;
+use std::thread;
+use std::time::{Duration, Instant};
 
+use anstream::println;
+use anyhow::{Context, Result};
+use owo_colors::OwoColorize as _;
+
+use crate::config::{compute_socket_path, load_config};
 use crate::pty::daemon as pty_daemon;
+use crate::pty::protocol::{C2D, C2DControl, write_frame};
+use crate::utils::command::Command as AgentCommand;
 
-pub fn run() -> Result<()> {
+pub fn run_blocking() -> Result<()> {
   // Initialize env_logger similar to pty-demo main
   let _ = env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
     .format_timestamp_secs()
     .try_init();
 
-  pty_daemon::run_daemon()
+  // Compute socket path from config (project + XDG)
+  let cwd = std::env::current_dir()?;
+  let cfg = load_config(&cwd)?;
+  let socket = compute_socket_path(&cfg);
+
+  // Resolve agent command template
+  let agent_cmd: AgentCommand = cfg
+    .agents
+    .get("fake")
+    .context("Fake agent expected")?
+    .get_cmd("fake")?;
+
+  // dbg!(&agent_cmd);
+
+  pty_daemon::run_daemon(&socket, agent_cmd)
+}
+
+pub fn start() -> Result<()> {
+  let cwd = std::env::current_dir()?;
+  let cfg = load_config(&cwd)?;
+  let socket = compute_socket_path(&cfg);
+
+  if UnixStream::connect(&socket).is_ok() {
+    println!("{}", "Daemon already running".green());
+    return Ok(());
+  }
+
+  // Spawn detached child running `agency daemon run`
+  let exe = std::env::current_exe().context("failed to get current exe")?;
+  let mut cmd = ProcCommand::new(exe);
+  cmd.arg("daemon").arg("run");
+  cmd.stdout(std::process::Stdio::null());
+  cmd.stderr(std::process::Stdio::null());
+  cmd.stdin(std::process::Stdio::null());
+  let _child = cmd.spawn().context("failed to spawn daemon child")?;
+
+  // Poll for readiness
+  let start = Instant::now();
+  while start.elapsed() < Duration::from_secs(5) {
+    if std::fs::metadata(&socket).is_ok() {
+      println!("{} {}", "Started daemon at".green(), socket.display());
+      return Ok(());
+    }
+    thread::sleep(Duration::from_millis(50));
+  }
+  anyhow::bail!(format!(
+    "daemon did not create socket at {} within timeout",
+    socket.display()
+  ))
+}
+
+pub fn stop() -> Result<()> {
+  let cwd = std::env::current_dir()?;
+  let cfg = load_config(&cwd)?;
+  let socket = compute_socket_path(&cfg);
+
+  let mut stream = UnixStream::connect(&socket)
+    .with_context(|| format!("failed to connect to {}", socket.display()))?;
+  write_frame(&mut stream, &C2D::Control(C2DControl::Shutdown))
+    .context("failed to send Shutdown frame")?;
+  let _ = stream.shutdown(std::net::Shutdown::Both);
+
+  // Wait for the socket file to disappear
+  let start = Instant::now();
+  while start.elapsed() < Duration::from_secs(5) {
+    if std::fs::metadata(&socket).is_err() {
+      println!("{}", "Stopped daemon".green());
+      return Ok(());
+    }
+    thread::sleep(Duration::from_millis(50));
+  }
+  anyhow::bail!("daemon socket still present after stop")
+}
+
+pub fn restart() -> Result<()> {
+  // Stop may fail if not running; ignore and proceed
+  let _ = stop();
+  start()
 }

@@ -20,9 +20,14 @@ fn roundtrip_attach_and_detach() -> Result<()> {
   let bin = bin();
   let mut daemon = spawn_daemon(&bin, workdir)?;
 
-  wait_for_socket(&workdir.join("tmp/daemon.sock"), Duration::from_secs(5))?;
+  wait_for_socket(&workdir.join("tmp/agency.sock"), Duration::from_secs(5))?;
 
-  let mut sess = spawn_attach_pty(&bin, workdir)?;
+  // Prepare a minimal task file
+  let tasks_dir = workdir.join(".agency").join("tasks");
+  std::fs::create_dir_all(&tasks_dir)?;
+  std::fs::write(tasks_dir.join("1-alpha.md"), "# Task 1: alpha\n")?;
+
+  let mut sess = spawn_attach_pty(&bin, workdir, "alpha")?;
 
   sess.send_line("echo READY")?;
   sess.expect("READY")?;
@@ -46,15 +51,22 @@ fn reject_second_attach_while_busy() -> Result<()> {
 
   let bin = bin();
   let mut daemon = spawn_daemon(&bin, workdir)?;
-  wait_for_socket(&workdir.join("tmp/daemon.sock"), Duration::from_secs(5))?;
+  wait_for_socket(&workdir.join("tmp/agency.sock"), Duration::from_secs(5))?;
 
   // First attach succeeds
-  let mut sess1 = spawn_attach_pty(&bin, workdir)?;
+  // Minimal task for attaches
+  let tasks_dir = workdir.join(".agency").join("tasks");
+  if !tasks_dir.exists() {
+    std::fs::create_dir_all(&tasks_dir)?;
+  }
+  std::fs::write(tasks_dir.join("1-alpha.md"), "# Task 1: alpha\n")?;
+
+  let mut sess1 = spawn_attach_pty(&bin, workdir, "alpha")?;
   sess1.send_line("echo READY1")?;
   sess1.expect("READY1")?;
 
   // Second attach should be rejected
-  let mut sess2 = spawn_attach_pty(&bin, workdir)?;
+  let mut sess2 = spawn_attach_pty(&bin, workdir, "alpha")?;
   sess2.send_line("echo READY2")?;
   sess2.expect("Another client is attached")?;
 
@@ -63,7 +75,7 @@ fn reject_second_attach_while_busy() -> Result<()> {
   sess1.expect(Eof)?;
 
   // Third attach should now work
-  let mut sess3 = spawn_attach_pty(&bin, workdir)?;
+  let mut sess3 = spawn_attach_pty(&bin, workdir, "alpha")?;
   sess3.send_line("echo OK")?;
   sess3.expect("OK")?;
   send_ctrl_c(&mut sess3)?;
