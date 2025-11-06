@@ -93,7 +93,7 @@ Add the files and commit in a single command, e.g. `git add file1.ts file2.ts &&
 - Always use the macro via the alias (`use anstream::println` and/or `use anstream::eprintln`)
 - Apply styles with `owo-colors::OwoColorize` and avoid asserting colors in tests as they depend on TTY.
 - You MUST use `bail!` for errors, if the should crash the program. They are automatically printed to stderr in red.
-- Make userfacing logs colorful. The user should get a modern feel then using our app.
+- Make userfacing logs colorful. The user should get a modern feel then using our app. But either use the same color for the whole message or highlight specific sections, avoid doing both.
 
 Example:
 
@@ -153,7 +153,7 @@ Then implementing a plan use your TODO list tool to track the progress.
 
 ### Build Mode
 
-Everytime a prompt starts with `BUILD:` you must enter the build mode. 
+Everytime a prompt starts with `BUILD:` you must enter the build mode.
 In the build mode, you fully focus on execution. This might be a plan or a direct task.
 
 Start execution by managing your TODO list and then continue working on them until you are finished with all tasks.

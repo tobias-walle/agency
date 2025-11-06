@@ -46,6 +46,12 @@ pub struct SessionRegistry {
   pub sessions: HashMap<u64, SessionEntry>,
 }
 
+impl Default for SessionRegistry {
+  fn default() -> Self {
+    Self::new()
+  }
+}
+
 impl SessionRegistry {
   pub fn new() -> Self {
     Self {
@@ -102,11 +108,12 @@ impl SessionRegistry {
     rows: u16,
     cols: u16,
   ) -> anyhow::Result<()> {
-    if let Some(entry) = self.sessions.get_mut(&session_id) {
-      if entry.exited_notified && entry.clients.is_empty() {
-        entry.session.restart_shell(rows, cols)?;
-        entry.exited_notified = false;
-      }
+    if let Some(entry) = self.sessions.get_mut(&session_id)
+      && entry.exited_notified
+      && entry.clients.is_empty()
+    {
+      entry.session.restart_shell(rows, cols)?;
+      entry.exited_notified = false;
     }
     Ok(())
   }
@@ -167,20 +174,20 @@ impl SessionRegistry {
   }
 
   pub fn detach_client(&mut self, session_id: u64, client_id: u64) {
-    if let Some(entry) = self.sessions.get_mut(&session_id) {
-      if let Some(att) = entry.clients.remove(&client_id) {
-        entry.session.remove_output_sink(&att.output);
-      }
+    if let Some(entry) = self.sessions.get_mut(&session_id)
+      && let Some(att) = entry.clients.remove(&client_id)
+    {
+      entry.session.remove_output_sink(&att.output);
     }
   }
 
   pub fn list_sessions(&self, project: Option<&ProjectKey>) -> Vec<SessionInfo> {
     let mut out = Vec::new();
     for entry in self.sessions.values() {
-      if let Some(pk) = project {
-        if &entry.meta.project != pk {
-          continue;
-        }
+      if let Some(pk) = project
+        && &entry.meta.project != pk
+      {
+        continue;
       }
       let stats = entry.stats_lite();
       let created_at_ms = entry
@@ -242,7 +249,7 @@ impl SessionRegistry {
     Ok(())
   }
 
-  pub fn stop_task(&mut self, project: &ProjectKey, task_id: u32, slug: &str) {
+  pub fn stop_task(&mut self, project: &ProjectKey, task_id: u32, slug: &str) -> usize {
     let ids: Vec<u64> = self
       .sessions
       .iter()
@@ -251,9 +258,11 @@ impl SessionRegistry {
       })
       .map(|(id, _)| *id)
       .collect();
+    let count = ids.len();
     for sid in ids {
       let _ = self.stop_session(sid);
     }
+    count
   }
 
   pub fn snapshot(&self, session_id: u64) -> Option<(Vec<u8>, (u16, u16))> {

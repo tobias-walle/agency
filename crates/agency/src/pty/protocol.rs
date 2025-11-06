@@ -124,6 +124,8 @@ pub enum D2CControl {
   },
   /// List of sessions returned for a query.
   Sessions { entries: Vec<SessionInfo> },
+  /// Generic acknowledgement with a count (e.g., number of sessions stopped).
+  Ack { stopped: usize },
   /// Goodbye indicates the daemon acknowledges the detach and will close the connection.
   Goodbye,
   /// Error message explaining a protocol or lifecycle issue.
