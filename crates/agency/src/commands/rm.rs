@@ -40,12 +40,17 @@ pub fn run(ctx: &AppContext, ident: &str) -> Result<()> {
         .workdir()
         .map(|p| p.canonicalize().unwrap_or_else(|_| p.to_path_buf()))
         .unwrap_or(ctx.paths.cwd().clone());
-      let project = ProjectKey { repo_root: repo_root.display().to_string() };
-      let _ = write_frame(&mut stream, &C2D::Control(C2DControl::StopTask {
-        project,
-        task_id: tref.id,
-        slug: tref.slug.clone(),
-      }));
+      let project = ProjectKey {
+        repo_root: repo_root.display().to_string(),
+      };
+      let _ = write_frame(
+        &mut stream,
+        &C2D::Control(C2DControl::StopTask {
+          project,
+          task_id: tref.id,
+          slug: tref.slug.clone(),
+        }),
+      );
       let _ = stream.shutdown(std::net::Shutdown::Both);
     }
   } else {
