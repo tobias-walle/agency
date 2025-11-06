@@ -93,6 +93,7 @@ Add the files and commit in a single command, e.g. `git add file1.ts file2.ts &&
 - Always use the macro via the alias (`use anstream::println` and/or `use anstream::eprintln`)
 - Apply styles with `owo-colors::OwoColorize` and avoid asserting colors in tests as they depend on TTY.
 - You MUST use `bail!` for errors, if the should crash the program. They are automatically printed to stderr in red.
+- Make userfacing logs colorful. The user should get a modern feel then using our app.
 
 Example:
 
