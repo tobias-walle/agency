@@ -1,4 +1,6 @@
+use anstream::println;
 use anyhow::{Context, Result};
+use owo_colors::OwoColorize as _;
 use std::os::unix::net::UnixStream;
 
 use crate::config::{AppContext, compute_socket_path};
@@ -16,8 +18,19 @@ pub fn run(ctx: &AppContext, ident: Option<&str>, session_id: Option<u64>) -> Re
       &mut stream,
       &C2D::Control(C2DControl::StopSession { session_id: sid }),
     )?;
-    // Best-effort read Goodbye
-    if let Ok(D2C::Control(D2CControl::Goodbye)) = read_frame(&mut stream) {}
+    // Read Goodbye acknowledgement, then log
+    match read_frame::<_, D2C>(&mut stream) {
+      Ok(D2C::Control(D2CControl::Goodbye)) => {
+        println!("Stopped session {}", sid.to_string().cyan());
+      }
+      Ok(D2C::Control(D2CControl::Error { message })) => {
+        anyhow::bail!(format!("daemon error: {}", message));
+      }
+      _ => {
+        // Silent success if protocol differs; keep user informed
+        println!("Requested stop for session {}", sid.to_string().cyan());
+      }
+    }
     return Ok(());
   }
 
@@ -36,9 +49,30 @@ pub fn run(ctx: &AppContext, ident: Option<&str>, session_id: Option<u64>) -> Re
       &C2D::Control(C2DControl::StopTask {
         project,
         task_id: task.id,
-        slug: task.slug,
+        slug: task.slug.clone(),
       }),
     )?;
+    // Read ack and log count
+    match read_frame::<_, D2C>(&mut stream) {
+      Ok(D2C::Control(D2CControl::Ack { stopped })) => {
+        println!(
+          "Stopped {} session(s) for {}-{}",
+          stopped.to_string().cyan(),
+          task.id,
+          task.slug
+        );
+      }
+      Ok(D2C::Control(D2CControl::Error { message })) => {
+        anyhow::bail!(format!("daemon error: {}", message));
+      }
+      _ => {
+        println!(
+          "Requested stop for task {}-{}",
+          task.id.to_string().cyan(),
+          task.slug
+        );
+      }
+    }
     return Ok(());
   }
 

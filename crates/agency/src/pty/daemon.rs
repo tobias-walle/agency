@@ -162,6 +162,30 @@ impl Daemon {
         let _ = stream.shutdown(std::net::Shutdown::Both);
         Ok(())
       }
+      Ok(C2D::Control(C2DControl::StopSession { session_id })) => {
+        {
+          let mut reg = self.registry.lock().unwrap();
+          let _ = reg.stop_session(session_id);
+        }
+        // Acknowledge with Goodbye for clients expecting it
+        let _ = write_frame(&mut stream, &D2C::Control(D2CControl::Goodbye));
+        let _ = stream.shutdown(std::net::Shutdown::Both);
+        Ok(())
+      }
+      Ok(C2D::Control(C2DControl::StopTask {
+        project,
+        task_id,
+        slug,
+      })) => {
+        let stopped = {
+          let mut reg = self.registry.lock().unwrap();
+          reg.stop_task(&project, task_id, &slug)
+        };
+        // Send acknowledgement with number of sessions stopped
+        let _ = write_frame(&mut stream, &D2C::Control(D2CControl::Ack { stopped }));
+        let _ = stream.shutdown(std::net::Shutdown::Both);
+        Ok(())
+      }
       Ok(C2D::Control(C2DControl::Shutdown)) => {
         info!("Received Shutdown; stopping daemon loop");
         self
@@ -382,7 +406,8 @@ impl Daemon {
                   .restart_session(session_id, rows_now, cols_now);
 
                 // After restart, send a fresh snapshot to the attached client
-                if let Some((ansi, (sr, sc))) = registry_for_reader.lock().unwrap().snapshot(session_id)
+                if let Some((ansi, (sr, sc))) =
+                  registry_for_reader.lock().unwrap().snapshot(session_id)
                 {
                   let _ = control_tx.send_welcome(session_id, sr, sc, ansi);
                 }

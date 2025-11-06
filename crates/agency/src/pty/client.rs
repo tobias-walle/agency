@@ -265,7 +265,7 @@ impl Client {
               }
             }
             D2CControl::Goodbye => break,
-            D2CControl::Sessions { .. } | D2CControl::Pong { .. } => {}
+            D2CControl::Sessions { .. } | D2CControl::Pong { .. } | D2CControl::Ack { .. } => {}
           },
         }
       }
