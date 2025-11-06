@@ -1,5 +1,7 @@
 #![cfg(unix)]
+#![allow(dead_code)]
 
+use std::fs::create_dir_all;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command};
 use std::time::{Duration, Instant};
@@ -8,12 +10,35 @@ use std::{fs, thread};
 use anyhow::Context;
 use expectrl::Expect;
 use expectrl::session::OsSession as Session;
+use fs_extra::file::{self, CopyOptions};
 
 pub fn bin() -> PathBuf {
   assert_cmd::cargo::cargo_bin!("agency").to_path_buf()
 }
 
+pub fn ensure_fake_agent(workdir: &Path) -> anyhow::Result<()> {
+  let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../scripts/fake_agent.py");
+
+  let dst_dir = workdir.join("scripts");
+  create_dir_all(&dst_dir)?;
+
+  let dst = dst_dir.join("fake_agent.py");
+  file::copy(&src, &dst, &CopyOptions::new())
+    .with_context(|| format!("copy {} -> {}", src.display(), dst.display()))?;
+
+  #[cfg(unix)]
+  {
+    use std::os::unix::fs::PermissionsExt as _;
+    let mut perms = std::fs::metadata(&dst)?.permissions();
+    perms.set_mode(0o755);
+    std::fs::set_permissions(&dst, perms)?;
+  }
+  Ok(())
+}
+
 pub fn spawn_daemon(bin: &Path, workdir: &Path) -> anyhow::Result<Child> {
+  // Ensure the test workdir has the fake agent available at ./scripts/fake_agent.py
+  ensure_fake_agent(workdir)?;
   let mut cmd = Command::new(bin);
   cmd
     .arg("daemon")

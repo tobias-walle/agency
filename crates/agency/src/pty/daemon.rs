@@ -267,36 +267,6 @@ impl Daemon {
     Ok(())
   }
 
-  /// Reads the first frame and expects `C2D::Control(C2DControl::Attach)`; returns rows/cols.
-  fn perform_handshake(&self, stream: &mut UnixStream) -> anyhow::Result<(u16, u16)> {
-    info!("Awaiting first frame (Attach)");
-    let first: C2D = read_frame(&mut *stream)?;
-    match first {
-      C2D::Control(C2DControl::Attach {
-        rows,
-        cols,
-        client_name,
-        ..
-      }) => {
-        info!(
-          "Received Attach: client={:?} size={}x{}",
-          client_name, rows, cols
-        );
-        Ok((rows, cols))
-      }
-      other => {
-        warn!("Unexpected first frame: {:?}", other);
-        let _ = write_frame(
-          &mut *stream,
-          &D2C::Control(D2CControl::Error {
-            message: "First frame must be Attach".to_string(),
-          }),
-        );
-        anyhow::bail!("handshake: expected Attach")
-      }
-    }
-  }
-
   /// Attaches the client: applies resize, configures channels, spawns threads,
   /// sends initial `Hello` + `Snapshot`, and supervises lifecycle.
   fn attach_client(&self, stream: UnixStream, rows: u16, cols: u16) -> anyhow::Result<()> {

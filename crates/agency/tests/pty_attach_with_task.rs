@@ -17,6 +17,9 @@ fn attach_and_stop_by_task() -> Result<()> {
   let td = tempdir()?;
   let workdir = td.path();
 
+  // Ensure fake agent is present for daemon
+  ensure_fake_agent(workdir)?;
+
   // Start daemon
   let mut start = std::process::Command::new(bin());
   start.arg("daemon").arg("start");
