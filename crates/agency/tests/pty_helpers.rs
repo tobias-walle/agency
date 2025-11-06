@@ -51,7 +51,8 @@ pub fn spawn_attach_pty(bin: &Path, workdir: &Path, task_ident: &str) -> anyhow:
   Ok(sess)
 }
 
-pub fn send_ctrl_c(sess: &mut Session) -> anyhow::Result<()> {
-  sess.send("\x03")?;
+pub fn send_ctrl_q(sess: &mut Session) -> anyhow::Result<()> {
+  // Ctrl-Q is 0x11 (DC1)
+  sess.send("\x11")?;
   Ok(())
 }

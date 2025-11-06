@@ -13,7 +13,7 @@ def main():
 
     # Print a small header so attach sees something immediately
     print("[agent] Got task:", task)
-    print("[agent] Ready. Type to echo, Ctrl-C to detach.")
+    print("[agent] Ready. Type to echo, Ctrl-Q to detach.")
     sys.stdout.flush()
 
     try:

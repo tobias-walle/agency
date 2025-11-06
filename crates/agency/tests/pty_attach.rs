@@ -32,8 +32,8 @@ fn roundtrip_attach_and_detach() -> Result<()> {
   sess.send_line("echo READY")?;
   sess.expect("READY")?;
 
-  // Detach via Ctrl-C and expect client to exit
-  send_ctrl_c(&mut sess)?;
+  // Detach via Ctrl-Q and expect client to exit
+  send_ctrl_q(&mut sess)?;
   sess.expect(Eof)?;
 
   // Shutdown daemon
@@ -71,14 +71,14 @@ fn reject_second_attach_while_busy() -> Result<()> {
   sess2.expect("Another client is attached")?;
 
   // Detach the first client
-  send_ctrl_c(&mut sess1)?;
+  send_ctrl_q(&mut sess1)?;
   sess1.expect(Eof)?;
 
   // Third attach should now work
   let mut sess3 = spawn_attach_pty(&bin, workdir, "alpha")?;
   sess3.send_line("echo OK")?;
   sess3.expect("OK")?;
-  send_ctrl_c(&mut sess3)?;
+  send_ctrl_q(&mut sess3)?;
   sess3.expect(Eof)?;
 
   let _ = daemon.kill();

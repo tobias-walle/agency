@@ -38,8 +38,8 @@ fn shell_exit_triggers_exited_and_restart() -> Result<()> {
   sess.send_line("echo AFTER")?;
   sess.expect("AFTER")?;
 
-  // Detach via Ctrl-C and expect client to exit
-  send_ctrl_c(&mut sess)?;
+  // Detach via Ctrl-Q and expect client to exit
+  send_ctrl_q(&mut sess)?;
   sess.expect(expectrl::Eof)?;
 
   let _ = daemon.kill();

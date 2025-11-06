@@ -1,7 +1,7 @@
 //! Terminal helpers used by the attach client.
 //!
 //! These helpers explain why raw mode is used.
-//! The client reads stdin and detects a literal Ctrl-C byte to
+//! The client reads stdin and detects a literal Ctrl-Q byte to
 //! translate it into a protocol `Detach` message rather than sending SIGINT to
 //! the client process itself.
 
