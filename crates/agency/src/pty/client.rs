@@ -12,6 +12,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
+use termwiz::input::{InputEvent, InputParser, KeyCode, KeyEvent, Modifiers};
 
 mod tty;
 use tty::{RawModeGuard, RawModePauseGuard};
@@ -157,7 +158,7 @@ impl Client {
   }
 
   /// Spawns the stdin reader thread that forwards bytes via the input channel.
-  /// Detects Ctrl-Q (0x11) to send `Detach` and initiate shutdown.
+  /// Detects Ctrl-Q using termwiz key parsing to send `Detach` and initiate shutdown.
   fn spawn_input_thread(&self) -> JoinHandle<()> {
     let send_input = self.input_tx.as_ref().unwrap().clone();
     let send_control = self.control_tx.as_ref().unwrap().clone();
@@ -167,15 +168,26 @@ impl Client {
     thread::spawn(move || {
       let mut stdin = std::io::stdin().lock();
       let mut buffer = [0u8; 8192];
+      let mut parser = InputParser::new();
       while running_flag.load(Ordering::Relaxed) {
         match stdin.read(&mut buffer) {
           Ok(0) => continue, // timeout tick
           Ok(count) => {
-            // Ctrl-Q (0x11) always detaches immediately
-            if let Some(ctrl_pos) = buffer[..count].iter().position(|&b| b == 0x11) {
-              if ctrl_pos > 0 && !waiting_flag.load(Ordering::Relaxed) {
-                let _ = send_input.send_input(&buffer[..ctrl_pos]);
+            let mut saw_ctrl_q = false;
+            let mut on_event = |event: InputEvent| {
+              if let InputEvent::Key(KeyEvent { key, modifiers, .. }) = event
+                && modifiers.contains(Modifiers::CTRL)
+                && let KeyCode::Char('q') = key
+              {
+                saw_ctrl_q = true;
               }
+            };
+            // Parse with maybe_more=true, then flush with maybe_more=false to
+            // recognize sequences that end at the buffer boundary.
+            parser.parse(&buffer[..count], &mut on_event, true);
+            parser.parse(&[], &mut on_event, false); // Flush the parser
+
+            if saw_ctrl_q {
               let _ = send_control.send_detach();
               running_flag.store(false, Ordering::Relaxed);
               break;
