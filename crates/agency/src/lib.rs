@@ -24,6 +24,9 @@ enum Commands {
     slug: String,
     #[arg(long)]
     attach: bool,
+    /// Skip opening the editor after creating the task file
+    #[arg(long)]
+    no_edit: bool,
   },
   /// Print the absolute worktree path
   Path { ident: String },
@@ -80,8 +83,12 @@ pub fn run() -> Result<()> {
   let ctx = AppContext { paths, config };
 
   match cli.command {
-    Some(Commands::New { slug, attach }) => {
-      commands::new::run(&ctx, &slug)?;
+    Some(Commands::New {
+      slug,
+      attach,
+      no_edit,
+    }) => {
+      commands::new::run(&ctx, &slug, no_edit)?;
       if attach {
         commands::daemon::start()?;
         commands::attach::run_with_task(&ctx, &slug)?;

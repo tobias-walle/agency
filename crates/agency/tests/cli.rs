@@ -15,7 +15,7 @@ fn new_creates_markdown_branch_and_worktree() -> Result<()> {
 
   // Run new
   let mut cmd = env.bin_cmd()?;
-  cmd.arg("new").arg("alpha-task");
+  cmd.arg("new").arg("--no-edit").arg("alpha-task");
   cmd
     .assert()
     .success()
@@ -60,7 +60,7 @@ fn path_prints_absolute_worktree_path_by_id_and_slug() -> Result<()> {
 
   // Create
   let mut cmd = env.bin_cmd()?;
-  cmd.arg("new").arg("beta-task");
+  cmd.arg("new").arg("--no-edit").arg("beta-task");
   cmd.assert().success();
 
   let expected = env
@@ -98,7 +98,7 @@ fn branch_prints_branch_name_by_id_and_slug() -> Result<()> {
 
   // Create
   let mut cmd = env.bin_cmd()?;
-  cmd.arg("new").arg("gamma-task");
+  cmd.arg("new").arg("--no-edit").arg("gamma-task");
   cmd.assert().success();
 
   // by id
@@ -128,7 +128,7 @@ fn rm_confirms_and_removes_on_y_or_y() -> Result<()> {
 
   // Create
   let mut cmd = env.bin_cmd()?;
-  cmd.arg("new").arg("delta-task");
+  cmd.arg("new").arg("--no-edit").arg("delta-task");
   cmd.assert().success();
 
   // Run rm and cancel
@@ -207,7 +207,7 @@ fn new_rejects_slugs_starting_with_digits() -> Result<()> {
   env.simulate_initial_commit()?;
 
   let mut cmd = env.bin_cmd()?;
-  cmd.arg("new").arg("1invalid");
+  cmd.arg("new").arg("--no-edit").arg("1invalid");
   cmd
     .assert()
     .failure()
@@ -224,10 +224,10 @@ fn ps_lists_id_and_slug_in_order() -> Result<()> {
 
   // Create two tasks
   let mut cmd = env.bin_cmd()?;
-  cmd.arg("new").arg("alpha-task");
+  cmd.arg("new").arg("--no-edit").arg("alpha-task");
   cmd.assert().success();
   let mut cmd = env.bin_cmd()?;
-  cmd.arg("new").arg("beta-task");
+  cmd.arg("new").arg("--no-edit").arg("beta-task");
   cmd.assert().success();
 
   // Run ps

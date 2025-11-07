@@ -1,5 +1,7 @@
 use std::fs;
+use std::io::IsTerminal as _;
 use std::path::Path;
+use std::process::Command;
 
 use anstream::println;
 use anyhow::{Context, Result, bail};
@@ -9,7 +11,7 @@ use crate::config::AppContext;
 use crate::utils::git::{add_worktree, ensure_branch, open_main_repo};
 use crate::utils::task::{TaskRef, normalize_and_validate_slug};
 
-pub fn run(ctx: &AppContext, slug: &str) -> Result<()> {
+pub fn run(ctx: &AppContext, slug: &str, no_edit: bool) -> Result<()> {
   let slug = normalize_and_validate_slug(slug)?;
 
   let tasks = ctx.paths.tasks_dir();
@@ -40,6 +42,11 @@ pub fn run(ctx: &AppContext, slug: &str) -> Result<()> {
   add_worktree(&repo, &wt_name, &wt_dir, &branch_ref)?;
 
   println!("Task {} with id {} created ✨", slug.cyan(), id.cyan());
+
+  // Optionally open the task file in the user's editor
+  if std::io::stdout().is_terminal() && !no_edit {
+    open_editor(&file_path)?;
+  }
 
   Ok(())
 }
@@ -84,4 +91,34 @@ fn next_id(tasks: &Path) -> Result<u32> {
     }
   }
   Ok(max_id.saturating_add(1))
+}
+
+fn open_editor(path: &Path) -> Result<()> {
+  // Resolve editor from $EDITOR or fallback to vi
+  let editor = std::env::var("EDITOR").unwrap_or_else(|_| "vi".to_string());
+  let file = path
+    .canonicalize()
+    .unwrap_or_else(|_| path.to_path_buf())
+    .display()
+    .to_string();
+
+  // Parse $EDITOR into program and args using shell-words
+  let tokens = shell_words::split(&editor).context("invalid $EDITOR value")?;
+  if tokens.is_empty() {
+    bail!("invalid $EDITOR value: empty");
+  }
+  let program = &tokens[0];
+  let mut args: Vec<String> = tokens[1..].to_vec();
+  args.push(file);
+
+  // Spawn editor directly, inheriting env vars
+  let status = Command::new(program)
+    .args(&args)
+    .status()
+    .with_context(|| format!("failed to spawn editor program: {program}"))?;
+
+  if !status.success() {
+    bail!("editor exited with non-zero status");
+  }
+  Ok(())
 }
