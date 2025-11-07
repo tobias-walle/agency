@@ -2,6 +2,8 @@ use crate::pty::protocol::{
   C2D, C2DControl, C2DControlChannel, C2DInputChannel, D2C, D2CControl, SessionOpenMeta,
   make_c2d_control_channel, make_c2d_input_channel, read_frame, write_frame,
 };
+use crate::config::AgencyConfig;
+use crate::utils::keybindings::{Keybinding, parse_detach_key};
 use anyhow::{Context, Result, anyhow};
 use crossbeam_channel::Receiver;
 use crossterm::terminal;
@@ -12,7 +14,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
-use termwiz::input::{InputEvent, InputParser, KeyCode, KeyEvent, Modifiers};
+use termwiz::input::{InputEvent, InputParser, KeyEvent};
 
 mod tty;
 use tty::{RawModeGuard, RawModePauseGuard};
@@ -26,12 +28,13 @@ pub fn run_attach(
   socket_path: &Path,
   open: SessionOpenMeta,
   join_session_id: Option<u64>,
+  config: AgencyConfig,
 ) -> Result<()> {
   let _raw = RawModeGuard::enable()?;
 
   let stream = UnixStream::connect(socket_path).context("failed to connect to daemon socket")?;
 
-  let mut client = Client::new(open, join_session_id);
+  let mut client = Client::new(open, join_session_id, config);
   client.run(stream)
 }
 
@@ -61,13 +64,18 @@ struct Client {
   session_id: Option<u64>,
   /// Indicates we should swallow input until Enter and then request a restart.
   waiting_for_restart: Arc<AtomicBool>,
+  /// Full application config
+  config: AgencyConfig,
+  /// Computed detach keybinding from config
+  detach: Keybinding,
 }
 
 impl Client {
   /// Constructs a new attached-only client orchestrator and its internal channels.
-  fn new(open: SessionOpenMeta, join_session: Option<u64>) -> Self {
+  fn new(open: SessionOpenMeta, join_session: Option<u64>, config: AgencyConfig) -> Self {
     let (control_tx, control_rx) = make_c2d_control_channel();
     let (input_tx, input_rx) = make_c2d_input_channel();
+    let detach = parse_detach_key(&config).expect("invalid detach keybinding in config");
     Self {
       control_tx: Some(control_tx),
       input_tx: Some(input_tx),
@@ -78,6 +86,8 @@ impl Client {
       join_session,
       session_id: None,
       waiting_for_restart: Arc::new(AtomicBool::new(false)),
+      config,
+      detach,
     }
   }
 
@@ -165,6 +175,7 @@ impl Client {
     let running_flag = self.running.clone();
     let waiting_flag = self.waiting_for_restart.clone();
     let session_id_for_restart = self.session_id;
+    let detach_binding = self.detach.clone();
     thread::spawn(move || {
       let mut stdin = std::io::stdin().lock();
       let mut buffer = [0u8; 8192];
@@ -173,13 +184,12 @@ impl Client {
         match stdin.read(&mut buffer) {
           Ok(0) => continue, // timeout tick
           Ok(count) => {
-            let mut saw_ctrl_q = false;
+            let mut saw_detach = false;
             let mut on_event = |event: InputEvent| {
               if let InputEvent::Key(KeyEvent { key, modifiers, .. }) = event
-                && modifiers.contains(Modifiers::CTRL)
-                && let KeyCode::Char('q') = key
+                && detach_binding.matches(modifiers, &key)
               {
-                saw_ctrl_q = true;
+                saw_detach = true;
               }
             };
             // Parse with maybe_more=true, then flush with maybe_more=false to
@@ -187,7 +197,7 @@ impl Client {
             parser.parse(&buffer[..count], &mut on_event, true);
             parser.parse(&[], &mut on_event, false); // Flush the parser
 
-            if saw_ctrl_q {
+            if saw_detach {
               let _ = send_control.send_detach();
               running_flag.store(false, Ordering::Relaxed);
               break;
