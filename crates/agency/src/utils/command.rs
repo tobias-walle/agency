@@ -1,4 +1,5 @@
 use anyhow::{Result, bail};
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -38,40 +39,14 @@ impl Command {
 
 /// Expand "$VAR" references in argv using the given env map. Does not support ${} forms.
 pub fn expand_vars_in_argv(argv: &[String], env: &HashMap<String, String>) -> Vec<String> {
+  let re = Regex::new(r"\$([A-Za-z_][A-Za-z0-9_]*)").expect("valid var regex");
   argv
     .iter()
-    .map(|s| {
-      let mut out = String::new();
-      let bytes = s.as_bytes();
-      let mut i = 0;
-      while i < bytes.len() {
-        if bytes[i] == b'$' {
-          // capture variable name [A-Za-z_][A-Za-z0-9_]*
-          let mut j = i + 1;
-          while j < bytes.len() {
-            let c = bytes[j] as char;
-            if j == i + 1 {
-              if !(c.is_ascii_alphabetic() || c == '_') {
-                break;
-              }
-            } else if !(c.is_ascii_alphanumeric() || c == '_') {
-              break;
-            }
-            j += 1;
-          }
-          if j > i + 1 {
-            let key = &s[i + 1..j];
-            if let Some(val) = env.get(key) {
-              out.push_str(val);
-            }
-            i = j;
-            continue;
-          }
-        }
-        out.push(bytes[i] as char);
-        i += 1;
-      }
-      out
+    .map(|input| {
+      re.replace_all(input, |caps: &regex::Captures| {
+        env.get(&caps[1]).map_or("", String::as_str)
+      })
+      .to_string()
     })
     .collect()
 }
@@ -79,8 +54,10 @@ pub fn expand_vars_in_argv(argv: &[String], env: &HashMap<String, String>) -> Ve
 #[cfg(test)]
 mod tests {
   use super::Command;
+  use super::expand_vars_in_argv;
   use crate::config::AgentConfig;
   use anyhow::Result;
+  use std::collections::HashMap;
 
   #[test]
   fn command_new_errors_on_empty() {
@@ -128,5 +105,37 @@ mod tests {
     let err = ac.get_cmd("x").expect_err("should fail");
     let msg = err.to_string();
     assert!(msg.contains("not defined"));
+  }
+
+  #[test]
+  fn expand_vars_in_argv_supports_sh_dash_c_with_task() {
+    let mut env = HashMap::new();
+    env.insert("AGENCY_TASK".to_string(), "Do something".to_string());
+    let argv = vec![
+      "sh".to_string(),
+      "-c".to_string(),
+      "echo Task: $AGENCY_TASK".to_string(),
+    ];
+    let expanded = expand_vars_in_argv(&argv, &env);
+    assert_eq!(expanded[0], "sh");
+    assert_eq!(expanded[1], "-c");
+    assert_eq!(expanded[2], "echo Task: Do something");
+  }
+
+  #[test]
+  fn expand_vars_in_argv_unknown_var_becomes_empty_string() {
+    let env = HashMap::new();
+    let argv = vec!["echo".to_string(), "$UNKNOWN".to_string()];
+    let expanded = expand_vars_in_argv(&argv, &env);
+    assert_eq!(expanded, vec!["echo", ""]);
+  }
+
+  #[test]
+  fn expand_vars_in_argv_mixed_text_expands_inline() {
+    let mut env = HashMap::new();
+    env.insert("AGENCY_TASK".to_string(), "X".to_string());
+    let argv = vec!["echo".to_string(), "pre-$AGENCY_TASK-post".to_string()];
+    let expanded = expand_vars_in_argv(&argv, &env);
+    assert_eq!(expanded, vec!["echo", "pre-X-post"]);
   }
 }
