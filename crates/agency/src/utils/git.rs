@@ -23,14 +23,13 @@ pub fn ensure_branch<'a>(repo: &'a Repository, name: &str) -> Result<Branch<'a>>
   let commit = head
     .peel_to_commit()
     .context("failed to peel HEAD to commit")?;
-  match repo.find_branch(name, BranchType::Local) {
-    Ok(b) => Ok(b),
-    Err(_) => {
-      let b = repo
-        .branch(name, &commit, false)
-        .context("failed to create branch")?;
-      Ok(b)
-    }
+  if let Ok(b) = repo.find_branch(name, BranchType::Local) {
+    Ok(b)
+  } else {
+    let b = repo
+      .branch(name, &commit, false)
+      .context("failed to create branch")?;
+    Ok(b)
   }
 }
 
@@ -44,7 +43,7 @@ pub fn add_worktree(
     bail!("worktree path {} already exists", wt_path.display());
   }
   if repo.find_worktree(wt_name).is_ok() {
-    bail!("worktree {} already exists", wt_name);
+    bail!("worktree {wt_name} already exists");
   }
   let mut opts = WorktreeAddOptions::new();
   opts.reference(Some(branch_ref));

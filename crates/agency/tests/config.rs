@@ -87,8 +87,8 @@ fn missing_keys_default_to_empty() -> Result<()> {
   // Provide an empty table to ensure defaulting works
   fs::write(
     project_dir.join("agency.toml"),
-    r#"[agents.custom]
-"#,
+    r"[agents.custom]
+",
   )?;
 
   let cfg = load_config(dir.path())?;
@@ -113,7 +113,6 @@ fn invalid_toml_fails_with_actionable_error() {
   let msg = err.to_string();
   assert!(
     msg.contains("invalid TOML"),
-    "error should mention invalid TOML: {}",
-    msg
+    "error should mention invalid TOML: {msg}"
   );
 }

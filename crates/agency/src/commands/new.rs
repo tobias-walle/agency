@@ -19,21 +19,21 @@ pub fn run(ctx: &AppContext, slug: &str) -> Result<()> {
   }
 
   if slug_exists(&tasks, &slug)? {
-    bail!("Task with slug {} already exists", slug);
+    bail!("Task with slug {slug} already exists");
   }
 
   let id = next_id(&tasks)?;
-  let file_path = tasks.join(format!("{}-{}.md", id, slug));
-  let content = format!("# Task {}: {}\n", id, slug);
+  let file_path = tasks.join(format!("{id}-{slug}.md"));
+  let content = format!("# Task {id}: {slug}\n");
   fs::write(&file_path, content)
     .with_context(|| format!("failed to write {}", file_path.display()))?;
 
   // Git: open main repo, ensure branch, add worktree
   let repo = open_main_repo(ctx.paths.cwd())?;
-  let branch_name = format!("agency/{}-{}", id, slug);
+  let branch_name = format!("agency/{id}-{slug}");
   let branch = ensure_branch(&repo, &branch_name)?;
   let branch_ref = branch.into_reference();
-  let wt_name = format!("{}-{}", id, slug);
+  let wt_name = format!("{id}-{slug}");
   let wt_root = ctx.paths.worktrees_dir();
   let _ = ensure_dir(&wt_root)?;
   let wt_dir = wt_root.join(&wt_name);

@@ -10,7 +10,7 @@ _list:
 
 # Run the tests with nextest
 test *ARGS:
-  cargo nextest run {{ARGS}}
+  cargo nextest run --cargo-quiet --status-level leak {{ARGS}}
 
 # Check for compiler or linting errors
 check:
@@ -22,5 +22,5 @@ fmt:
 
 # Fix the linting errors and formatting
 fix:
-  cargo clippy -q --allow-dirty --allow-staged --all-targets --fix -- -W clippy::pedantic
+  cargo clippy -q --allow-dirty --allow-staged --all-targets --fix -- -W clippy::pedantic -A clippy::missing-errors-doc
   just fmt

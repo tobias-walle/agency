@@ -130,7 +130,7 @@ impl Daemon {
       }
       Err(e) if e.kind() == ErrorKind::WouldBlock => Ok(None),
       Err(e) => {
-        error!("Accept error: {}", e);
+        error!("Accept error: {e}");
         thread::sleep(Duration::from_millis(200));
         Ok(None)
       }
@@ -195,7 +195,7 @@ impl Daemon {
         Ok(())
       }
       Ok(other) => {
-        warn!("Unexpected first frame: {:?}", other);
+        warn!("Unexpected first frame: {other:?}");
         let _ = write_frame(
           &mut stream,
           &D2C::Control(D2CControl::Error {
@@ -206,7 +206,7 @@ impl Daemon {
         Ok(())
       }
       Err(e) => {
-        error!("Handshake read error: {}", e);
+        error!("Handshake read error: {e}");
         Ok(())
       }
     }
@@ -288,7 +288,7 @@ impl Daemon {
         reg.detach_client(session_id, client_id);
       }
       let _ = writer.join();
-      info!("Detached client {} from session {}", client_id, session_id);
+      info!("Detached client {client_id} from session {session_id}");
     });
 
     Ok(())
@@ -312,7 +312,7 @@ impl Daemon {
         loop {
           while let Ok(cm) = control_rx.try_recv() {
             if let Err(e) = write_frame(&mut stream_writer, &D2C::Control(cm)) {
-              error!("Writer: control frame send error: {}", e);
+              error!("Writer: control frame send error: {e}");
               return;
             }
           }
@@ -321,7 +321,7 @@ impl Daemon {
                   match msg {
                       Ok(cm) => {
                           if let Err(e) = write_frame(&mut stream_writer, &D2C::Control(cm)) {
-                              error!("Writer: control send error: {}", e);
+                              error!("Writer: control send error: {e}");
                               break;
                           }
                       }
@@ -332,7 +332,7 @@ impl Daemon {
                   match msg {
                       Ok(bytes) => {
                           if let Err(e) = write_frame(&mut stream_writer, &D2C::Output { bytes }) {
-                              error!("Writer: output send error: {}", e);
+                              error!("Writer: output send error: {e}");
                               break;
                           }
                       }
@@ -364,7 +364,7 @@ impl Daemon {
           let msg: C2D = match read_frame(&mut stream_reader) {
             Ok(m) => m,
             Err(e) => {
-              warn!("Reader: read_frame error or disconnect: {}", e);
+              warn!("Reader: read_frame error or disconnect: {e}");
               break;
             }
           };
@@ -396,8 +396,7 @@ impl Daemon {
                   .lock()
                   .unwrap()
                   .snapshot(session_id)
-                  .map(|(_, sz)| sz)
-                  .unwrap_or((24, 80));
+                  .map_or((24, 80), |(_, sz)| sz);
 
                 // Restart the shell with the current size
                 let _ = registry_for_reader

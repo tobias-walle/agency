@@ -61,7 +61,7 @@ pub fn resolve_id_or_slug(paths: &AgencyPaths, ident: &str) -> Result<TaskRef> {
         return Ok(tf);
       }
     }
-    bail!("task with id {} not found", ident);
+    bail!("task with id {ident} not found");
   } else {
     let slug = ident.to_string();
     for entry in
@@ -74,7 +74,7 @@ pub fn resolve_id_or_slug(paths: &AgencyPaths, ident: &str) -> Result<TaskRef> {
         return Ok(tf);
       }
     }
-    bail!("task with slug {} not found", ident);
+    bail!("task with slug {ident} not found");
   }
 }
 

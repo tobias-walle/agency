@@ -34,6 +34,7 @@ pub struct SessionEntry {
 }
 
 impl SessionEntry {
+  #[must_use]
   pub fn stats_lite(&self) -> SessionStatsLite {
     self.session.stats_lite()
   }
@@ -53,6 +54,7 @@ impl Default for SessionRegistry {
 }
 
 impl SessionRegistry {
+  #[must_use]
   pub fn new() -> Self {
     Self {
       next_session_id: 1,
@@ -72,6 +74,7 @@ impl SessionRegistry {
 
   /// Find the most recently created session id for the given project/task tuple.
   /// Returns `None` if no session exists.
+  #[must_use]
   pub fn find_latest_session_for_task(
     &self,
     project: &ProjectKey,
@@ -79,7 +82,7 @@ impl SessionRegistry {
     slug: &str,
   ) -> Option<u64> {
     let mut best: Option<(u64, std::time::SystemTime)> = None;
-    for (sid, entry) in self.sessions.iter() {
+    for (sid, entry) in &self.sessions {
       if &entry.meta.project != project
         || entry.meta.task.id != task_id
         || entry.meta.task.slug != slug
@@ -181,6 +184,7 @@ impl SessionRegistry {
     }
   }
 
+  #[must_use]
   pub fn list_sessions(&self, project: Option<&ProjectKey>) -> Vec<SessionInfo> {
     let mut out = Vec::new();
     for entry in self.sessions.values() {
@@ -265,6 +269,7 @@ impl SessionRegistry {
     count
   }
 
+  #[must_use]
   pub fn snapshot(&self, session_id: u64) -> Option<(Vec<u8>, (u16, u16))> {
     self.sessions.get(&session_id).map(|e| e.session.snapshot())
   }
@@ -272,7 +277,7 @@ impl SessionRegistry {
   /// Scan sessions for exited children and return list to notify.
   pub fn collect_exited(&mut self) -> Vec<(u64, SessionStatsLite)> {
     let mut out = Vec::new();
-    for (sid, entry) in self.sessions.iter_mut() {
+    for (sid, entry) in &mut self.sessions {
       if entry.exited_notified {
         continue;
       }
