@@ -39,6 +39,8 @@ pub struct AgencyConfig {
   pub agents: BTreeMap<String, AgentConfig>,
   #[serde(default)]
   pub daemon: Option<DaemonConfig>,
+  #[serde(default)]
+  pub keybindings: Option<KeybindingsConfig>,
 }
 
 #[derive(Debug, Clone)]
@@ -68,6 +70,11 @@ impl AgencyPaths {
 pub struct AppContext {
   pub paths: AgencyPaths,
   pub config: AgencyConfig,
+}
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct KeybindingsConfig {
+  #[serde(default)]
+  pub detach: String,
 }
 
 fn merge_values(base: &mut TomlValue, overlay: TomlValue) {

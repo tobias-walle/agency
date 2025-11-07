@@ -58,6 +58,7 @@ Add the files and commit in a single command, e.g. `git add file1.ts file2.ts &&
 - Indent code always with 2 spaces
 - Prefer ASCII punctuation in docs and code. Avoid long dashes (—), semicolons (;) and Unicode arrows (→, ↔); use `-`, `->`, `<->` instead.
 - Never use single letter variable names if they span more than 3 lines
+- You SHOULD merge nested ifs together if possible (Hint: `if let ...` is now supported with `&&` and `||`)
 
 ## Dependencies
 
@@ -69,6 +70,7 @@ Add the files and commit in a single command, e.g. `git add file1.ts file2.ts &&
 ## Testing
 
 - Run tests with `just test`. Don't pass `-q`, it will fail.
+- You MUST put unit tests into the same file as this is a Rust best practice
 - Keep tests readable and focused on behavior. Extract common functionality into helpers to keep the tests high signal.
 - Highly emphasize actionable assertion output (what, why, actual vs expected).
 - Prefer polling with bounded timeouts over fixed sleeps to reduce flakiness.
@@ -140,6 +142,8 @@ Structure your final plan into the following sections (replace placeholders in `
 - `[how does the system currently work (based on your research). Make sure to directly reference relevant files and code snippets.]`
 - `## Solution`
 - `[how will the behavior be changed to solve the problem (in bullet points). Stay high level and focus on architecture and avoid verbose Implementation details.]`
+- `## Architecture`
+- `[overview of the new, modified and deleted files and symbols in a tree of bullet points. Should be more detailed then solution for a quick review of a Tech Lead.]`
 - `## Detailed Plan`
 - `HINT: Update checkboxes during the implementation and add short implementation notes (including problems that occurred on how they were solved)`
 - `[Numbered, Step by step plan on how to implement the solution. Mention relevant files and code changes in relatively high detail. Make sure the order makes sense. Keep Testing and TDD in mind and always start with tests. Add empty mardown checkboxes '[ ]' before each step for later update.]`
