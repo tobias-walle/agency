@@ -1,8 +1,8 @@
+use crate::config::AgencyConfig;
 use crate::pty::protocol::{
   C2D, C2DControl, C2DControlChannel, C2DInputChannel, D2C, D2CControl, SessionOpenMeta,
   make_c2d_control_channel, make_c2d_input_channel, read_frame, write_frame,
 };
-use crate::config::AgencyConfig;
 use crate::utils::keybindings::{Keybinding, parse_detach_key};
 use anyhow::{Context, Result, anyhow};
 use crossbeam_channel::Receiver;
@@ -64,8 +64,6 @@ struct Client {
   session_id: Option<u64>,
   /// Indicates we should swallow input until Enter and then request a restart.
   waiting_for_restart: Arc<AtomicBool>,
-  /// Full application config
-  config: AgencyConfig,
   /// Computed detach keybinding from config
   detach: Keybinding,
 }
@@ -86,7 +84,6 @@ impl Client {
       join_session,
       session_id: None,
       waiting_for_restart: Arc::new(AtomicBool::new(false)),
-      config,
       detach,
     }
   }
@@ -115,7 +112,7 @@ impl Client {
         Ok(())
       }
       D2C::Control(D2CControl::Error { message }) => {
-        eprintln!("Daemon error: {}", message);
+        eprintln!("Daemon error: {message}");
         Err(anyhow!(message))
       }
       other => {
@@ -262,7 +259,7 @@ impl Client {
           }
           D2C::Control(cm) => match cm {
             D2CControl::Error { message } => {
-              eprintln!("Daemon error: {}", message);
+              eprintln!("Daemon error: {message}");
               break;
             }
             D2CControl::Welcome { .. } => {

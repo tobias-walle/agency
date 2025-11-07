@@ -37,7 +37,7 @@ pub fn parse_binding_str(s: &str) -> Result<Keybinding> {
   if s.is_empty() {
     bail!("empty keybinding string")
   }
-  if s.chars().any(|c| c.is_whitespace()) {
+  if s.chars().any(char::is_whitespace) {
     bail!("whitespace not allowed in keybinding: '{s}'")
   }
 
@@ -57,8 +57,13 @@ pub fn parse_binding_str(s: &str) -> Result<Keybinding> {
       if key_tok.chars().count() != 1 {
         bail!("key must be a single character in '{s}'")
       }
-      if ch.is_uppercase() { mods |= Modifiers::SHIFT; }
-      Ok(Keybinding { mods, key: KeyCode::Char(ch) })
+      if ch.is_uppercase() {
+        mods |= Modifiers::SHIFT;
+      }
+      Ok(Keybinding {
+        mods,
+        key: KeyCode::Char(ch),
+      })
     }
   }
 }

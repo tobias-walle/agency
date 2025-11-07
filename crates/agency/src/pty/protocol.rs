@@ -187,8 +187,8 @@ pub struct D2CControlChannel {
 
 impl D2CControlChannel {
   /// Sends any control message (internal helper for broadcast paths).
-  pub fn send(&self, msg: D2CControl) -> Result<(), crossbeam_channel::SendError<D2CControl>> {
-    self.tx.send(msg)
+  pub fn send(&self, msg: D2CControl) -> Result<(), Box<crossbeam_channel::SendError<D2CControl>>> {
+    self.tx.send(msg).map_err(Box::new)
   }
   /// Sends a `Welcome` control message with session id and initial snapshot.
   pub fn send_welcome(
@@ -197,13 +197,16 @@ impl D2CControlChannel {
     rows: u16,
     cols: u16,
     ansi: Vec<u8>,
-  ) -> Result<(), crossbeam_channel::SendError<D2CControl>> {
-    self.tx.send(D2CControl::Welcome {
-      session_id,
-      rows,
-      cols,
-      ansi,
-    })
+  ) -> Result<(), Box<crossbeam_channel::SendError<D2CControl>>> {
+    self
+      .tx
+      .send(D2CControl::Welcome {
+        session_id,
+        rows,
+        cols,
+        ansi,
+      })
+      .map_err(Box::new)
   }
 
   /// Sends an `Exited` control message with stats.
@@ -212,38 +215,47 @@ impl D2CControlChannel {
     code: Option<i32>,
     signal: Option<i32>,
     stats: SessionStatsLite,
-  ) -> Result<(), crossbeam_channel::SendError<D2CControl>> {
-    self.tx.send(D2CControl::Exited {
-      code,
-      signal,
-      stats,
-    })
+  ) -> Result<(), Box<crossbeam_channel::SendError<D2CControl>>> {
+    self
+      .tx
+      .send(D2CControl::Exited {
+        code,
+        signal,
+        stats,
+      })
+      .map_err(Box::new)
   }
 
   /// Sends a `Sessions` control message.
   pub fn send_sessions(
     &self,
     entries: Vec<SessionInfo>,
-  ) -> Result<(), crossbeam_channel::SendError<D2CControl>> {
-    self.tx.send(D2CControl::Sessions { entries })
+  ) -> Result<(), Box<crossbeam_channel::SendError<D2CControl>>> {
+    self
+      .tx
+      .send(D2CControl::Sessions { entries })
+      .map_err(Box::new)
   }
 
   /// Sends a `Goodbye` control message.
-  pub fn send_goodbye(&self) -> Result<(), crossbeam_channel::SendError<D2CControl>> {
-    self.tx.send(D2CControl::Goodbye)
+  pub fn send_goodbye(&self) -> Result<(), Box<crossbeam_channel::SendError<D2CControl>>> {
+    self.tx.send(D2CControl::Goodbye).map_err(Box::new)
   }
 
   /// Sends a `Pong` response.
-  pub fn send_pong(&self, nonce: u64) -> Result<(), crossbeam_channel::SendError<D2CControl>> {
-    self.tx.send(D2CControl::Pong { nonce })
+  pub fn send_pong(&self, nonce: u64) -> Result<(), Box<crossbeam_channel::SendError<D2CControl>>> {
+    self.tx.send(D2CControl::Pong { nonce }).map_err(Box::new)
   }
 
   /// Sends an `Error` control message.
   pub fn send_error(
     &self,
     message: String,
-  ) -> Result<(), crossbeam_channel::SendError<D2CControl>> {
-    self.tx.send(D2CControl::Error { message })
+  ) -> Result<(), Box<crossbeam_channel::SendError<D2CControl>>> {
+    self
+      .tx
+      .send(D2CControl::Error { message })
+      .map_err(Box::new)
   }
 }
 
@@ -256,6 +268,7 @@ pub struct D2COutputChannel {
 
 impl D2COutputChannel {
   /// Attempts to enqueue output bytes without blocking.
+  #[must_use]
   pub fn try_send_bytes(&self, bytes: &[u8]) -> bool {
     match self.tx.try_send(bytes.to_vec()) {
       Ok(()) => true,
@@ -279,8 +292,11 @@ impl C2DControlChannel {
     meta: SessionOpenMeta,
     rows: u16,
     cols: u16,
-  ) -> Result<(), crossbeam_channel::SendError<C2DControl>> {
-    self.tx.send(C2DControl::OpenSession { meta, rows, cols })
+  ) -> Result<(), Box<crossbeam_channel::SendError<C2DControl>>> {
+    self
+      .tx
+      .send(C2DControl::OpenSession { meta, rows, cols })
+      .map_err(Box::new)
   }
 
   /// Sends a `JoinSession` request for an existing session id.
@@ -289,17 +305,20 @@ impl C2DControlChannel {
     session_id: u64,
     rows: u16,
     cols: u16,
-  ) -> Result<(), crossbeam_channel::SendError<C2DControl>> {
-    self.tx.send(C2DControl::JoinSession {
-      session_id,
-      rows,
-      cols,
-    })
+  ) -> Result<(), Box<crossbeam_channel::SendError<C2DControl>>> {
+    self
+      .tx
+      .send(C2DControl::JoinSession {
+        session_id,
+        rows,
+        cols,
+      })
+      .map_err(Box::new)
   }
 
   /// Sends a `Detach` request.
-  pub fn send_detach(&self) -> Result<(), crossbeam_channel::SendError<C2DControl>> {
-    self.tx.send(C2DControl::Detach)
+  pub fn send_detach(&self) -> Result<(), Box<crossbeam_channel::SendError<C2DControl>>> {
+    self.tx.send(C2DControl::Detach).map_err(Box::new)
   }
 
   /// Sends a `Resize` notification.
@@ -307,24 +326,33 @@ impl C2DControlChannel {
     &self,
     rows: u16,
     cols: u16,
-  ) -> Result<(), crossbeam_channel::SendError<C2DControl>> {
-    self.tx.send(C2DControl::Resize { rows, cols })
+  ) -> Result<(), Box<crossbeam_channel::SendError<C2DControl>>> {
+    self
+      .tx
+      .send(C2DControl::Resize { rows, cols })
+      .map_err(Box::new)
   }
 
   /// Sends a `RestartSession` request.
   pub fn send_restart_session(
     &self,
     session_id: u64,
-  ) -> Result<(), crossbeam_channel::SendError<C2DControl>> {
-    self.tx.send(C2DControl::RestartSession { session_id })
+  ) -> Result<(), Box<crossbeam_channel::SendError<C2DControl>>> {
+    self
+      .tx
+      .send(C2DControl::RestartSession { session_id })
+      .map_err(Box::new)
   }
 
   /// Sends a `StopSession` request.
   pub fn send_stop_session(
     &self,
     session_id: u64,
-  ) -> Result<(), crossbeam_channel::SendError<C2DControl>> {
-    self.tx.send(C2DControl::StopSession { session_id })
+  ) -> Result<(), Box<crossbeam_channel::SendError<C2DControl>>> {
+    self
+      .tx
+      .send(C2DControl::StopSession { session_id })
+      .map_err(Box::new)
   }
 
   /// Sends a `StopTask` request.
@@ -333,31 +361,37 @@ impl C2DControlChannel {
     project: ProjectKey,
     task_id: u32,
     slug: String,
-  ) -> Result<(), crossbeam_channel::SendError<C2DControl>> {
-    self.tx.send(C2DControl::StopTask {
-      project,
-      task_id,
-      slug,
-    })
+  ) -> Result<(), Box<crossbeam_channel::SendError<C2DControl>>> {
+    self
+      .tx
+      .send(C2DControl::StopTask {
+        project,
+        task_id,
+        slug,
+      })
+      .map_err(Box::new)
   }
 
   /// Sends a `ListSessions` request.
   pub fn send_list_sessions(
     &self,
     project: Option<ProjectKey>,
-  ) -> Result<(), crossbeam_channel::SendError<C2DControl>> {
-    self.tx.send(C2DControl::ListSessions { project })
+  ) -> Result<(), Box<crossbeam_channel::SendError<C2DControl>>> {
+    self
+      .tx
+      .send(C2DControl::ListSessions { project })
+      .map_err(Box::new)
   }
 
   /// Sends a `Ping` with the given nonce.
   #[allow(dead_code)]
-  pub fn send_ping(&self, nonce: u64) -> Result<(), crossbeam_channel::SendError<C2DControl>> {
-    self.tx.send(C2DControl::Ping { nonce })
+  pub fn send_ping(&self, nonce: u64) -> Result<(), Box<crossbeam_channel::SendError<C2DControl>>> {
+    self.tx.send(C2DControl::Ping { nonce }).map_err(Box::new)
   }
 
   /// Sends a `Shutdown` control.
-  pub fn send_shutdown(&self) -> Result<(), crossbeam_channel::SendError<C2DControl>> {
-    self.tx.send(C2DControl::Shutdown)
+  pub fn send_shutdown(&self) -> Result<(), Box<crossbeam_channel::SendError<C2DControl>>> {
+    self.tx.send(C2DControl::Shutdown).map_err(Box::new)
   }
 }
 
@@ -370,13 +404,14 @@ pub struct C2DInputChannel {
 
 impl C2DInputChannel {
   /// Enqueues input bytes for the writer thread. Unbounded; does not block.
-  pub fn send_input(&self, bytes: &[u8]) -> Result<(), crossbeam_channel::SendError<Vec<u8>>> {
-    self.tx.send(bytes.to_vec())
+  pub fn send_input(&self, bytes: &[u8]) -> Result<(), Box<crossbeam_channel::SendError<Vec<u8>>>> {
+    self.tx.send(bytes.to_vec()).map_err(Box::new)
   }
 }
 
 /// Creates an unbounded daemon control channel suitable for low-volume reliable frames.
 /// Returns the sender wrapper and a receiver for the writer thread.
+#[must_use]
 pub fn make_d2c_control_channel() -> (D2CControlChannel, Receiver<D2CControl>) {
   let (tx, rx) = unbounded::<D2CControl>();
   (D2CControlChannel { tx }, rx)
@@ -384,18 +419,21 @@ pub fn make_d2c_control_channel() -> (D2CControlChannel, Receiver<D2CControl>) {
 
 /// Creates a bounded lossy output channel with the given capacity in chunks.
 /// Returns the sender wrapper and a receiver for the writer thread.
+#[must_use]
 pub fn make_output_channel(capacity: usize) -> (D2COutputChannel, Receiver<Vec<u8>>) {
   let (tx, rx) = bounded::<Vec<u8>>(capacity);
   (D2COutputChannel { tx }, rx)
 }
 
 /// Creates an unbounded client control channel.
+#[must_use]
 pub fn make_c2d_control_channel() -> (C2DControlChannel, Receiver<C2DControl>) {
   let (tx, rx) = unbounded::<C2DControl>();
   (C2DControlChannel { tx }, rx)
 }
 
 /// Creates an unbounded client input channel.
+#[must_use]
 pub fn make_c2d_input_channel() -> (C2DInputChannel, Receiver<Vec<u8>>) {
   let (tx, rx) = unbounded::<Vec<u8>>();
   (C2DInputChannel { tx }, rx)
