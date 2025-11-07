@@ -3,10 +3,6 @@
 _list:
   @just --list
 
-# Check for compiler or linting error
-check:
-  cargo clippy --tests
-
 # Start the app
 [no-exit-message]
 @agency *ARGS:
@@ -16,11 +12,15 @@ check:
 test *ARGS:
   cargo nextest run {{ARGS}}
 
+# Check for compiler or linting errors
+check:
+  cargo clippy -q --all-targets -- -A warnings
+
 # Format the code
 fmt:
   cargo fmt --all
 
 # Fix the linting errors and formatting
 fix:
-  cargo clippy --allow-dirty --allow-staged --tests --fix
+  cargo clippy -q --allow-dirty --allow-staged --all-targets --fix -- -W clippy::pedantic
   just fmt
