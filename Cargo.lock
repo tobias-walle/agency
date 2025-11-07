@@ -24,6 +24,7 @@ dependencies = [
  "regex",
  "serde",
  "serial_test",
+ "shell-words",
  "temp-env",
  "tempfile",
  "termwiz",
