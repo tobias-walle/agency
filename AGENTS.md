@@ -35,8 +35,13 @@ The Agency tool orchestrates parallel-running AI CLI agents in isolated Git work
 ## Justfile
 
 - All common scripts life in `./justfile`.
-- You MUST read it at the beginning of a chat
 - Prefer using the `just` commands over the direct `cargo` commands.
+- Most important command:
+  - `just agency ...` - Runs the app with the given commands
+  - `just test ...` - Runs the tests with `nextest run`
+  - `just check` - Check the code for errors. Use this often and fix the errors immediately.
+  - `just fix` - Fixes all linting errors and prints pedantic warnings and formats the code afterwards. Use this if the user asks you to fix the lints. In this case make sure all warnings are resolved if they couldn't be fixed automatically.
+  - `just fmt` - Just formats the code. Run this after finishing a feature or fix.
 
 ## Commit Rules
 
