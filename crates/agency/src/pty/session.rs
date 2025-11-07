@@ -116,7 +116,7 @@ impl Session {
     Ok(())
   }
 
-  /// Build a portable_pty::CommandBuilder from our Command
+  /// Build a `portable_pty::CommandBuilder` from our Command
   fn build_pty_command_for(cmd: &Command) -> CommandBuilder {
     let mut builder = CommandBuilder::new(&cmd.program);
     for a in &cmd.args {
@@ -192,6 +192,7 @@ impl Session {
     Ok(())
   }
 
+  #[must_use]
   pub fn snapshot(&self) -> (Vec<u8>, (u16, u16)) {
     let p = self.parser.lock().unwrap();
     let screen = p.screen();
@@ -201,6 +202,7 @@ impl Session {
   }
 
   /// Returns the current PTY size as `(rows, cols)` without generating ANSI.
+  #[must_use]
   pub fn size(&self) -> (u16, u16) {
     let p = self.parser.lock().unwrap();
     let screen = p.screen();
@@ -208,6 +210,7 @@ impl Session {
     (rows, cols)
   }
 
+  #[must_use]
   pub fn stats_lite(&self) -> crate::pty::protocol::SessionStatsLite {
     let elapsed = self.start.elapsed();
     crate::pty::protocol::SessionStatsLite {

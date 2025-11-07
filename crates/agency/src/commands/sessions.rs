@@ -47,7 +47,7 @@ pub fn run(ctx: &AppContext) -> Result<()> {
       print_table(&headers, &rows);
     }
     D2C::Control(D2CControl::Error { message }) => {
-      anyhow::bail!("daemon error: {}", message);
+      anyhow::bail!("daemon error: {message}");
     }
     _ => {
       anyhow::bail!("protocol error: expected Sessions reply");

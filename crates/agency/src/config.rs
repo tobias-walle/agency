@@ -53,14 +53,17 @@ impl AgencyPaths {
     Self { cwd: cwd.into() }
   }
 
+  #[must_use]
   pub fn cwd(&self) -> &PathBuf {
     &self.cwd
   }
 
+  #[must_use]
   pub fn tasks_dir(&self) -> PathBuf {
     self.cwd.join(".agency").join("tasks")
   }
 
+  #[must_use]
   pub fn worktrees_dir(&self) -> PathBuf {
     self.cwd.join(".agency").join("worktrees")
   }
@@ -135,6 +138,7 @@ pub fn load_config(cwd: &Path) -> Result<AgencyConfig> {
 /// 3) Fallback to `~/.local/run/agency.sock`
 ///
 /// Ensures the parent directory exists with 0700 permissions.
+#[must_use]
 pub fn compute_socket_path(cfg: &AgencyConfig) -> std::path::PathBuf {
   use std::os::unix::fs::PermissionsExt;
   use std::path::PathBuf;

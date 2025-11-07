@@ -89,8 +89,7 @@ mod tests {
     let msg = err.to_string();
     assert!(
       msg.contains("empty"),
-      "error message should mention empty: {}",
-      msg
+      "error message should mention empty: {msg}"
     );
   }
 

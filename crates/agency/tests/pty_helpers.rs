@@ -12,6 +12,7 @@ use expectrl::Expect;
 use expectrl::session::OsSession as Session;
 use fs_extra::file::{self, CopyOptions};
 
+#[must_use]
 pub fn bin() -> PathBuf {
   assert_cmd::cargo::cargo_bin!("agency").to_path_buf()
 }

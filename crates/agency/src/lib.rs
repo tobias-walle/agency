@@ -67,6 +67,7 @@ enum DaemonCmd {
   Run {},
 }
 
+#[must_use]
 pub fn parse() -> Cli {
   Cli::parse()
 }

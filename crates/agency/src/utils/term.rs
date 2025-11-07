@@ -50,7 +50,10 @@ fn format_table(headers: &[impl Display], rows: &[Vec<String>]) -> String {
     return String::new();
   }
   let cols = headers.len();
-  let hdrs_raw: Vec<String> = headers.iter().map(|h| h.to_string()).collect();
+  let hdrs_raw: Vec<String> = headers
+    .iter()
+    .map(std::string::ToString::to_string)
+    .collect();
 
   // Compute column widths based on stripped headers and rows
   let mut widths = vec![0_usize; cols];
@@ -58,7 +61,7 @@ fn format_table(headers: &[impl Display], rows: &[Vec<String>]) -> String {
     let hw = strip_ansi(&hdrs_raw[i]).len();
     let rw = rows
       .iter()
-      .map(|r| r.get(i).map(|c| strip_ansi(c).len()).unwrap_or(0))
+      .map(|r| r.get(i).map_or(0, |c| strip_ansi(c).len()))
       .max()
       .unwrap_or(0);
     widths[i] = hw.max(rw);
@@ -97,7 +100,7 @@ fn format_table(headers: &[impl Display], rows: &[Vec<String>]) -> String {
 
   // Body lines: align; do not pad the last column
   let mut body_lines = Vec::new();
-  for row in rows.iter() {
+  for row in rows {
     let mut parts = Vec::with_capacity(cols);
     for i in 0..cols {
       let val = row.get(i).cloned().unwrap_or_default();

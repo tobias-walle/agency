@@ -91,7 +91,7 @@ pub fn run_join_session(ctx: &AppContext, session_id: u64) -> Result<()> {
     project,
     task: TaskMeta {
       id: 0,
-      slug: "".to_string(),
+      slug: String::new(),
     },
     worktree_dir: cwd.clone(),
     cmd: WireCommand {

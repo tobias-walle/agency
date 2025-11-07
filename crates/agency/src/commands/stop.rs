@@ -24,7 +24,7 @@ pub fn run(ctx: &AppContext, ident: Option<&str>, session_id: Option<u64>) -> Re
         println!("Stopped session {}", sid.to_string().cyan());
       }
       Ok(D2C::Control(D2CControl::Error { message })) => {
-        anyhow::bail!(format!("daemon error: {}", message));
+        anyhow::bail!(format!("daemon error: {message}"));
       }
       _ => {
         // Silent success if protocol differs; keep user informed
@@ -63,7 +63,7 @@ pub fn run(ctx: &AppContext, ident: Option<&str>, session_id: Option<u64>) -> Re
         );
       }
       Ok(D2C::Control(D2CControl::Error { message })) => {
-        anyhow::bail!(format!("daemon error: {}", message));
+        anyhow::bail!(format!("daemon error: {message}"));
       }
       _ => {
         println!(
