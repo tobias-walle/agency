@@ -1,7 +1,9 @@
 pub mod attach;
 pub mod branch;
 pub mod daemon;
+pub mod merge;
 pub mod new;
+pub mod open;
 pub mod path;
 pub mod ps;
 pub mod rm;

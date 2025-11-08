@@ -435,3 +435,53 @@ fn new_bootstrap_respects_config_includes_and_excludes() -> Result<()> {
 
   Ok(())
 }
+
+#[test]
+fn open_opens_worktree_via_editor() -> Result<()> {
+  let env = common::TestEnv::new();
+  env.init_repo()?;
+  let (id, slug) = env.new_task("open-task", &["--no-edit", "--no-attach"])?;
+
+  with_vars([("EDITOR", Some("true".to_string()))], || {
+    let mut cmd = env.bin_cmd().unwrap();
+    cmd.arg("open").arg(id.to_string());
+    cmd.assert().success();
+  });
+
+  Ok(())
+}
+
+#[test]
+fn merge_fast_forwards_and_cleans_up() -> Result<()> {
+  let env = common::TestEnv::new();
+  env.init_repo()?;
+  let (id, slug) = env.new_task("merge-task", &["--no-edit", "--no-attach"])?;
+
+  // Create a new commit on the task branch (empty tree commit)
+  let repo = git::discover(env.path())?;
+  let empty_tree = git::ObjectId::empty_tree(repo.object_hash());
+  let head = repo.head_commit()?;
+  let parent_id = head.id();
+  let task_ref = format!("refs/heads/{}", env.branch_name(id, &slug));
+  let new_id = repo.commit(task_ref.as_str(), "test", empty_tree, [parent_id])?;
+
+  // Merge back to base (main) and clean up
+  let mut cmd = env.bin_cmd()?;
+  cmd.arg("merge").arg(id.to_string());
+  cmd.assert().success();
+
+  // Verify base advanced to new commit
+  let main_ref = repo.find_reference("refs/heads/main")?;
+  let tgt = main_ref.target();
+  let main_target = tgt.try_id().expect("id");
+  let main_hex = main_target.to_hex().to_string();
+  let new_hex = new_id.to_hex().to_string();
+  assert_eq!(main_hex, new_hex);
+
+  // Verify cleanup
+  assert!(!env.branch_exists(id, &slug)?);
+  assert!(!env.task_file_path(id, &slug).exists());
+  assert!(!env.worktree_dir_path(id, &slug).exists());
+
+  Ok(())
+}

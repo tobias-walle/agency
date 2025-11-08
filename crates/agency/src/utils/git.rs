@@ -125,3 +125,52 @@ fn run_git(args: &[&str], cwd: &Path) -> Result<()> {
   }
   Ok(())
 }
+
+pub fn rebase_onto(worktree_dir: &Path, base: &str) -> Result<()> {
+  run_git(&["rebase", base], worktree_dir)
+}
+
+pub fn is_fast_forward(repo: &git::Repository, base: &str, task_branch: &str) -> Result<bool> {
+  let workdir = repo
+    .workdir()
+    .ok_or_else(|| anyhow::anyhow!("no main worktree: cannot check fast-forward"))?;
+  let status = std::process::Command::new("git")
+    .current_dir(workdir)
+    .args(["merge-base", "--is-ancestor", base, task_branch])
+    .stdout(std::process::Stdio::null())
+    .stderr(std::process::Stdio::null())
+    .status()
+    .with_context(|| "failed to run git merge-base --is-ancestor")?;
+  if status.success() {
+    return Ok(true);
+  }
+  if status.code() == Some(1) {
+    return Ok(false);
+  }
+  anyhow::bail!("git merge-base --is-ancestor failed: status={}", status);
+}
+
+pub fn rev_parse(cwd: &Path, rev: &str) -> Result<String> {
+  let out = std::process::Command::new("git")
+    .current_dir(cwd)
+    .arg("rev-parse")
+    .arg(rev)
+    .stdout(std::process::Stdio::piped())
+    .stderr(std::process::Stdio::null())
+    .spawn()
+    .with_context(|| "failed to spawn git rev-parse")?
+    .wait_with_output()
+    .with_context(|| "failed to wait for git rev-parse")?;
+  if !out.status.success() {
+    anyhow::bail!("git rev-parse failed: status={}", out.status);
+  }
+  Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
+}
+
+pub fn update_branch_ref(repo: &git::Repository, branch: &str, new_commit: &str) -> Result<()> {
+  let workdir = repo
+    .workdir()
+    .ok_or_else(|| anyhow::anyhow!("no main worktree: cannot update ref"))?;
+  let full = format!("refs/heads/{branch}");
+  run_git(&["update-ref", &full, new_commit], workdir)
+}
