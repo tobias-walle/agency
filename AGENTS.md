@@ -130,7 +130,7 @@ Every time a prompt starts with `PLAN:` you must enter the plan mode. In the pla
 
 General Workflow in Plan Mode:
 
-1. If there is ambiguity, ask clarifying questions. Give each question a number (for easy reference) and a recommended/default answer. Do this before starting the agentic workflow!
+1. If there is ambiguity, ask clarifying questions. Give each question a number (for easy reference) and a recommended/default answer.
 2. After all questions were answered or the user asks you to, start with the research for the plan.
    The goal of the research is to read all necessary files to get a full picture how the change can be implemented.
    You MUST make sure you got all the relevant facts before generating the final plan.

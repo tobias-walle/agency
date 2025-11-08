@@ -1,19 +1,20 @@
-# Agency default configuration
-# [agents.opencode]
-# The command used to invoke the opencode agent.
-# "$AGENCY_TASK" is a placeholder for the task text.
+# Default agent for new tasks. Can be overridden per task with --agent/-a
+agent = "claude"
+
+# Format <mod>-<key>. Where <mod> can be one of: ctrl|alt|shift|cmd
+[keybindings]
+detach = "ctrl-q"
+
+# Configuration of common agents, you can also add your own
+[agents.claude]
+cmd = ["claude", "$AGENCY_TASK"]
+
 [agents.opencode]
 cmd = ["opencode", "--prompt", "$AGENCY_TASK"]
 
-# A minimal, deterministic agent used in local dev and CI.
-# It echoes input back with a prefix and prints a small header.
+[agents.codex]
+cmd = ["codex", "--full-auto", "$AGENCY_TASK"]
+
+# Used for testing
 [agents.fake]
-cmd = ["./scripts/fake_agent.py", "$AGENCY_TASK"]
-
-# Default agent selection (used when task file has no YAML front matter)
-agent = "fake"
-
-# Keybindings configuration
-[keybindings]
-# Default detach keybinding: Ctrl+q
-detach = "ctrl-q"
+cmd = ["sh"]
