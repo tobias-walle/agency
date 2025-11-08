@@ -109,9 +109,9 @@ impl TestEnv {
       );
     }
     let stdout = String::from_utf8_lossy(&out.stdout);
-    // Parse: "Task <slug> with id <id> created"
+    // Parse: "Create Task <slug> with id <id>"
     let re =
-      regex::Regex::new(r"Task ([A-Za-z][A-Za-z0-9-]*) with id (\d+) created").expect("regex");
+      regex::Regex::new(r"Create Task ([A-Za-z][A-Za-z0-9-]*) with id (\d+)").expect("regex");
     let caps = re
       .captures(&stdout)
       .with_context(|| format!("unexpected stdout: {stdout}"))?;

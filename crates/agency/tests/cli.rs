@@ -47,6 +47,73 @@ fn new_accepts_no_attach_flag() -> Result<()> {
 }
 
 #[test]
+fn new_runs_default_bootstrap_cmd_when_present() -> Result<()> {
+  let env = common::TestEnv::new();
+  env.init_repo()?;
+
+  // Write default bootstrap script at <root>/.agency/setup.sh
+  let agen_dir = env.path().join(".agency");
+  std::fs::create_dir_all(&agen_dir)?;
+  let script = agen_dir.join("setup.sh");
+  std::fs::write(
+    &script,
+    "#!/usr/bin/env bash\n\n echo bootstrap-script-output && echo ok > boot.out\n",
+  )?;
+  #[cfg(unix)]
+  {
+    use std::os::unix::fs::PermissionsExt as _;
+    let mut perms = std::fs::metadata(&script)?.permissions();
+    perms.set_mode(0o755);
+    std::fs::set_permissions(&script, perms)?;
+  }
+
+  let (id, slug) = env.new_task("boot-cmd", &["--no-edit", "--no-attach"])?;
+  let wt = env.worktree_dir_path(id, &slug);
+  assert!(wt.join("boot.out").is_file());
+
+  Ok(())
+}
+
+#[test]
+fn new_skips_default_bootstrap_when_missing() -> Result<()> {
+  let env = common::TestEnv::new();
+  env.init_repo()?;
+  // Ensure no .agency/setup.sh exists
+  std::fs::create_dir_all(env.path().join(".agency"))?;
+
+  let (id, slug) = env.new_task("no-boot-script", &["--no-edit"])?;
+  let wt = env.worktree_dir_path(id, &slug);
+  assert!(!wt.join("boot.out").exists());
+  Ok(())
+}
+
+#[test]
+fn new_supports_placeholder_root_in_bootstrap_cmd() -> Result<()> {
+  let env = common::TestEnv::new();
+  env.init_repo()?;
+
+  // Project config with custom bootstrap cmd using <root>
+  let agen_dir = env.path().join(".agency");
+  std::fs::create_dir_all(&agen_dir)?;
+  std::fs::write(
+    agen_dir.join("agency.toml"),
+    "[bootstrap]\ncmd=[\"bash\",\"-lc\",\"echo <root> > root.txt\"]\n",
+  )?;
+
+  let (id, slug) = env.new_task("boot-root", &["--no-edit"])?;
+  let wt = env.worktree_dir_path(id, &slug);
+  let data = std::fs::read_to_string(wt.join("root.txt"))?;
+  let expect_root = env
+    .path()
+    .canonicalize()
+    .unwrap_or_else(|_| env.path().to_path_buf())
+    .display()
+    .to_string();
+  assert_eq!(data.trim(), expect_root);
+  Ok(())
+}
+
+#[test]
 fn new_writes_yaml_header_when_agent_specified() -> Result<()> {
   let env = common::TestEnv::new();
   env.init_repo()?;
