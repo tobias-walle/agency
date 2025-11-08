@@ -25,8 +25,9 @@ enum Commands {
     /// Select agent to attach to task (writes YAML front matter)
     #[arg(short = 'a', long = "agent")]
     agent: Option<String>,
-    #[arg(long)]
-    attach: bool,
+    /// Do not attach to the task after creation (attach is default)
+    #[arg(long = "no-attach")]
+    no_attach: bool,
     /// Skip opening the editor after creating the task file
     #[arg(long)]
     no_edit: bool,
@@ -89,11 +90,11 @@ pub fn run() -> Result<()> {
     Some(Commands::New {
       slug,
       agent,
-      attach,
+      no_attach,
       no_edit,
     }) => {
       let created = commands::new::run(&ctx, &slug, no_edit, agent.as_deref())?;
-      if attach {
+      if !no_attach {
         commands::daemon::start()?;
         let ident = created.id.to_string();
         commands::attach::run_with_task(&ctx, &ident)?;

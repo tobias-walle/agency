@@ -32,6 +32,19 @@ fn new_creates_markdown_branch_and_worktree() -> Result<()> {
 }
 
 #[test]
+fn new_accepts_no_attach_flag() -> Result<()> {
+  let env = common::TestEnv::new();
+  env.init_repo()?;
+
+  // Run without helper to ensure the flag is accepted
+  let mut cmd = env.bin_cmd()?;
+  cmd.arg("new").arg("--no-attach").arg("epsilon-task");
+  cmd.assert().success();
+
+  Ok(())
+}
+
+#[test]
 fn new_writes_yaml_header_when_agent_specified() -> Result<()> {
   let env = common::TestEnv::new();
   env.init_repo()?;
