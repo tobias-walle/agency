@@ -92,10 +92,11 @@ pub fn run() -> Result<()> {
       attach,
       no_edit,
     }) => {
-      commands::new::run(&ctx, &slug, no_edit, agent.as_deref())?;
+      let created = commands::new::run(&ctx, &slug, no_edit, agent.as_deref())?;
       if attach {
         commands::daemon::start()?;
-        commands::attach::run_with_task(&ctx, &slug)?;
+        let ident = created.id.to_string();
+        commands::attach::run_with_task(&ctx, &ident)?;
       }
     }
     Some(Commands::Path { ident }) => {

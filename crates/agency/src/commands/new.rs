@@ -10,11 +10,12 @@ use owo_colors::OwoColorize as _;
 use crate::config::AppContext;
 use crate::utils::git::{add_worktree, ensure_branch, open_main_repo};
 use crate::utils::task::{
-  TaskFrontmatter, TaskRef, format_task_markdown, normalize_and_validate_slug,
+  TaskFrontmatter, TaskRef, compute_unique_slug, format_task_markdown, next_id,
+  normalize_and_validate_slug,
 };
 
-pub fn run(ctx: &AppContext, slug: &str, no_edit: bool, agent: Option<&str>) -> Result<()> {
-  let slug = normalize_and_validate_slug(slug)?;
+pub fn run(ctx: &AppContext, slug: &str, no_edit: bool, agent: Option<&str>) -> Result<TaskRef> {
+  let base_slug = normalize_and_validate_slug(slug)?;
 
   let tasks = ctx.paths.tasks_dir();
   let created = ensure_dir(&tasks)?;
@@ -22,11 +23,10 @@ pub fn run(ctx: &AppContext, slug: &str, no_edit: bool, agent: Option<&str>) -> 
     println!("Created folder {}", ".agency/tasks".cyan());
   }
 
-  if slug_exists(&tasks, &slug)? {
-    bail!("Task with slug {slug} already exists");
-  }
-
+  // Compute global next id and a unique slug
   let id = next_id(&tasks)?;
+  let slug = compute_unique_slug(&tasks, &base_slug)?;
+
   let file_path = tasks.join(format!("{id}-{slug}.md"));
   // Optional YAML front matter
   let fm_opt = if let Some(agent_name) = agent {
@@ -60,7 +60,7 @@ pub fn run(ctx: &AppContext, slug: &str, no_edit: bool, agent: Option<&str>) -> 
     open_editor(&file_path)?;
   }
 
-  Ok(())
+  Ok(TaskRef { id, slug })
 }
 
 fn ensure_dir(dir: &Path) -> Result<bool> {
@@ -69,40 +69,6 @@ fn ensure_dir(dir: &Path) -> Result<bool> {
   }
   fs::create_dir_all(dir).with_context(|| format!("failed to create {}", dir.display()))?;
   Ok(true)
-}
-
-fn slug_exists(tasks: &Path, slug: &str) -> Result<bool> {
-  if !tasks.exists() {
-    return Ok(false);
-  }
-  for entry in fs::read_dir(tasks).with_context(|| format!("failed to read {}", tasks.display()))? {
-    let entry = entry?;
-    let path = entry.path();
-    if let Some(tf) = TaskRef::from_task_file(&path)
-      && tf.slug == slug
-    {
-      return Ok(true);
-    }
-  }
-  Ok(false)
-}
-
-fn next_id(tasks: &Path) -> Result<u32> {
-  let mut max_id: u32 = 0;
-  if tasks.exists() {
-    for entry in
-      fs::read_dir(tasks).with_context(|| format!("failed to read {}", tasks.display()))?
-    {
-      let entry = entry?;
-      let path = entry.path();
-      if let Some(tf) = TaskRef::from_task_file(&path)
-        && tf.id > max_id
-      {
-        max_id = tf.id;
-      }
-    }
-  }
-  Ok(max_id.saturating_add(1))
 }
 
 fn open_editor(path: &Path) -> Result<()> {

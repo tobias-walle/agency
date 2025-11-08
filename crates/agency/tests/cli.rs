@@ -256,6 +256,92 @@ fn new_rejects_slugs_starting_with_digits() -> Result<()> {
 }
 
 #[test]
+fn new_auto_suffixes_duplicate_slug_to_slug2() -> Result<()> {
+  let env = common::TestEnv::new();
+  env.setup_git_repo()?;
+  env.simulate_initial_commit()?;
+
+  // First creation
+  let mut cmd = env.bin_cmd()?;
+  cmd.arg("new").arg("--no-edit").arg("alpha");
+  cmd
+    .assert()
+    .success()
+    .stdout(predicates::str::contains("Task alpha with id 1 created").from_utf8());
+
+  // Duplicate should auto-suffix to alpha2
+  let mut cmd = env.bin_cmd()?;
+  cmd.arg("new").arg("--no-edit").arg("alpha");
+  cmd
+    .assert()
+    .success()
+    .stdout(predicates::str::contains("Task alpha2 with id 2 created").from_utf8());
+
+  // Check file, branch, worktree
+  let file = env.path().join(".agency").join("tasks").join("2-alpha2.md");
+  assert!(file.is_file());
+
+  let repo = git2::Repository::discover(env.path())?;
+  assert!(
+    repo
+      .find_branch("agency/2-alpha2", git2::BranchType::Local)
+      .is_ok()
+  );
+
+  let wt_dir = env
+    .path()
+    .join(".agency")
+    .join("worktrees")
+    .join("2-alpha2");
+  assert!(wt_dir.is_dir());
+
+  Ok(())
+}
+
+#[test]
+fn new_increments_trailing_number_slug() -> Result<()> {
+  let env = common::TestEnv::new();
+  env.setup_git_repo()?;
+  env.simulate_initial_commit()?;
+
+  // Create alpha2
+  let mut cmd = env.bin_cmd()?;
+  cmd.arg("new").arg("--no-edit").arg("alpha2");
+  cmd
+    .assert()
+    .success()
+    .stdout(predicates::str::contains("Task alpha2 with id 1 created").from_utf8());
+
+  // Duplicate alpha2 should become alpha3
+  let mut cmd = env.bin_cmd()?;
+  cmd.arg("new").arg("--no-edit").arg("alpha2");
+  cmd
+    .assert()
+    .success()
+    .stdout(predicates::str::contains("Task alpha3 with id 2 created").from_utf8());
+
+  // Check artifacts
+  let file = env.path().join(".agency").join("tasks").join("2-alpha3.md");
+  assert!(file.is_file());
+
+  let repo = git2::Repository::discover(env.path())?;
+  assert!(
+    repo
+      .find_branch("agency/2-alpha3", git2::BranchType::Local)
+      .is_ok()
+  );
+
+  let wt_dir = env
+    .path()
+    .join(".agency")
+    .join("worktrees")
+    .join("2-alpha3");
+  assert!(wt_dir.is_dir());
+
+  Ok(())
+}
+
+#[test]
 fn ps_lists_id_and_slug_in_order() -> Result<()> {
   let env = common::TestEnv::new();
   env.setup_git_repo()?;
