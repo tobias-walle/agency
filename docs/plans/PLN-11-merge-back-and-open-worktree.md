@@ -15,11 +15,11 @@ Add `agency merge <id|slug>` to rebase and fast-forward merge task changes back 
 - Post-merge branch protection or automation.
 
 ## Current Behavior
-- Front matter includes `base_branch` during `new` based on current HEAD or `main` (`crates/agency/src/commands/new.rs:36`, `:45`, `:50`).
-- Worktree and branch creation for each task (`utils/git.rs:48` ensure_branch, `:73` add_worktree_for_branch).
-- Helpers for task resolution and paths (`utils/task.rs:101` resolve_id_or_slug, `:139` branch_name, `:147` worktree_dir, `:153` task_file).
-- No `merge` or `open` commands wired yet (`crates/agency/src/commands/mod.rs`, `lib.rs`).
-- `$EDITOR` spawn logic exists inside `new.rs` for opening a file.
+- Front matter includes `base_branch` during `new` based on current HEAD or `main` (see `crates/agency/src/commands/new.rs` using `current_branch_name` and writing `TaskFrontmatter`).
+- Worktree and branch creation are performed for each task (see `crates/agency/src/utils/git.rs`: `ensure_branch`, `add_worktree_for_branch`).
+- Helpers for task resolution and paths exist (see `crates/agency/src/utils/task.rs`: `resolve_id_or_slug`, `branch_name`, `worktree_dir`, `task_file`).
+- No `merge` or `open` commands are wired yet (see `crates/agency/src/commands/mod.rs` and `crates/agency/src/lib.rs`).
+- `$EDITOR` spawn logic is currently implemented inline in `crates/agency/src/commands/new.rs` for opening the created task file.
 
 ## Solution
 - `merge` command:
@@ -80,4 +80,3 @@ HINT: Update checkboxes during the implementation and add short implementation n
 
 3) Can we fast-forward without switching HEAD in the root repo?
 - Assumed: Yes. Verify fast-forward and update the base branch ref directly via `git update-ref` or gix APIs, avoiding `git checkout` and keeping the current HEAD untouched.
-
