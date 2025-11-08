@@ -44,6 +44,8 @@ pub struct AgencyConfig {
   pub daemon: Option<DaemonConfig>,
   #[serde(default)]
   pub keybindings: Option<KeybindingsConfig>,
+  #[serde(default)]
+  pub bootstrap: Option<BootstrapConfig>,
 }
 
 impl AgencyConfig {
@@ -55,6 +57,26 @@ impl AgencyConfig {
       let known: Vec<String> = self.agents.keys().cloned().collect();
       anyhow::bail!("unknown agent: {name}. Known agents: {}", known.join(", "));
     }
+  }
+
+  /// Returns merged bootstrap config with defaults and de-duplicated lists.
+  #[must_use]
+  pub fn bootstrap_config(&self) -> BootstrapConfig {
+    let mut cfg = self.bootstrap.clone().unwrap_or_default();
+    // Always ensure hard excludes are present
+    for name in [".git", ".agency"] {
+      if !cfg.exclude.iter().any(|e| e == name) {
+        cfg.exclude.push(name.to_string());
+      }
+    }
+    // Dedup while preserving order of first occurrence
+    fn dedup_keep_first(items: &mut Vec<String>) {
+      let mut seen = std::collections::BTreeSet::new();
+      items.retain(|s| seen.insert(s.clone()));
+    }
+    dedup_keep_first(&mut cfg.include);
+    dedup_keep_first(&mut cfg.exclude);
+    cfg
   }
 }
 
@@ -95,22 +117,46 @@ pub struct KeybindingsConfig {
   pub detach: String,
 }
 
-fn merge_values(base: &mut TomlValue, overlay: TomlValue) {
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct BootstrapConfig {
+  #[serde(default)]
+  pub include: Vec<String>,
+  #[serde(default)]
+  pub exclude: Vec<String>,
+}
+
+fn merge_values(base: &mut TomlValue, overlay: TomlValue, path: &str) {
   match (base, overlay) {
     (TomlValue::Table(base_tbl), TomlValue::Table(overlay_tbl)) => {
       for (k, v) in overlay_tbl {
         match (base_tbl.get_mut(&k), v) {
-          (Some(existing), new_v) => merge_values(existing, new_v),
+          (Some(existing), new_v) => {
+            let next_path = if path.is_empty() {
+              k.clone()
+            } else {
+              format!("{path}.{k}")
+            };
+            merge_values(existing, new_v, &next_path)
+          }
           (None, new_v) => {
             base_tbl.insert(k, new_v);
           }
         }
       }
     }
-    // Arrays and scalars: replace last-wins
-    (base_slot, new_v) => {
-      *base_slot = new_v;
+    (TomlValue::Array(base_arr), TomlValue::Array(mut overlay_arr))
+      if path == "bootstrap.include" || path == "bootstrap.exclude" =>
+    {
+      base_arr.append(&mut overlay_arr);
+      // Dedup string arrays
+      let mut seen = std::collections::BTreeSet::new();
+      base_arr.retain(|v| match v {
+        TomlValue::String(s) => seen.insert(s.clone()),
+        _ => true,
+      });
     }
+    // Arrays and scalars: replace last-wins
+    (base_slot, new_v) => *base_slot = new_v,
   }
 }
 
@@ -126,7 +172,7 @@ pub fn load_config(cwd: &Path) -> Result<AgencyConfig> {
       .with_context(|| format!("failed to read {}", global_path.display()))?;
     let val: TomlValue = toml::from_str(&data)
       .with_context(|| format!("invalid TOML in {}", global_path.display()))?;
-    merge_values(&mut merged, val);
+    merge_values(&mut merged, val, "");
   }
 
   // Merge project config if present
@@ -136,7 +182,7 @@ pub fn load_config(cwd: &Path) -> Result<AgencyConfig> {
       .with_context(|| format!("failed to read {}", project_cfg.display()))?;
     let val: TomlValue = toml::from_str(&data)
       .with_context(|| format!("invalid TOML in {}", project_cfg.display()))?;
-    merge_values(&mut merged, val);
+    merge_values(&mut merged, val, "");
   }
 
   // Deserialize into strongly typed config

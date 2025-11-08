@@ -3,6 +3,7 @@ mod common;
 use anyhow::Result;
 use gix as git;
 use predicates::prelude::*;
+use temp_env::with_vars;
 
 #[test]
 fn new_creates_markdown_branch_and_worktree() -> Result<()> {
@@ -260,6 +261,110 @@ fn ps_handles_empty_state() -> Result<()> {
     .assert()
     .success()
     .stdout(predicates::str::contains("ID SLUG\n").from_utf8());
+
+  Ok(())
+}
+
+#[test]
+fn new_bootstraps_git_ignored_root_files_with_defaults() -> Result<()> {
+  let env = common::TestEnv::new();
+  env.init_repo()?;
+
+  // Create .gitignore at repo root
+  let gi = env.path().join(".gitignore");
+  std::fs::write(
+    &gi,
+    ".env\n.env.local\nsecrets.txt\n.venv/\n.direnv/\nbig.bin\n",
+  )?;
+
+  // Create ignored root files and dirs
+  std::fs::write(env.path().join(".env"), "KEY=VALUE\n")?;
+  std::fs::write(env.path().join(".env.local"), "LOCAL=1\n")?;
+  std::fs::write(env.path().join("secrets.txt"), "secret\n")?;
+  // big.bin >= 10MB
+  let big = env.path().join("big.bin");
+  let f = std::fs::File::create(&big)?;
+  f.set_len(10 * 1024 * 1024 + 1)?;
+  // dirs
+  std::fs::create_dir_all(env.path().join(".venv"))?;
+  std::fs::write(env.path().join(".venv").join("pkg.txt"), "x\n")?;
+  std::fs::create_dir_all(env.path().join(".direnv"))?;
+  std::fs::write(env.path().join(".direnv").join("env.txt"), "x\n")?;
+
+  // Create task
+  let (id, slug) = env.new_task("bootstrap-a", &["--no-edit"])?;
+  let wt = env.worktree_dir_path(id, &slug);
+
+  // Files present (<=10MB)
+  assert!(wt.join(".env").is_file());
+  assert!(wt.join(".env.local").is_file());
+  assert!(wt.join("secrets.txt").is_file());
+  // Excluded by size; dirs are included by default now
+  assert!(!wt.join("big.bin").exists());
+  assert!(wt.join(".venv").is_dir());
+  assert!(wt.join(".venv").join("pkg.txt").is_file());
+  assert!(wt.join(".direnv").is_dir());
+  assert!(wt.join(".direnv").join("env.txt").is_file());
+  // Always excluded from copying
+  assert!(!wt.join(".agency").exists());
+
+  Ok(())
+}
+
+#[test]
+fn new_bootstrap_respects_config_includes_and_excludes() -> Result<()> {
+  let env = common::TestEnv::new();
+  env.init_repo()?;
+
+  // .gitignore
+  std::fs::write(
+    env.path().join(".gitignore"),
+    ".env\n.env.local\nsecrets.txt\n.venv/\n.direnv/\n",
+  )?;
+  // Files/dirs
+  std::fs::write(env.path().join(".env"), "KEY=VALUE\n")?;
+  std::fs::write(env.path().join(".env.local"), "LOCAL=1\n")?;
+  std::fs::write(env.path().join("secrets.txt"), "secret\n")?;
+  std::fs::create_dir_all(env.path().join(".venv"))?;
+  std::fs::write(env.path().join(".venv").join("pkg.txt"), "x\n")?;
+  std::fs::create_dir_all(env.path().join(".direnv"))?;
+  std::fs::write(env.path().join(".direnv").join("env.txt"), "x\n")?;
+
+  // Project config: include .venv
+  let proj_cfg_dir = env.path().join(".agency");
+  std::fs::create_dir_all(&proj_cfg_dir)?;
+  std::fs::write(
+    proj_cfg_dir.join("agency.toml"),
+    "[bootstrap]\ninclude=[\".venv\"]\n",
+  )?;
+
+  // XDG config: include .direnv, exclude .env.local
+  let xdg_root = common::tmp_root().join("xdg-config");
+  let agency_dir = xdg_root.join("agency");
+  std::fs::create_dir_all(&agency_dir)?;
+  std::fs::write(
+    agency_dir.join("agency.toml"),
+    "[bootstrap]\ninclude=[\".direnv\"]\nexclude=[\".env.local\"]\n",
+  )?;
+
+  // Scope XDG path only for this call
+  with_vars(
+    [("XDG_CONFIG_HOME", Some(xdg_root.display().to_string()))],
+    || {
+      let (id, slug) = env.new_task("bootstrap-b", &["--no-edit"]).unwrap();
+      let wt = env.worktree_dir_path(id, &slug);
+      assert!(wt.join(".env").is_file());
+      assert!(wt.join("secrets.txt").is_file());
+      assert!(wt.join(".venv").is_dir());
+      assert!(wt.join(".venv").join("pkg.txt").is_file());
+      assert!(wt.join(".direnv").is_dir());
+      assert!(wt.join(".direnv").join("env.txt").is_file());
+      // excluded via XDG override
+      assert!(!wt.join(".env.local").exists());
+      // always excluded from copying
+      assert!(!wt.join(".agency").exists());
+    },
+  );
 
   Ok(())
 }

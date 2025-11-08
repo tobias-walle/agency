@@ -8,8 +8,9 @@ use anyhow::{Context, Result, bail};
 use owo_colors::OwoColorize as _;
 
 use crate::config::AppContext;
+use crate::utils::bootstrap::bootstrap_worktree;
 use crate::utils::git::{
-  add_worktree_for_branch, current_branch_name, ensure_branch, open_main_repo,
+  add_worktree_for_branch, current_branch_name, ensure_branch, open_main_repo, repo_workdir_or,
 };
 use crate::utils::task::{
   TaskFrontmatter, TaskRef, compute_unique_slug, format_task_markdown, next_id,
@@ -20,10 +21,7 @@ pub fn run(ctx: &AppContext, slug: &str, no_edit: bool, agent: Option<&str>) -> 
   let base_slug = normalize_and_validate_slug(slug)?;
 
   let tasks = ctx.paths.tasks_dir();
-  let created = ensure_dir(&tasks)?;
-  if created {
-    println!("Created folder {}", ".agency/tasks".cyan());
-  }
+  let _ = ensure_dir(&tasks)?;
 
   // Compute global next id and a unique slug
   let id = next_id(&tasks)?;
@@ -63,14 +61,24 @@ pub fn run(ctx: &AppContext, slug: &str, no_edit: bool, agent: Option<&str>) -> 
   let wt_root = ctx.paths.worktrees_dir();
   let _ = ensure_dir(&wt_root)?;
   let wt_dir = wt_root.join(&wt_name);
-  add_worktree_for_branch(&repo, &wt_name, &wt_dir, &branch_name)?;
-
+  // First concise task creation log
   println!("Task {} with id {} created ✨", slug.cyan(), id.cyan());
+  // Bootstrap worktree log
+  println!(
+    "Bootstrap worktree {} ...",
+    format!("agency/{}-{}", id, slug).cyan()
+  );
+  add_worktree_for_branch(&repo, &wt_name, &wt_dir, &branch_name)?;
 
   // Optionally open the task file in the user's editor
   if std::io::stdout().is_terminal() && !no_edit {
     open_editor(&file_path)?;
   }
+
+  // Bootstrap git-ignored root files into the new worktree AFTER editing for better UX
+  let root_workdir = repo_workdir_or(&repo, ctx.paths.cwd());
+  let bcfg = ctx.config.bootstrap_config();
+  bootstrap_worktree(&repo, &root_workdir, &wt_dir, &bcfg)?;
 
   Ok(TaskRef { id, slug })
 }

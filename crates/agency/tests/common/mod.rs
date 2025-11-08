@@ -151,12 +151,17 @@ impl TestEnv {
   }
 }
 
-/// Returns a workspace-local temp root for tests, inside `target/test-tmp`.
+/// Returns a workspace-local temp root for tests under `./target/test-tmp` at the workspace root.
 /// Ensures the directory exists to satisfy sandboxed filesystems that forbid `/tmp`.
 pub fn tmp_root() -> std::path::PathBuf {
-  let mut root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-  root.push("target");
-  root.push("test-tmp");
+  let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+  // Walk two parents up: crates/agency -> crates -> workspace root
+  let workspace_root = manifest_dir
+    .parent()
+    .and_then(|p| p.parent())
+    .unwrap_or(&manifest_dir)
+    .to_path_buf();
+  let root = workspace_root.join("target").join("test-tmp");
   let _ = std::fs::create_dir_all(&root);
   root
 }
