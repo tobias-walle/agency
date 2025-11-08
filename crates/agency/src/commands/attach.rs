@@ -8,7 +8,7 @@ use crate::pty::client as pty_client;
 use crate::pty::protocol::{ProjectKey, SessionOpenMeta, TaskMeta, WireCommand};
 use crate::utils::command::{Command as LocalCommand, expand_vars_in_argv};
 use crate::utils::git::open_main_repo;
-use crate::utils::task::{parse_task_markdown, resolve_id_or_slug, task_file};
+use crate::utils::task::{parse_task_markdown, remove_title, resolve_id_or_slug, task_file};
 
 pub fn run_with_task(ctx: &AppContext, ident: &str) -> Result<()> {
   // Initialize env_logger similar to pty-demo main
@@ -44,7 +44,8 @@ pub fn run_with_task(ctx: &AppContext, ident: &str) -> Result<()> {
 
   // Build env map and argv
   let mut env_map: HashMap<String, String> = std::env::vars().collect();
-  env_map.insert("AGENCY_TASK".to_string(), body.to_string());
+  let stripped = remove_title(body, &task.slug);
+  env_map.insert("AGENCY_TASK".to_string(), stripped.to_string());
 
   // Select agent: front matter overrides config default
   let selected_agent = frontmatter

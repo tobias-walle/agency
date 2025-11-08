@@ -8,7 +8,7 @@ use anyhow::{Context, Result, bail};
 use owo_colors::OwoColorize as _;
 
 use crate::config::AppContext;
-use crate::utils::git::{add_worktree, ensure_branch, open_main_repo};
+use crate::utils::git::{add_worktree, current_branch_name, ensure_branch, open_main_repo};
 use crate::utils::task::{
   TaskFrontmatter, TaskRef, compute_unique_slug, format_task_markdown, next_id,
   normalize_and_validate_slug,
@@ -28,22 +28,30 @@ pub fn run(ctx: &AppContext, slug: &str, no_edit: bool, agent: Option<&str>) -> 
   let slug = compute_unique_slug(&tasks, &base_slug)?;
 
   let file_path = tasks.join(format!("{id}-{slug}.md"));
-  // Optional YAML front matter
-  let fm_opt = if let Some(agent_name) = agent {
+
+  // Determine base branch from current repo HEAD
+  let repo = open_main_repo(ctx.paths.cwd())?;
+  let base_branch = current_branch_name(&repo)?;
+
+  // Compose YAML front matter
+  let fm = if let Some(agent_name) = agent {
     // Validate agent exists in config
     let _ = ctx.config.get_agent(agent_name)?;
-    Some(TaskFrontmatter {
+    TaskFrontmatter {
       agent: Some(agent_name.to_string()),
-    })
+      base_branch: Some(base_branch),
+    }
   } else {
-    None
+    TaskFrontmatter {
+      agent: None,
+      base_branch: Some(base_branch),
+    }
   };
-  let content = format_task_markdown(id, &slug, fm_opt.as_ref())?;
+  let content = format_task_markdown(&slug, Some(&fm))?;
   fs::write(&file_path, content)
     .with_context(|| format!("failed to write {}", file_path.display()))?;
 
   // Git: open main repo, ensure branch, add worktree
-  let repo = open_main_repo(ctx.paths.cwd())?;
   let branch_name = format!("agency/{id}-{slug}");
   let branch = ensure_branch(&repo, &branch_name)?;
   let branch_ref = branch.into_reference();

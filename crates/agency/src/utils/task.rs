@@ -5,6 +5,7 @@ use std::sync::OnceLock;
 use anyhow::{Context, Result, bail};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
+use std::borrow::Cow;
 
 use crate::config::AgencyPaths;
 
@@ -194,8 +195,10 @@ pub fn list_tasks(paths: &AgencyPaths) -> Result<Vec<TaskRef>> {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct TaskFrontmatter {
-  #[serde(default)]
+  #[serde(default, skip_serializing_if = "Option::is_none")]
   pub agent: Option<String>,
+  #[serde(default)]
+  pub base_branch: Option<String>,
 }
 
 const FRONT_MATTER_START: &str = "---\n";
@@ -215,18 +218,51 @@ pub fn parse_task_markdown(input: &str) -> (Option<TaskFrontmatter>, &str) {
   (None, input)
 }
 
+/// Produce a human title from a task slug, e.g. "some-slug" -> "# Some Slug\n".
+pub fn title_from_slug(slug: &str) -> String {
+  let title: String = slug
+    .split('-')
+    .filter(|s| !s.is_empty())
+    .map(|word| {
+      let mut chars = word.chars();
+      match chars.next() {
+        Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+        None => String::new(),
+      }
+    })
+    .collect::<Vec<_>>()
+    .join(" ");
+  format!("# {title}\n")
+}
+
+/// Remove the default, unmodified title line (derived from the slug) from the
+/// provided body. If the first line equals the exact default title, it is
+/// removed and the remaining content is returned with leading whitespace
+/// trimmed. Otherwise the original input is returned unchanged.
+pub fn remove_title<'a>(body: &'a str, slug: &str) -> Cow<'a, str> {
+  let expected = title_from_slug(slug);
+  // Compare without trailing newline for first-line equality
+  let expected_line = expected.trim_end();
+  if let Some(first_line) = body.lines().next() {
+    if first_line == expected_line {
+      // Skip the first line and trim leading whitespace from the remainder
+      let mut iter = body.lines();
+      let _ = iter.next();
+      let rest = iter.collect::<Vec<_>>().join("\n");
+      return Cow::Owned(rest.trim_start().to_string());
+    }
+  }
+  Cow::Borrowed(body)
+}
+
 /// Format task markdown with optional YAML front matter and a standard title line.
-pub fn format_task_markdown(
-  id: u32,
-  slug: &str,
-  frontmatter: Option<&TaskFrontmatter>,
-) -> Result<String> {
-  let title = format!("# Task {id}: {slug}\n");
+pub fn format_task_markdown(slug: &str, frontmatter: Option<&TaskFrontmatter>) -> Result<String> {
+  let title = title_from_slug(slug);
   if let Some(fm) = frontmatter {
     let yaml = serde_yaml::to_string(fm).context("failed to serialize front matter")?;
     let yaml = yaml.trim();
     Ok(format!(
-      "{FRONT_MATTER_START}{yaml}{FRONT_MATTER_END}\n{title}"
+      "{FRONT_MATTER_START}{yaml}{FRONT_MATTER_END}{title}"
     ))
   } else {
     Ok(title)
