@@ -90,11 +90,11 @@ impl TestEnv {
     cmd.arg("new");
     // Default to not attaching in tests unless explicitly overridden
     let mut has_no_attach = false;
-    for a in extra_args {
-      if *a == "--no-attach" {
+    for arg_value in extra_args {
+      if *arg_value == "--no-attach" {
         has_no_attach = true;
       }
-      cmd.arg(a);
+      cmd.arg(arg_value);
     }
     if !has_no_attach {
       cmd.arg("--no-attach");
@@ -108,11 +108,12 @@ impl TestEnv {
         String::from_utf8_lossy(&out.stderr)
       );
     }
+
+    // Parse only the new log format: "Create task <slug> (id <id>)"
     let stdout = String::from_utf8_lossy(&out.stdout);
-    // Parse: "Create Task <slug> with id <id>"
-    let re =
-      regex::Regex::new(r"Create Task ([A-Za-z][A-Za-z0-9-]*) with id (\d+)").expect("regex");
-    let caps = re
+    let re_new = regex::Regex::new(r"(?i)Create task ([A-Za-z][A-Za-z0-9-]*) \(id (\d+)\)")
+      .expect("regex new");
+    let caps = re_new
       .captures(&stdout)
       .with_context(|| format!("unexpected stdout: {stdout}"))?;
     let final_slug = caps.get(1).unwrap().as_str().to_string();
