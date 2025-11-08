@@ -70,3 +70,16 @@ pub fn remove_worktree_and_branch(
   }
   Ok(())
 }
+
+/// Returns the current branch's short name (e.g., "main").
+/// Errors if HEAD is detached or cannot be resolved to a branch name.
+pub fn current_branch_name(repo: &Repository) -> Result<String> {
+  if repo.head_detached()? {
+    bail!("detached HEAD: cannot determine base branch");
+  }
+  let head = repo.head().context("failed to resolve HEAD")?;
+  let name = head
+    .shorthand()
+    .ok_or_else(|| anyhow::anyhow!("failed to obtain branch name"))?;
+  Ok(name.to_string())
+}

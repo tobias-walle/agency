@@ -61,8 +61,12 @@ fn new_writes_yaml_header_when_agent_specified() -> Result<()> {
     "front matter should contain agent: fake"
   );
   assert!(
-    data.contains(&format!("\n---\n\n# Task {id}: {slug}\n")),
-    "should close YAML and include title"
+    data.contains("base_branch: main\n"),
+    "front matter should contain base_branch: main"
+  );
+  assert!(
+    data.contains("\n---\n# Alpha Task\n"),
+    "should close YAML and include new title without extra blank line"
   );
 
   Ok(())

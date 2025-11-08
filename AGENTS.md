@@ -166,7 +166,7 @@ Then, when implementing a plan, use your TODO list tool to track the progress.
 
 ### Build Mode
 
-Everytime a prompt starts with `BUILD:` you must enter the build mode.
+Everytime a prompt starts with `BUILD` you must enter the build mode.
 In the build mode, you fully focus on execution. This might be a plan or a direct task.
 
 Start execution by managing your TODO list and then continue working on them until you are finished with all tasks.
