@@ -101,8 +101,16 @@ impl TestEnv {
   pub fn new_task(&self, slug: &str, extra_args: &[&str]) -> Result<(u32, String)> {
     let mut cmd = self.bin_cmd()?;
     cmd.arg("new");
+    // Default to not attaching in tests unless explicitly overridden
+    let mut has_no_attach = false;
     for a in extra_args {
+      if *a == "--no-attach" {
+        has_no_attach = true;
+      }
       cmd.arg(a);
+    }
+    if !has_no_attach {
+      cmd.arg("--no-attach");
     }
     cmd.arg(slug);
     let out = cmd.output().context("run agency new")?;
