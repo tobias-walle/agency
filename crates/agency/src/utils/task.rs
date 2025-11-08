@@ -243,14 +243,14 @@ pub fn remove_title<'a>(body: &'a str, slug: &str) -> Cow<'a, str> {
   let expected = title_from_slug(slug);
   // Compare without trailing newline for first-line equality
   let expected_line = expected.trim_end();
-  if let Some(first_line) = body.lines().next() {
-    if first_line == expected_line {
-      // Skip the first line and trim leading whitespace from the remainder
-      let mut iter = body.lines();
-      let _ = iter.next();
-      let rest = iter.collect::<Vec<_>>().join("\n");
-      return Cow::Owned(rest.trim_start().to_string());
-    }
+  if let Some(first_line) = body.lines().next()
+    && first_line == expected_line
+  {
+    // Skip the first line and trim leading whitespace from the remainder
+    let mut iter = body.lines();
+    let _ = iter.next();
+    let rest = iter.collect::<Vec<_>>().join("\n");
+    return Cow::Owned(rest.trim_start().to_string());
   }
   Cow::Borrowed(body)
 }

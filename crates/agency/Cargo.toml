@@ -11,7 +11,7 @@ clap = { version = "4.5.50", features = ["derive"] }
 crossbeam-channel = "0.5.15"
 crossterm = "0.29"
 env_logger = "0.11.8"
-git2 = "0.20.2"
+gix = { version = "0.74.1", default-features = false }
 log = "0.4.28"
 owo-colors = "4.2.3"
 portable-pty = "0.9"

@@ -2,6 +2,7 @@
 use anyhow::{Context, Result};
 use assert_cmd::Command;
 
+use gix as git;
 use tempfile::{Builder, TempDir};
 
 #[derive(Debug)]
@@ -55,39 +56,25 @@ impl TestEnv {
   }
 
   pub fn setup_git_repo(&self) -> anyhow::Result<()> {
-    let repo = git2::Repository::init(self.path())?;
-    // Ensure HEAD points to main
-    repo.set_head("refs/heads/main")?;
+    let _ = git::init(self.path())?;
     Ok(())
   }
 
   pub fn simulate_initial_commit(&self) -> anyhow::Result<()> {
-    use std::fs;
-    use std::path::Path;
-
-    let repo = git2::Repository::open(self.path())?;
-
-    // Write a file
-    let readme = self.path().join("README.md");
-    fs::write(&readme, "init\n")?;
-
-    // Stage it
-    let mut index = repo.index()?;
-    index.add_path(Path::new("README.md"))?;
-    let tree_id = index.write_tree()?;
-    index.write()?;
-
-    // Create tree and commit
-    let tree = repo.find_tree(tree_id)?;
-    let sig = git2::Signature::now("test", "test@example.com")?;
-
-    // Create main branch commit, no parents
-    let oid = repo.commit(Some("refs/heads/main"), &sig, &sig, "init", &tree, &[])?;
-
-    // Set HEAD to main and checkout
-    repo.set_head("refs/heads/main")?;
-    let obj = repo.find_object(oid, None)?;
-    repo.checkout_tree(&obj, None)?;
+    // Ensure local config provides author/committer
+    let cfg_path = self.path().join(".git").join("config");
+    let cfg = "[user]\n\tname = test\n\temail = test@example.com\n";
+    std::fs::write(&cfg_path, cfg).context("write test git config")?;
+    let repo = git::open(self.path())?;
+    // Create empty tree and initial commit on HEAD so HEAD is peelable
+    let empty_tree_id = git::ObjectId::empty_tree(repo.object_hash());
+    // Provide author/committer via environment for gix::Repository::commit()
+    let _id = repo.commit(
+      "HEAD",
+      "init",
+      empty_tree_id,
+      std::iter::empty::<git::ObjectId>(),
+    )?;
     Ok(())
   }
 
@@ -158,12 +145,9 @@ impl TestEnv {
 
   /// Check whether branch exists in this repo.
   pub fn branch_exists(&self, id: u32, slug: &str) -> Result<bool> {
-    let repo = git2::Repository::discover(self.path())?;
-    Ok(
-      repo
-        .find_branch(&self.branch_name(id, slug), git2::BranchType::Local)
-        .is_ok(),
-    )
+    let repo = git::discover(self.path())?;
+    let full = format!("refs/heads/{}", self.branch_name(id, slug));
+    Ok(repo.find_reference(&full).is_ok())
   }
 }
 

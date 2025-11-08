@@ -6,14 +6,13 @@ use owo_colors::OwoColorize as _;
 use crate::config::AppContext;
 use crate::config::compute_socket_path;
 use crate::pty::protocol::{C2D, C2DControl, ProjectKey, write_frame};
-use crate::utils::git::{open_main_repo, remove_worktree_and_branch};
+use crate::utils::git::{delete_branch_if_exists, open_main_repo, prune_worktree_if_exists};
 use crate::utils::task::{branch_name, resolve_id_or_slug, task_file, worktree_dir, worktree_name};
 use crate::utils::term::confirm;
 
 pub fn run(ctx: &AppContext, ident: &str) -> Result<()> {
   let tref = resolve_id_or_slug(&ctx.paths, ident)?;
   let branch = branch_name(&tref);
-  let wt_name = worktree_name(&tref);
   let wt_dir = worktree_dir(&ctx.paths, &tref);
   let file = task_file(&ctx.paths, &tref);
 
@@ -27,7 +26,8 @@ pub fn run(ctx: &AppContext, ident: &str) -> Result<()> {
 
   if confirm("Proceed? [y/N]")? {
     let repo = open_main_repo(ctx.paths.cwd())?;
-    remove_worktree_and_branch(&repo, &wt_name, &branch)?;
+    let _ = prune_worktree_if_exists(&repo, &wt_dir)?;
+    let _ = delete_branch_if_exists(&repo, &branch)?;
     if file.exists() {
       fs::remove_file(&file).with_context(|| format!("failed to remove {}", file.display()))?;
     }

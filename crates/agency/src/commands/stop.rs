@@ -5,7 +5,7 @@ use std::os::unix::net::UnixStream;
 
 use crate::config::{AppContext, compute_socket_path};
 use crate::pty::protocol::{C2D, C2DControl, D2C, D2CControl, ProjectKey, read_frame, write_frame};
-use crate::utils::git::open_main_repo;
+use crate::utils::git::{open_main_repo, repo_workdir_or};
 use crate::utils::task::resolve_id_or_slug;
 
 pub fn run(ctx: &AppContext, ident: Option<&str>, session_id: Option<u64>) -> Result<()> {
@@ -37,10 +37,7 @@ pub fn run(ctx: &AppContext, ident: Option<&str>, session_id: Option<u64>) -> Re
   if let Some(task_ident) = ident {
     let task = resolve_id_or_slug(&ctx.paths, task_ident)?;
     let repo = open_main_repo(ctx.paths.cwd())?;
-    let repo_root = repo
-      .workdir()
-      .map(|p| p.canonicalize().unwrap_or_else(|_| p.to_path_buf()))
-      .unwrap_or(ctx.paths.cwd().clone());
+    let repo_root = repo_workdir_or(&repo, ctx.paths.cwd());
     let project = ProjectKey {
       repo_root: repo_root.display().to_string(),
     };

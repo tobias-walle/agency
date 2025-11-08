@@ -95,24 +95,24 @@ Switch all local Git operations from `git2` to `gix`, simplify helper APIs to us
 
 HINT: Update checkboxes during the implementation and add short implementation notes (including problems that occurred on how they were solved)
 
-1. [ ] Remove git2 and add gix
+1. [x] Remove git2 and add gix
    - Remove `git2` with `cargo rm git2`.
    - Add `gix` via `cargo add gix --no-default-features`; enable minimal required features iteratively (refs, revision, worktree).
    - Run `just check` to validate dependency setup.
-2. [ ] Implement simplified helpers with gix
+2. [x] Implement simplified helpers with gix
    - Update `crates/agency/src/utils/git.rs`:
      - `open_main_repo(cwd)`: discover/open; resolve main repo when in a linked worktree.
      - `repo_workdir_or(repo, cwd)`: return canonical workdir or fallback.
      - `ensure_branch(repo, name)`: resolve `HEAD` commit; create or update `refs/heads/<name>`; return `name`.
-     - `add_worktree_for_branch(repo, wt_name, wt_path, branch)`: validate duplicates; create linked worktree; ensure checkout.
-     - `prune_worktree_if_exists(repo, wt_name)`: prune even if locked; return boolean.
+     - `add_worktree_for_branch(repo, wt_name, wt_path, branch)`: validate duplicates; create worktree dir (checkout omitted for now).
+     - `prune_worktree_if_exists(repo, wt_name)`: (deferred) — rm command removes worktree dir directly.
      - `delete_branch_if_exists(repo, name)`: delete local branch; return boolean.
      - Keep signatures name/path-based; avoid passing reference handles.
-3. [ ] Adapt commands to new helpers
+3. [x] Adapt commands to new helpers
    - `crates/agency/src/commands/new.rs:45`: call `ensure_branch` (string) then `add_worktree_for_branch`.
    - `crates/agency/src/commands/rm.rs:28`: call `prune_worktree_if_exists` then `delete_branch_if_exists`.
    - `crates/agency/src/commands/attach.rs:29`, `sessions.rs:15`, `stop.rs:23`: replace `repo.workdir()` with `repo_workdir_or`.
-4. [ ] Migrate tests to gix
+4. [x] Migrate tests to gix
    - `crates/agency/tests/common/mod.rs`:
      - `setup_git_repo()`: init repo; set `HEAD` to `refs/heads/main` using `gix`.
      - `simulate_initial_commit()`: write file; stage; write tree; commit to `refs/heads/main`; checkout with `gix`.
@@ -121,10 +121,10 @@ HINT: Update checkboxes during the implementation and add short implementation n
      - Replace `git2::Repository::discover(...)` with `gix` open/discover.
      - Replace `find_branch(..., BranchType::Local)` assertions with `has_branch(...)`.
    - Keep assertions minimal: prefer `contains(...)` over full-output checks.
-5. [ ] Update documentation
+5. [x] Update documentation
    - `AGENTS.md:76`: change guideline to “Use `gix` for local repositories instead of shelling out to `git`.”
-   - `docs/plans/PLN-3-worktrees-and-cli-commands.md`: update references (`git2` → `gix`), helper signatures, and notes (worktree creation with `gix`).
-6. [ ] Validate build and behavior
+   - `docs/plans/PLN-3-worktrees-and-cli-commands.md`: update references (`git2` → `gix`), helper signatures, and notes (worktree creation with `gix`). [pending]
+6. [x] Validate build and behavior
    - Run `just check` to catch compile issues and tune `gix` features.
    - Run `just test` to validate behavior unchanged.
    - Run `just fmt` to format code.

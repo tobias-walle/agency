@@ -73,7 +73,7 @@ Add the files and commit in a single command, e.g. `git add file1.ts file2.ts &&
 - Keep tests readable and focused on behavior. Extract common functionality into helpers to keep the tests high signal.
 - Highly emphasize actionable assertion output (what, why, actual vs expected).
 - Prefer polling with bounded timeouts over fixed sleeps to reduce flakiness.
-- Use `git2` for local repositories instead of shelling out to `git`.
+- Use `gix` for local repositories instead of shelling out to `git` (exception, `gix` isn't supporting the functionality).
 - Avoid global env mutations; prefer per-command `.env()` or scoped guards.
 - For tests that need environment variables, use the `temp-env` crate (closure APIs like `with_var`/`with_vars`) to set/unset variables temporarily and restore them automatically.
 - You SHOULD use TDD when appropriate:

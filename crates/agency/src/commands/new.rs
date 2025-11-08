@@ -8,7 +8,9 @@ use anyhow::{Context, Result, bail};
 use owo_colors::OwoColorize as _;
 
 use crate::config::AppContext;
-use crate::utils::git::{add_worktree, current_branch_name, ensure_branch, open_main_repo};
+use crate::utils::git::{
+  add_worktree_for_branch, current_branch_name, ensure_branch, open_main_repo,
+};
 use crate::utils::task::{
   TaskFrontmatter, TaskRef, compute_unique_slug, format_task_markdown, next_id,
   normalize_and_validate_slug,
@@ -31,7 +33,10 @@ pub fn run(ctx: &AppContext, slug: &str, no_edit: bool, agent: Option<&str>) -> 
 
   // Determine base branch from current repo HEAD
   let repo = open_main_repo(ctx.paths.cwd())?;
-  let base_branch = current_branch_name(&repo)?;
+  let base_branch = match current_branch_name(&repo) {
+    Ok(name) => name,
+    Err(_) => "main".to_string(),
+  };
 
   // Compose YAML front matter
   let fm = if let Some(agent_name) = agent {
@@ -53,13 +58,12 @@ pub fn run(ctx: &AppContext, slug: &str, no_edit: bool, agent: Option<&str>) -> 
 
   // Git: open main repo, ensure branch, add worktree
   let branch_name = format!("agency/{id}-{slug}");
-  let branch = ensure_branch(&repo, &branch_name)?;
-  let branch_ref = branch.into_reference();
+  let _ = ensure_branch(&repo, &branch_name)?;
   let wt_name = format!("{id}-{slug}");
   let wt_root = ctx.paths.worktrees_dir();
   let _ = ensure_dir(&wt_root)?;
   let wt_dir = wt_root.join(&wt_name);
-  add_worktree(&repo, &wt_name, &wt_dir, &branch_ref)?;
+  add_worktree_for_branch(&repo, &wt_name, &wt_dir, &branch_name)?;
 
   println!("Task {} with id {} created ✨", slug.cyan(), id.cyan());
 
