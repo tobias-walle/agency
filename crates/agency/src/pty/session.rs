@@ -148,7 +148,7 @@ impl Session {
       let mut buf = [0u8; 8192];
       loop {
         match reader.read(&mut buf) {
-          Ok(0) => break, // PTY closed
+          Ok(0) | Err(_) => break, // PTY closed or error
           Ok(n) => {
             if let Ok(mut p) = parser.lock() {
               p.process(&buf[..n]);
@@ -161,7 +161,6 @@ impl Session {
               }
             }
           }
-          Err(_) => break,
         }
       }
     });
@@ -193,6 +192,7 @@ impl Session {
   }
 
   #[must_use]
+  #[allow(clippy::missing_panics_doc)]
   pub fn snapshot(&self) -> (Vec<u8>, (u16, u16)) {
     let p = self.parser.lock().unwrap();
     let screen = p.screen();
@@ -203,6 +203,7 @@ impl Session {
 
   /// Returns the current PTY size as `(rows, cols)` without generating ANSI.
   #[must_use]
+  #[allow(clippy::missing_panics_doc)]
   pub fn size(&self) -> (u16, u16) {
     let p = self.parser.lock().unwrap();
     let screen = p.screen();
@@ -216,7 +217,7 @@ impl Session {
     crate::pty::protocol::SessionStatsLite {
       bytes_in: self.bytes_in.load(std::sync::atomic::Ordering::Relaxed),
       bytes_out: self.bytes_out.load(std::sync::atomic::Ordering::Relaxed),
-      elapsed_ms: elapsed.as_millis() as u64,
+      elapsed_ms: u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX),
     }
   }
 
@@ -229,8 +230,7 @@ impl Session {
   pub fn try_wait_child(&mut self) -> Option<ExitStatus> {
     match self.child.try_wait() {
       Ok(Some(status)) => Some(status),
-      Ok(None) => None,
-      Err(_) => None,
+      _ => None,
     }
   }
 

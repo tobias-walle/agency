@@ -194,19 +194,22 @@ impl SessionRegistry {
         continue;
       }
       let stats = entry.stats_lite();
-      let created_at_ms = entry
-        .meta
-        .created_at
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .unwrap_or(Duration::from_millis(0))
-        .as_millis() as u64;
+      let created_at_ms = u64::try_from(
+        entry
+          .meta
+          .created_at
+          .duration_since(SystemTime::UNIX_EPOCH)
+          .unwrap_or(Duration::from_millis(0))
+          .as_millis(),
+      )
+      .unwrap_or(u64::MAX);
       out.push(SessionInfo {
         session_id: entry.session_id,
         project: entry.meta.project.clone(),
         task: entry.meta.task.clone(),
         cwd: entry.meta.cwd.clone(),
         status: "Running".to_string(),
-        clients: entry.clients.len() as u32,
+        clients: u32::try_from(entry.clients.len()).unwrap_or(u32::MAX),
         created_at_ms,
         stats,
       });
@@ -214,7 +217,7 @@ impl SessionRegistry {
     out
   }
 
-  pub fn broadcast(&self, session_id: u64, ctrl: D2CControl) {
+  pub fn broadcast(&self, session_id: u64, ctrl: &D2CControl) {
     if let Some(entry) = self.sessions.get(&session_id) {
       for att in entry.clients.values() {
         let _ = att.control.send(ctrl.clone());

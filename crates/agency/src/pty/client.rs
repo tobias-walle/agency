@@ -28,7 +28,7 @@ pub fn run_attach(
   socket_path: &Path,
   open: SessionOpenMeta,
   join_session_id: Option<u64>,
-  config: AgencyConfig,
+  config: &AgencyConfig,
 ) -> Result<()> {
   let _raw = RawModeGuard::enable()?;
 
@@ -70,10 +70,10 @@ struct Client {
 
 impl Client {
   /// Constructs a new attached-only client orchestrator and its internal channels.
-  fn new(open: SessionOpenMeta, join_session: Option<u64>, config: AgencyConfig) -> Self {
+  fn new(open: SessionOpenMeta, join_session: Option<u64>, config: &AgencyConfig) -> Self {
     let (control_tx, control_rx) = make_c2d_control_channel();
     let (input_tx, input_rx) = make_c2d_input_channel();
-    let detach = parse_detach_key(&config).expect("invalid detach keybinding in config");
+    let detach = parse_detach_key(config).expect("invalid detach keybinding in config");
     Self {
       control_tx: Some(control_tx),
       input_tx: Some(input_tx),
@@ -179,12 +179,12 @@ impl Client {
       let mut parser = InputParser::new();
       while running_flag.load(Ordering::Relaxed) {
         match stdin.read(&mut buffer) {
-          Ok(0) => continue, // timeout tick
+          Ok(0) => {} // timeout tick
           Ok(count) => {
             let mut saw_detach = false;
             let mut on_event = |event: InputEvent| {
               if let InputEvent::Key(KeyEvent { key, modifiers, .. }) = event
-                && detach_binding.matches(modifiers, &key)
+                && detach_binding.matches(modifiers, key)
               {
                 saw_detach = true;
               }

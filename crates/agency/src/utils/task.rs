@@ -7,6 +7,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::config::AgencyPaths;
 
+static TASK_FILE_RE: OnceLock<Regex> = OnceLock::new();
+
 pub struct TaskRef {
   pub id: u32,
   pub slug: String,
@@ -15,8 +17,7 @@ pub struct TaskRef {
 impl TaskRef {
   pub fn from_task_file(path: &Path) -> Option<Self> {
     let name = path.file_name()?.to_str()?;
-    static RE: OnceLock<Regex> = OnceLock::new();
-    let re = RE.get_or_init(|| Regex::new(r"^(\d+)-(.+)\.md$").expect("valid regex"));
+    let re = TASK_FILE_RE.get_or_init(|| Regex::new(r"^(\d+)-(.+)\.md$").expect("valid regex"));
     let caps = re.captures(name)?;
     let id_str = caps.get(1)?.as_str();
     let slug = caps.get(2)?.as_str().to_string();
@@ -63,20 +64,19 @@ pub fn resolve_id_or_slug(paths: &AgencyPaths, ident: &str) -> Result<TaskRef> {
       }
     }
     bail!("task with id {ident} not found");
-  } else {
-    let slug = ident.to_string();
-    for entry in
-      std::fs::read_dir(&tasks).with_context(|| format!("failed to read {}", tasks.display()))?
-    {
-      let path = entry?.path();
-      if let Some(tf) = TaskRef::from_task_file(&path)
-        && tf.slug == slug
-      {
-        return Ok(tf);
-      }
-    }
-    bail!("task with slug {ident} not found");
   }
+  let slug = ident.to_string();
+  for entry in
+    std::fs::read_dir(&tasks).with_context(|| format!("failed to read {}", tasks.display()))?
+  {
+    let path = entry?.path();
+    if let Some(tf) = TaskRef::from_task_file(&path)
+      && tf.slug == slug
+    {
+      return Ok(tf);
+    }
+  }
+  bail!("task with slug {ident} not found");
 }
 
 pub fn branch_name(task: &TaskRef) -> String {
@@ -128,11 +128,11 @@ const FRONT_MATTER_END: &str = "\n---\n";
 /// excluding the front matter. Gracefully ignores malformed boundaries.
 pub fn parse_task_markdown(input: &str) -> (Option<TaskFrontmatter>, &str) {
   // Expect YAML front matter delimited by FRONT_MATTER_START and FRONT_MATTER_END.
-  if let Some(rest) = input.strip_prefix(FRONT_MATTER_START) {
-    if let Some((yaml, body)) = rest.split_once(FRONT_MATTER_END) {
-      let fm = serde_yaml::from_str::<TaskFrontmatter>(yaml).ok();
-      return (fm, body);
-    }
+  if let Some(rest) = input.strip_prefix(FRONT_MATTER_START)
+    && let Some((yaml, body)) = rest.split_once(FRONT_MATTER_END)
+  {
+    let fm = serde_yaml::from_str::<TaskFrontmatter>(yaml).ok();
+    return (fm, body);
   }
   (None, input)
 }
@@ -147,11 +147,7 @@ pub fn format_task_markdown(
   if let Some(fm) = frontmatter {
     let yaml = serde_yaml::to_string(fm).context("failed to serialize front matter")?;
     Ok(format!(
-      "{start}{yaml}{end}\n{title}",
-      start = FRONT_MATTER_START,
-      yaml = yaml,
-      end = FRONT_MATTER_END,
-      title = title
+      "{FRONT_MATTER_START}{yaml}{FRONT_MATTER_END}\n{title}"
     ))
   } else {
     Ok(title)

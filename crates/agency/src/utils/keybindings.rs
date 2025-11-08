@@ -9,8 +9,8 @@ pub struct Keybinding {
 }
 
 impl Keybinding {
-  pub fn matches(&self, event_mods: Modifiers, event_key: &KeyCode) -> bool {
-    self.mods == event_mods && &self.key == event_key
+  pub fn matches(&self, event_mods: Modifiers, event_key: KeyCode) -> bool {
+    self.mods == event_mods && self.key == event_key
   }
 }
 

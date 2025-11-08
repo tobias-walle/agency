@@ -22,7 +22,7 @@ impl Command {
     if program.trim().is_empty() {
       bail!("command program is empty");
     }
-    let args = if argv.len() > 1 {
+    let tail_args = if argv.len() > 1 {
       argv[1..].to_vec()
     } else {
       Vec::new()
@@ -30,7 +30,7 @@ impl Command {
     let cwd = std::env::current_dir()?;
     Ok(Self {
       program,
-      args,
+      args: tail_args,
       cwd,
       env: Vec::new(),
     })

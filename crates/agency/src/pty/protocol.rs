@@ -152,7 +152,7 @@ pub const FRAME_HEADER_LEN: usize = 4;
 pub fn write_frame<W: Write, T: SerdeSerialize>(mut writer: W, payload: &T) -> Result<()> {
   let data = bincode::serde::encode_to_vec(payload, bincode::config::standard())
     .context("encode payload with bincode")?;
-  let len = data.len() as u32;
+  let len = u32::try_from(data.len()).context("payload too large for frame header (u32)")?;
   let hdr = len.to_le_bytes();
   writer.write_all(&hdr).context("write frame header (len)")?;
   writer
@@ -272,8 +272,7 @@ impl D2COutputChannel {
   pub fn try_send_bytes(&self, bytes: &[u8]) -> bool {
     match self.tx.try_send(bytes.to_vec()) {
       Ok(()) => true,
-      Err(TrySendError::Full(_)) => false,
-      Err(TrySendError::Disconnected(_)) => false,
+      Err(TrySendError::Full(_) | TrySendError::Disconnected(_)) => false,
     }
   }
 }
