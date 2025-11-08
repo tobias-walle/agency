@@ -203,12 +203,17 @@ impl SessionRegistry {
           .as_millis(),
       )
       .unwrap_or(u64::MAX);
+      let status = if entry.exited_notified {
+        "Exited".to_string()
+      } else {
+        "Running".to_string()
+      };
       out.push(SessionInfo {
         session_id: entry.session_id,
         project: entry.meta.project.clone(),
         task: entry.meta.task.clone(),
         cwd: entry.meta.cwd.clone(),
-        status: "Running".to_string(),
+        status,
         clients: u32::try_from(entry.clients.len()).unwrap_or(u32::MAX),
         created_at_ms,
         stats,

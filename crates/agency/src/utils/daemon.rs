@@ -1,5 +1,7 @@
 use crate::config::{AppContext, compute_socket_path};
-use crate::pty::protocol::{C2D, C2DControl, ProjectKey, write_frame};
+use crate::pty::protocol::{
+  C2D, C2DControl, D2C, D2CControl, ProjectKey, SessionInfo, read_frame, write_frame,
+};
 use crate::utils::git::{open_main_repo, repo_workdir_or};
 use crate::utils::task::TaskRef;
 use anyhow::{Context, Result};
@@ -41,4 +43,43 @@ pub fn stop_sessions_of_task(ctx: &AppContext, task: &TaskRef) -> anyhow::Result
       slug: task.slug.clone(),
     },
   )
+}
+
+/// Best-effort helper to list sessions for the current project.
+///
+/// Returns an empty list if the daemon is unavailable or any error occurs.
+#[must_use]
+pub fn list_sessions_for_project(ctx: &AppContext) -> Vec<SessionInfo> {
+  let socket = compute_socket_path(&ctx.config);
+  // Compute project key from the main repo workdir
+  let repo = match open_main_repo(ctx.paths.cwd()) {
+    Ok(r) => r,
+    Err(_) => return Vec::new(),
+  };
+  let repo_root = repo_workdir_or(&repo, ctx.paths.cwd());
+  let project = ProjectKey {
+    repo_root: repo_root.display().to_string(),
+  };
+
+  // Connect and request sessions; swallow errors
+  let mut stream = match UnixStream::connect(&socket) {
+    Ok(s) => s,
+    Err(_) => return Vec::new(),
+  };
+  if write_frame(
+    &mut stream,
+    &C2D::Control(C2DControl::ListSessions {
+      project: Some(project),
+    }),
+  )
+  .is_err()
+  {
+    return Vec::new();
+  }
+
+  let reply: Result<D2C> = read_frame(&mut stream);
+  match reply {
+    Ok(D2C::Control(D2CControl::Sessions { entries })) => entries,
+    _ => Vec::new(),
+  }
 }

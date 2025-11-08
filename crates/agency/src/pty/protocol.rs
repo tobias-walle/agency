@@ -106,6 +106,30 @@ pub struct SessionInfo {
   pub stats: SessionStatsLite,
 }
 
+impl Default for SessionInfo {
+  fn default() -> Self {
+    Self {
+      session_id: 0,
+      project: ProjectKey {
+        repo_root: String::new(),
+      },
+      task: TaskMeta {
+        id: 0,
+        slug: String::new(),
+      },
+      cwd: String::new(),
+      status: String::new(),
+      clients: 0,
+      created_at_ms: 0,
+      stats: SessionStatsLite {
+        bytes_in: 0,
+        bytes_out: 0,
+        elapsed_ms: 0,
+      },
+    }
+  }
+}
+
 /// Control messages sent from the daemon to the client.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum D2CControl {

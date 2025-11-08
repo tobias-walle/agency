@@ -1,10 +1,12 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
+use std::io::IsTerminal as _;
 
 mod commands;
 pub mod config;
 pub mod pty;
 mod utils;
+pub mod tui;
 
 use crate::config::load_config;
 use crate::config::{AgencyPaths, AppContext};
@@ -68,6 +70,8 @@ enum Commands {
   },
   /// List running sessions in this project
   Sessions {},
+  /// Interactive terminal UI
+  Tui {},
 }
 
 #[derive(Debug, Subcommand)]
@@ -144,7 +148,16 @@ pub fn run() -> Result<()> {
     Some(Commands::Sessions {}) => {
       commands::sessions::run(&ctx)?;
     }
-    None => {}
+    Some(Commands::Tui {}) => {
+      crate::tui::run(&ctx)?;
+    }
+    None => {
+      if std::io::stdout().is_terminal() {
+        crate::tui::run(&ctx)?;
+      } else {
+        crate::log_info!("Usage: agency <SUBCOMMAND>. Try 'agency --help'");
+      }
+    }
   }
 
   Ok(())
