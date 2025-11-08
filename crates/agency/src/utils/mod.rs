@@ -1,6 +1,8 @@
 pub mod bootstrap;
 pub mod cmd;
 pub mod command;
+pub mod daemon;
+pub mod editor;
 pub mod git;
 pub mod keybindings;
 pub mod task;

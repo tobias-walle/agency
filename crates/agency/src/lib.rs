@@ -32,6 +32,15 @@ enum Commands {
     #[arg(long)]
     no_edit: bool,
   },
+  /// Fast-forward merge task back to base and clean up
+  Merge {
+    ident: String,
+    /// Override base branch
+    #[arg(short = 'b', long = "branch")]
+    base: Option<String>,
+  },
+  /// Open the task's worktree directory in $EDITOR
+  Open { ident: String },
   /// Print the absolute worktree path
   Path { ident: String },
   /// Print the branch name
@@ -99,6 +108,12 @@ pub fn run() -> Result<()> {
         let ident = created.id.to_string();
         commands::attach::run_with_task(&ctx, &ident)?;
       }
+    }
+    Some(Commands::Merge { ident, base }) => {
+      commands::merge::run(&ctx, &ident, base.as_deref())?;
+    }
+    Some(Commands::Open { ident }) => {
+      commands::open::run(&ctx, &ident)?;
     }
     Some(Commands::Path { ident }) => {
       commands::path::run(&ctx, &ident)?;
