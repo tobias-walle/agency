@@ -17,6 +17,7 @@ owo-colors = "4.2.3"
 portable-pty = "0.9"
 regex = "1.12.2"
 serde = { version = "1.0.228", features = ["derive"] }
+serde_yaml = "0.9.34"
 shell-words = "1.1.0"
 termwiz = "0.23.3"
 toml = "0.9.8"

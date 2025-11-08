@@ -22,6 +22,9 @@ enum Commands {
   /// Create a new task under .agency/tasks
   New {
     slug: String,
+    /// Select agent to attach to task (writes YAML front matter)
+    #[arg(short = 'a', long = "agent")]
+    agent: Option<String>,
     #[arg(long)]
     attach: bool,
     /// Skip opening the editor after creating the task file
@@ -85,10 +88,11 @@ pub fn run() -> Result<()> {
   match cli.command {
     Some(Commands::New {
       slug,
+      agent,
       attach,
       no_edit,
     }) => {
-      commands::new::run(&ctx, &slug, no_edit)?;
+      commands::new::run(&ctx, &slug, no_edit, agent.as_deref())?;
       if attach {
         commands::daemon::start()?;
         commands::attach::run_with_task(&ctx, &slug)?;

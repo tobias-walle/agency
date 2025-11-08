@@ -37,10 +37,25 @@ pub struct DaemonConfig {
 pub struct AgencyConfig {
   #[serde(default)]
   pub agents: BTreeMap<String, AgentConfig>,
+  /// Default agent name when task lacks front matter
+  #[serde(default)]
+  pub agent: Option<String>,
   #[serde(default)]
   pub daemon: Option<DaemonConfig>,
   #[serde(default)]
   pub keybindings: Option<KeybindingsConfig>,
+}
+
+impl AgencyConfig {
+  /// Return the agent config for `name` or a helpful error listing known agents.
+  pub fn get_agent(&self, name: &str) -> Result<&AgentConfig> {
+    if let Some(cfg) = self.agents.get(name) {
+      Ok(cfg)
+    } else {
+      let known: Vec<String> = self.agents.keys().cloned().collect();
+      anyhow::bail!("unknown agent: {name}. Known agents: {}", known.join(", "));
+    }
+  }
 }
 
 #[derive(Debug, Clone)]
