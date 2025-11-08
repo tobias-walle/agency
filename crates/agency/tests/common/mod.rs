@@ -140,6 +140,8 @@ impl TestEnv {
 
   /// Branch name `agency/<id>-<slug>`.
   pub fn branch_name(&self, id: u32, slug: &str) -> String {
+    // Reference self to avoid unused_self lint while keeping call sites stable
+    let _ = self;
     format!("agency/{id}-{slug}")
   }
 

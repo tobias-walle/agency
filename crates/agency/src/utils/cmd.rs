@@ -51,7 +51,7 @@ mod tests {
   #[test]
   fn expands_root_placeholder() {
     let ctx = CmdCtx::with_env("/repo", HashMap::new());
-    let out = expand_argv(&vec!["echo".into(), "<root>".into()], &ctx);
+    let out = expand_argv(&["echo".into(), "<root>".into()], &ctx);
     assert_eq!(out, vec!["echo", "/repo"]);
   }
 
@@ -60,7 +60,7 @@ mod tests {
     let mut env = HashMap::new();
     env.insert("FOO".into(), "bar".into());
     let ctx = CmdCtx::with_env("/r", env);
-    let out = expand_argv(&vec!["echo".into(), "$FOO".into()], &ctx);
+    let out = expand_argv(&["echo".into(), "$FOO".into()], &ctx);
     assert_eq!(out, vec!["echo", "bar"]);
   }
 
@@ -69,14 +69,14 @@ mod tests {
     let mut env = HashMap::new();
     env.insert("X".into(), "1".into());
     let ctx = CmdCtx::with_env("/root", env);
-    let out = expand_argv(&vec!["echo".into(), "pre-<root>-$X".into()], &ctx);
+    let out = expand_argv(&["echo".into(), "pre-<root>-$X".into()], &ctx);
     assert_eq!(out, vec!["echo", "pre-/root-1"]);
   }
 
   #[test]
   fn unknown_var_becomes_empty() {
     let ctx = CmdCtx::with_env("/r", HashMap::new());
-    let out = expand_argv(&vec!["echo".into(), "$NOPE".into()], &ctx);
+    let out = expand_argv(&["echo".into(), "$NOPE".into()], &ctx);
     assert_eq!(out, vec!["echo", ""]);
   }
 }

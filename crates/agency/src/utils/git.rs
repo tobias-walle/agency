@@ -60,7 +60,7 @@ pub fn prune_worktree_if_exists(repo: &git::Repository, wt_path: &Path) -> Resul
   let workdir = repo
     .workdir()
     .ok_or_else(|| anyhow::anyhow!("no main worktree: cannot remove linked worktree"))?;
-  match run_git(
+  if let Ok(()) = run_git(
     &[
       "worktree",
       "remove",
@@ -69,24 +69,23 @@ pub fn prune_worktree_if_exists(repo: &git::Repository, wt_path: &Path) -> Resul
     ],
     workdir,
   ) {
-    Ok(()) => Ok(true),
-    Err(_) => {
-      let _ = run_git(&["worktree", "prune"], workdir);
-      Ok(wt_path.exists())
-    }
+    Ok(true)
+  } else {
+    let _ = run_git(&["worktree", "prune"], workdir);
+    Ok(wt_path.exists())
   }
 }
 
 pub fn add_worktree_for_branch(
-  _repo: &git::Repository,
+  repo: &git::Repository,
   _wt_name: &str,
   wt_path: &Path,
-  _branch: &str,
+  branch: &str,
 ) -> Result<()> {
   if wt_path.exists() {
     bail!("worktree path {} already exists", wt_path.display());
   }
-  let workdir = _repo
+  let workdir = repo
     .workdir()
     .ok_or_else(|| anyhow::anyhow!("no main worktree: cannot add linked worktree"))?;
   run_git(
@@ -95,7 +94,7 @@ pub fn add_worktree_for_branch(
       "add",
       "--quiet",
       wt_path.to_string_lossy().as_ref(),
-      _branch,
+      branch,
     ],
     workdir,
   )?;
@@ -147,7 +146,7 @@ pub fn is_fast_forward(repo: &git::Repository, base: &str, task_branch: &str) ->
   if status.code() == Some(1) {
     return Ok(false);
   }
-  anyhow::bail!("git merge-base --is-ancestor failed: status={}", status);
+  anyhow::bail!("git merge-base --is-ancestor failed: status={status}");
 }
 
 pub fn rev_parse(cwd: &Path, rev: &str) -> Result<String> {

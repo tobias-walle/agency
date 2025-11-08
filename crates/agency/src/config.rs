@@ -70,14 +70,16 @@ impl AgencyConfig {
       }
     }
     // Dedup while preserving order of first occurrence
-    fn dedup_keep_first(items: &mut Vec<String>) {
-      let mut seen = std::collections::BTreeSet::new();
-      items.retain(|s| seen.insert(s.clone()));
-    }
     dedup_keep_first(&mut cfg.include);
     dedup_keep_first(&mut cfg.exclude);
     cfg
   }
+}
+
+// Helper to deduplicate string vectors while preserving the first occurrence
+fn dedup_keep_first(items: &mut Vec<String>) {
+  let mut seen = std::collections::BTreeSet::new();
+  items.retain(|s| seen.insert(s.clone()));
 }
 
 #[derive(Debug, Clone)]
@@ -140,7 +142,7 @@ fn merge_values(base: &mut TomlValue, overlay: TomlValue, path: &str) {
             } else {
               format!("{path}.{k}")
             };
-            merge_values(existing, new_v, &next_path)
+            merge_values(existing, new_v, &next_path);
           }
           (None, new_v) => {
             base_tbl.insert(k, new_v);

@@ -66,7 +66,7 @@ pub fn run(ctx: &AppContext, slug: &str, no_edit: bool, agent: Option<&str>) -> 
   // Bootstrap worktree log
   println!(
     "Bootstrap worktree {} ...",
-    format!("agency/{}-{}", id, slug).cyan()
+    format!("agency/{id}-{slug}").cyan()
   );
   add_worktree_for_branch(&repo, &wt_name, &wt_dir, &branch_name)?;
 
@@ -80,7 +80,7 @@ pub fn run(ctx: &AppContext, slug: &str, no_edit: bool, agent: Option<&str>) -> 
   let bcfg = ctx.config.bootstrap_config();
   bootstrap_worktree(&repo, &root_workdir, &wt_dir, &bcfg)?;
   // Run optional bootstrap command within the new worktree
-  let _ = run_bootstrap_cmd(&root_workdir, &wt_dir, &bcfg);
+  run_bootstrap_cmd(&root_workdir, &wt_dir, &bcfg);
 
   Ok(TaskRef { id, slug })
 }
