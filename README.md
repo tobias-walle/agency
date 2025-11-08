@@ -89,3 +89,20 @@ start = ["sh"]
 
 Arguments support `$AGENCY_*` placeholders which are expanded before the process starts.
 The same keys (task id, slug, body, prompt, project root, worktree, optional session/message) are also exported as environment variables in the child process.
+
+### Bootstrapping ignored files
+
+When creating a new task worktree, Agency bootstraps selected files from the main repository’s root:
+- Copies root files that are git-ignored (e.g., `.env`) up to 10MB in size.
+- Copies entire root directories only if explicitly included.
+- Never copies `.git` or `.agency`.
+
+Configure via `[bootstrap]` in `agency.toml` (defaults live in `crates/agency/defaults/agency.toml`). By default, Agency includes common root folders across major ecosystems (`target/`, `node_modules/`, `.yarn/`, `.venv/`, `.direnv/`, `.tox/`, `.gradle/`, `build/`, `dist/`, `_build/`, `vendor/`, `.next/`, `.svelte-kit/`, `.terraform/`):
+
+```toml
+[bootstrap]
+include = ["target", "node_modules", ".yarn", ".venv", ".direnv", ".tox", ".gradle", "build", "dist", "_build", "vendor", ".next", ".svelte-kit", ".terraform"]
+exclude = [".env.local"]
+```
+
+Lists are merged across defaults, global (XDG), and project configs by concatenation with de-duplication.

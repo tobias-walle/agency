@@ -16,6 +16,10 @@ test *ARGS:
 check:
   cargo clippy -q --all-targets -- -A warnings
 
+# Check for compiler or linting errors (Verbose)
+check-verbose:
+  cargo clippy --all-targets
+
 # Format the code
 fmt:
   cargo fmt --all

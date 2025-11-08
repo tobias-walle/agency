@@ -15,6 +15,7 @@ gix = { version = "0.74.1", default-features = false }
 log = "0.4.28"
 owo-colors = "4.2.3"
 portable-pty = "0.9"
+reflink-copy = "0.1.28"
 regex = "1.12.2"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_yaml = "0.9.34"

@@ -53,11 +53,6 @@ pub fn delete_branch_if_exists(repo: &git::Repository, name: &str) -> Result<boo
   }
 }
 
-pub fn has_branch(repo: &git::Repository, name: &str) -> Result<bool> {
-  let full = format!("refs/heads/{name}");
-  Ok(repo.find_reference(&full).is_ok())
-}
-
 pub fn prune_worktree_if_exists(repo: &git::Repository, wt_path: &Path) -> Result<bool> {
   if !wt_path.exists() {
     return Ok(false);
@@ -98,6 +93,7 @@ pub fn add_worktree_for_branch(
     &[
       "worktree",
       "add",
+      "--quiet",
       wt_path.to_string_lossy().as_ref(),
       _branch,
     ],
@@ -116,9 +112,12 @@ pub fn current_branch_name(repo: &git::Repository) -> Result<String> {
 }
 
 fn run_git(args: &[&str], cwd: &Path) -> Result<()> {
+  // Run git quietly: suppress stdout/stderr to keep CLI logs clean.
   let status = std::process::Command::new("git")
     .current_dir(cwd)
     .args(args)
+    .stdout(std::process::Stdio::null())
+    .stderr(std::process::Stdio::null())
     .status()
     .with_context(|| format!("failed to run git {}", args.join(" ")))?;
   if !status.success() {

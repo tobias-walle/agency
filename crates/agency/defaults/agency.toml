@@ -5,6 +5,21 @@ agent = "claude"
 [keybindings]
 detach = "ctrl-q"
 
+# Configure the bootstrap process then creating new git worktrees
+[bootstrap]
+# Include common directories
+include = [
+  "target",
+  "node_modules",
+  ".venv",
+  ".direnv",
+  ".tox",
+  ".gradle",
+  "vendor",
+]
+# Always exclude these names from bootstrapping
+exclude = [".git", ".agency"]
+
 # Configuration of common agents, you can also add your own
 [agents.claude]
 cmd = ["claude", "$AGENCY_TASK"]
@@ -18,3 +33,4 @@ cmd = ["codex", "--full-auto", "$AGENCY_TASK"]
 # Used for testing
 [agents.fake]
 cmd = ["sh"]
+

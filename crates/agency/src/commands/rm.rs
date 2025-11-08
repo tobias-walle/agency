@@ -7,7 +7,7 @@ use crate::config::AppContext;
 use crate::config::compute_socket_path;
 use crate::pty::protocol::{C2D, C2DControl, ProjectKey, write_frame};
 use crate::utils::git::{delete_branch_if_exists, open_main_repo, prune_worktree_if_exists};
-use crate::utils::task::{branch_name, resolve_id_or_slug, task_file, worktree_dir, worktree_name};
+use crate::utils::task::{branch_name, resolve_id_or_slug, task_file, worktree_dir};
 use crate::utils::term::confirm;
 
 pub fn run(ctx: &AppContext, ident: &str) -> Result<()> {
