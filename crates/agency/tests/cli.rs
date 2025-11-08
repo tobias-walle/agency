@@ -53,6 +53,45 @@ fn new_creates_markdown_branch_and_worktree() -> Result<()> {
 }
 
 #[test]
+fn new_writes_yaml_header_when_agent_specified() -> Result<()> {
+  let env = common::TestEnv::new();
+  env.setup_git_repo()?;
+  env.simulate_initial_commit()?;
+
+  // Run new with agent
+  let mut cmd = env.bin_cmd()?;
+  cmd
+    .arg("new")
+    .arg("--no-edit")
+    .arg("-a")
+    .arg("fake")
+    .arg("alpha-task");
+  cmd.assert().success();
+
+  // Check markdown content includes YAML front matter
+  let file = env
+    .path()
+    .join(".agency")
+    .join("tasks")
+    .join("1-alpha-task.md");
+  let data = std::fs::read_to_string(&file)?;
+  assert!(
+    data.starts_with("---\n"),
+    "file should start with YAML '---' block"
+  );
+  assert!(
+    data.contains("agent: fake\n"),
+    "front matter should contain agent: fake"
+  );
+  assert!(
+    data.contains("\n---\n\n# Task 1: alpha-task\n"),
+    "should close YAML and include title"
+  );
+
+  Ok(())
+}
+
+#[test]
 fn path_prints_absolute_worktree_path_by_id_and_slug() -> Result<()> {
   let env = common::TestEnv::new();
   env.setup_git_repo()?;

@@ -3,6 +3,7 @@ use std::sync::OnceLock;
 
 use anyhow::{Context, Result, bail};
 use regex::Regex;
+use serde::{Deserialize, Serialize};
 
 use crate::config::AgencyPaths;
 
@@ -113,6 +114,50 @@ pub fn list_tasks(paths: &AgencyPaths) -> Result<Vec<TaskRef>> {
   Ok(out)
 }
 
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct TaskFrontmatter {
+  #[serde(default)]
+  pub agent: Option<String>,
+}
+
+const FRONT_MATTER_START: &str = "---\n";
+const FRONT_MATTER_END: &str = "\n---\n";
+
+/// Parse optional YAML front matter from the start of a task markdown string.
+/// Returns the parsed front matter (if present) and a slice of the body
+/// excluding the front matter. Gracefully ignores malformed boundaries.
+pub fn parse_task_markdown(input: &str) -> (Option<TaskFrontmatter>, &str) {
+  // Expect YAML front matter delimited by FRONT_MATTER_START and FRONT_MATTER_END.
+  if let Some(rest) = input.strip_prefix(FRONT_MATTER_START) {
+    if let Some((yaml, body)) = rest.split_once(FRONT_MATTER_END) {
+      let fm = serde_yaml::from_str::<TaskFrontmatter>(yaml).ok();
+      return (fm, body);
+    }
+  }
+  (None, input)
+}
+
+/// Format task markdown with optional YAML front matter and a standard title line.
+pub fn format_task_markdown(
+  id: u32,
+  slug: &str,
+  frontmatter: Option<&TaskFrontmatter>,
+) -> Result<String> {
+  let title = format!("# Task {id}: {slug}\n");
+  if let Some(fm) = frontmatter {
+    let yaml = serde_yaml::to_string(fm).context("failed to serialize front matter")?;
+    Ok(format!(
+      "{start}{yaml}{end}\n{title}",
+      start = FRONT_MATTER_START,
+      yaml = yaml,
+      end = FRONT_MATTER_END,
+      title = title
+    ))
+  } else {
+    Ok(title)
+  }
+}
+
 #[cfg(test)]
 mod tests {
 
@@ -153,6 +198,31 @@ mod tests {
 
     let tf_path = task_file(&paths, &task);
     assert!(tf_path.ends_with(".agency/tasks/7-alpha.md"));
+  }
+
+  #[test]
+  fn parse_task_markdown_with_agent() {
+    let input = "---\nagent: fake\n---\n\n# Task 1: alpha\n";
+    let (fm, body) = parse_task_markdown(input);
+    let fm = fm.expect("front matter present");
+    assert_eq!(fm.agent.as_deref(), Some("fake"));
+    assert!(body.starts_with("\n# Task 1: alpha\n") || body.starts_with("# Task 1: alpha\n"));
+  }
+
+  #[test]
+  fn parse_task_markdown_without_front_matter() {
+    let input = "# Task 2: beta\n";
+    let (fm, body) = parse_task_markdown(input);
+    assert!(fm.is_none());
+    assert_eq!(body, input);
+  }
+
+  #[test]
+  fn parse_task_markdown_ignores_unclosed_block() {
+    let input = "---\nagent: fake\n# Task 3: gamma\n"; // no closing delimiter
+    let (fm, body) = parse_task_markdown(input);
+    assert!(fm.is_none());
+    assert_eq!(body, input);
   }
 
   #[test]

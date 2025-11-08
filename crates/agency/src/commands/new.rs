@@ -9,9 +9,11 @@ use owo_colors::OwoColorize as _;
 
 use crate::config::AppContext;
 use crate::utils::git::{add_worktree, ensure_branch, open_main_repo};
-use crate::utils::task::{TaskRef, normalize_and_validate_slug};
+use crate::utils::task::{
+  TaskFrontmatter, TaskRef, format_task_markdown, normalize_and_validate_slug,
+};
 
-pub fn run(ctx: &AppContext, slug: &str, no_edit: bool) -> Result<()> {
+pub fn run(ctx: &AppContext, slug: &str, no_edit: bool, agent: Option<&str>) -> Result<()> {
   let slug = normalize_and_validate_slug(slug)?;
 
   let tasks = ctx.paths.tasks_dir();
@@ -26,7 +28,17 @@ pub fn run(ctx: &AppContext, slug: &str, no_edit: bool) -> Result<()> {
 
   let id = next_id(&tasks)?;
   let file_path = tasks.join(format!("{id}-{slug}.md"));
-  let content = format!("# Task {id}: {slug}\n");
+  // Optional YAML front matter
+  let fm_opt = if let Some(agent_name) = agent {
+    // Validate agent exists in config
+    let _ = ctx.config.get_agent(agent_name)?;
+    Some(TaskFrontmatter {
+      agent: Some(agent_name.to_string()),
+    })
+  } else {
+    None
+  };
+  let content = format_task_markdown(id, &slug, fm_opt.as_ref())?;
   fs::write(&file_path, content)
     .with_context(|| format!("failed to write {}", file_path.display()))?;
 

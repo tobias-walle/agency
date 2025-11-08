@@ -8,7 +8,7 @@ use crate::pty::client as pty_client;
 use crate::pty::protocol::{ProjectKey, SessionOpenMeta, TaskMeta, WireCommand};
 use crate::utils::command::{Command as LocalCommand, expand_vars_in_argv};
 use crate::utils::git::open_main_repo;
-use crate::utils::task::{resolve_id_or_slug, task_file};
+use crate::utils::task::{parse_task_markdown, resolve_id_or_slug, task_file};
 
 pub fn run_with_task(ctx: &AppContext, ident: &str) -> Result<()> {
   // Initialize env_logger similar to pty-demo main
@@ -21,6 +21,7 @@ pub fn run_with_task(ctx: &AppContext, ident: &str) -> Result<()> {
   let tf_path = task_file(&ctx.paths, &task);
   let task_text = fs::read_to_string(&tf_path)
     .with_context(|| format!("failed to read {}", tf_path.display()))?;
+  let (frontmatter, body) = parse_task_markdown(&task_text);
 
   // Compute socket path from config
   let socket = compute_socket_path(&ctx.config);
@@ -43,14 +44,21 @@ pub fn run_with_task(ctx: &AppContext, ident: &str) -> Result<()> {
 
   // Build env map and argv
   let mut env_map: HashMap<String, String> = std::env::vars().collect();
-  env_map.insert("AGENCY_TASK".to_string(), task_text);
+  env_map.insert("AGENCY_TASK".to_string(), body.to_string());
 
-  // Get agent argv template from config (use fake by default)
-  let agent_cfg = ctx
-    .config
-    .agents
-    .get("fake")
-    .context("Fake agent expected in config")?;
+  // Select agent: front matter overrides config default
+  let selected_agent = frontmatter
+    .and_then(|fm| fm.agent)
+    .or_else(|| ctx.config.agent.clone());
+  let agent_name = selected_agent.ok_or_else(|| {
+    let known: Vec<String> = ctx.config.agents.keys().cloned().collect();
+    anyhow::anyhow!(
+      "no agent selected. Set `agent` in config or add YAML front matter. Known agents: {}",
+      known.join(", ")
+    )
+  })?;
+  // Validate configured agents
+  let agent_cfg = ctx.config.get_agent(&agent_name)?;
   let argv_tmpl = agent_cfg.cmd.clone();
   let argv = expand_vars_in_argv(&argv_tmpl, &env_map);
   let cmd_local = LocalCommand::new(&argv)?;
