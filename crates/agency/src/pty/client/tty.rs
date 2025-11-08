@@ -6,11 +6,7 @@
 //! the client process itself.
 
 use anyhow::Result;
-use crossterm::{
-  ExecutableCommand,
-  terminal::{self, EnterAlternateScreen, LeaveAlternateScreen},
-};
-use std::io::stdout;
+use crossterm::terminal;
 
 /// Disables raw terminal mode for the lifetime of this guard and
 /// re-enables it when dropped.
@@ -40,17 +36,11 @@ pub struct RawModeGuard;
 impl RawModeGuard {
   pub fn enable() -> Result<Self> {
     terminal::enable_raw_mode()?;
-    // Enter alternate screen so output is cleared after the session
-    let mut out = stdout();
-    out.execute(EnterAlternateScreen)?;
     Ok(Self)
   }
 }
 impl Drop for RawModeGuard {
   fn drop(&mut self) {
-    // Leave alternate screen again
-    let mut out = stdout();
-    let _ = out.execute(LeaveAlternateScreen);
     let _ = terminal::disable_raw_mode();
   }
 }
