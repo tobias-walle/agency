@@ -6,7 +6,8 @@ use owo_colors::OwoColorize as _;
 use crate::config::AppContext;
 use crate::utils::daemon::stop_sessions_of_task;
 use crate::utils::git::{
-  is_fast_forward, open_main_repo, rebase_onto, rev_parse, update_branch_ref,
+  current_branch_name, hard_reset_to_head, is_fast_forward, open_main_repo, rebase_onto, rev_parse,
+  update_branch_ref, worktree_is_clean,
 };
 use crate::utils::task::{
   branch_name, parse_task_markdown, resolve_id_or_slug, task_file, worktree_dir,
@@ -32,6 +33,26 @@ pub fn run(ctx: &AppContext, ident: &str, base_override: Option<&str>) -> Result
 
   // Open main repo once
   let repo = open_main_repo(ctx.paths.cwd())?;
+
+  // If the base branch is currently checked out in the main worktree,
+  // ensure it is clean to avoid leaving the working tree in a dirty state.
+  let mut refresh_checked_out_base = false;
+  if let Ok(cur) = current_branch_name(&repo) {
+    if cur == base_branch {
+      if !worktree_is_clean(&repo)? {
+        bail!(
+          "base branch {} is checked out and has uncommitted changes; commit or stash before merging",
+          base_branch
+        );
+      }
+      refresh_checked_out_base = true;
+      anstream::println!(
+        "{} {}",
+        "Base is checked out and clean; will refresh after merge".yellow(),
+        base_branch.cyan()
+      );
+    }
+  }
 
   anstream::println!(
     "{} {} -> {}",
@@ -62,6 +83,14 @@ pub fn run(ctx: &AppContext, ident: &str, base_override: Option<&str>) -> Result
     new_head.cyan()
   );
   update_branch_ref(&repo, &base_branch, &new_head)?;
+  if refresh_checked_out_base {
+    hard_reset_to_head(&repo)?;
+    anstream::println!(
+      "{} {}",
+      "Refreshed checked-out working tree for".green(),
+      base_branch.cyan()
+    );
+  }
 
   // Stop any running sessions for this task (best-effort)
   let _ = stop_sessions_of_task(ctx, &task);
