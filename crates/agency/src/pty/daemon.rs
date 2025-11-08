@@ -109,14 +109,12 @@ impl Daemon {
     if !exited.is_empty() {
       let reg = self.registry.lock().unwrap();
       for (sid, stats) in exited {
-        reg.broadcast(
-          sid,
-          D2CControl::Exited {
-            code: None,
-            signal: None,
-            stats: stats.clone(),
-          },
-        );
+        let msg = D2CControl::Exited {
+          code: None,
+          signal: None,
+          stats: stats.clone(),
+        };
+        reg.broadcast(sid, &msg);
       }
     }
   }
@@ -276,7 +274,7 @@ impl Daemon {
     }
 
     // Spawn writer and reader threads
-    let writer = self.spawn_writer_thread(stream_writer, control_rx, output_rx)?;
+    let writer = Self::spawn_writer_thread(stream_writer, control_rx, output_rx)?;
     let reader = self.spawn_reader_thread(stream_reader, control_tx.clone(), session_id)?;
 
     // Supervisor to clean up after reader exits
@@ -300,7 +298,6 @@ impl Daemon {
   /// ensuring detaches and other control messages are delivered even under heavy
   /// output. No daemon locks are held while sending frames.
   fn spawn_writer_thread(
-    &self,
     mut stream_writer: UnixStream,
     control_rx: crossbeam_channel::Receiver<D2CControl>,
     output_rx: crossbeam_channel::Receiver<Vec<u8>>,

@@ -81,7 +81,7 @@ pub fn run_with_task(ctx: &AppContext, ident: &str) -> Result<()> {
     cmd: cmd_wire,
   };
 
-  pty_client::run_attach(&socket, open, None, ctx.config.clone())
+  pty_client::run_attach(&socket, open, None, &ctx.config)
 }
 
 pub fn run_join_session(ctx: &AppContext, session_id: u64) -> Result<()> {
@@ -110,5 +110,5 @@ pub fn run_join_session(ctx: &AppContext, session_id: u64) -> Result<()> {
     },
   };
   let socket = compute_socket_path(&ctx.config);
-  pty_client::run_attach(&socket, open, Some(session_id), ctx.config.clone())
+  pty_client::run_attach(&socket, open, Some(session_id), &ctx.config)
 }

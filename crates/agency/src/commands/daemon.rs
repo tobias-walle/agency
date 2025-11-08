@@ -37,12 +37,12 @@ pub fn start() -> Result<()> {
 
   // Spawn detached child running `agency daemon run`
   let exe = std::env::current_exe().context("failed to get current exe")?;
-  let mut cmd = ProcCommand::new(exe);
-  cmd.arg("daemon").arg("run");
-  cmd.stdout(std::process::Stdio::null());
-  cmd.stderr(std::process::Stdio::null());
-  cmd.stdin(std::process::Stdio::null());
-  let _child = cmd.spawn().context("failed to spawn daemon child")?;
+  let mut daemon_cmd = ProcCommand::new(exe);
+  daemon_cmd.arg("daemon").arg("run");
+  daemon_cmd.stdout(std::process::Stdio::null());
+  daemon_cmd.stderr(std::process::Stdio::null());
+  daemon_cmd.stdin(std::process::Stdio::null());
+  let _child = daemon_cmd.spawn().context("failed to spawn daemon child")?;
 
   // Poll for readiness
   let start = Instant::now();
