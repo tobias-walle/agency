@@ -3,9 +3,9 @@ use std::process::Command as ProcCommand;
 use std::thread;
 use std::time::{Duration, Instant};
 
+use crate::{log_success, log_warn};
 use anstream::println;
 use anyhow::{Context, Result};
-use owo_colors::OwoColorize as _;
 
 use crate::config::{compute_socket_path, load_config};
 use crate::pty::daemon as pty_daemon;
@@ -31,7 +31,7 @@ pub fn start() -> Result<()> {
   let socket = compute_socket_path(&cfg);
 
   if UnixStream::connect(&socket).is_ok() {
-    println!("{}", "Daemon already running".green());
+    log_warn!("Daemon already running");
     return Ok(());
   }
 
@@ -48,15 +48,15 @@ pub fn start() -> Result<()> {
   let start = Instant::now();
   while start.elapsed() < Duration::from_secs(5) {
     if std::fs::metadata(&socket).is_ok() {
-      println!("{} {}", "Started daemon at".green(), socket.display());
+      log_success!("Started daemon at {}", socket.display());
       return Ok(());
     }
     thread::sleep(Duration::from_millis(50));
   }
-  anyhow::bail!(format!(
-    "daemon did not create socket at {} within timeout",
+  anyhow::bail!(
+    "Daemon did not create socket at {} within timeout",
     socket.display()
-  ))
+  )
 }
 
 pub fn stop() -> Result<()> {
@@ -74,12 +74,12 @@ pub fn stop() -> Result<()> {
   let start = Instant::now();
   while start.elapsed() < Duration::from_secs(5) {
     if std::fs::metadata(&socket).is_err() {
-      println!("{}", "Stopped daemon".green());
+      log_success!("Stopped daemon");
       return Ok(());
     }
     thread::sleep(Duration::from_millis(50));
   }
-  anyhow::bail!("daemon socket still present after stop")
+  anyhow::bail!("Daemon socket still present after stop")
 }
 
 pub fn restart() -> Result<()> {

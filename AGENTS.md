@@ -100,23 +100,16 @@ Add the files and commit in a single command, e.g. `git add file1.ts file2.ts &&
 
 ## Terminal IO
 
-- Use `println!` and `eprintln!` from `anstream` for stdout/stderr to ensure TTY-aware behavior.
-- Always import and use the aliases (`use anstream::println` and/or `use anstream::eprintln`). Do not use `std::println!` or `std::eprintln!` anywhere.
-- Apply styles with `owo-colors::OwoColorize` and avoid asserting colors in tests as they depend on TTY.
 - You MUST use `bail!` for errors, if they should crash the program. They are automatically printed to stderr in red.
-- Make user-facing logs colorful. The user should get a modern feel when using our app. But either use the same color for the whole message or highlight specific sections; avoid doing both.
-
-Example:
-
-```rust
-use anstream::println;
-use owo_colors::OwoColorize as _;
-
-// Foreground colors
-println!("My number is {:#x}!", 10.green());
-// Background colors
-println!("My number is not {}!", 4.on_red());
-```
+- You MUST use the our log macros `log_info!`, `log_success!`, `log_warn!`, `log_error!` (use `crate::log_info`, etc.)
+- Logging Style
+  - Info: neutral line; highlight tokens via `utils::log::t`.
+  - Success: entire line green; no token highlights.
+  - Warn: entire line yellow; no token highlights.
+  - Error: entire line red; no token highlights.
+  - Tokens (`use utils::log::t`): `t::id`, `t::count` (blue), `t::slug` (bold), `t::branch` (magenta), `t::path`/`t::sha` (cyan).
+- Wording: Uppercase start; verb-first; past tense for confirmations; ASCII; no trailing period; use `->`.
+- Examples: `log_info!("Create task {} (id {})", t::slug(slug), t::id(id));` · `log_success!("Fast-forward {} to {} at {}", base, branch, sha);` · `log_warn!("Clean up: worktree, branch, file");` · `log_error!("Daemon error: {}", msg);`
 
 ## Async
 
@@ -180,3 +173,7 @@ Start execution by managing your TODO list and then continue working on them unt
 In the following these conditional rule files are listed:
 
 - `./docs/rules/rust-best-practices.md` - You MUST read this if you are working with Rust Code. Either if you are implementing rust code or planning to modify it.
+
+```
+
+```

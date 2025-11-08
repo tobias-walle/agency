@@ -136,7 +136,7 @@ pub fn run() -> Result<()> {
     Some(Commands::Attach { task, session }) => match (task, session) {
       (Some(t), None) => commands::attach::run_with_task(&ctx, &t)?,
       (None, Some(sid)) => commands::attach::run_join_session(&ctx, sid)?,
-      _ => anyhow::bail!("attach requires either a task or --session <id>"),
+      _ => anyhow::bail!("Attach requires either a task or --session <id>"),
     },
     Some(Commands::Stop { task, session }) => {
       commands::stop::run(&ctx, task.as_deref(), session)?;

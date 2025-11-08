@@ -1,12 +1,12 @@
-use anstream::println;
 use anyhow::{Context, Result};
-use owo_colors::OwoColorize as _;
 use std::os::unix::net::UnixStream;
 
 use crate::config::{AppContext, compute_socket_path};
 use crate::pty::protocol::{C2D, C2DControl, D2C, D2CControl, ProjectKey, read_frame, write_frame};
 use crate::utils::git::{open_main_repo, repo_workdir_or};
 use crate::utils::task::resolve_id_or_slug;
+use crate::{log_info, log_success};
+// Use macros via module path
 
 pub fn run(ctx: &AppContext, ident: Option<&str>, session_id: Option<u64>) -> Result<()> {
   let socket = compute_socket_path(&ctx.config);
@@ -21,14 +21,14 @@ pub fn run(ctx: &AppContext, ident: Option<&str>, session_id: Option<u64>) -> Re
     // Read Goodbye acknowledgement, then log
     match read_frame::<_, D2C>(&mut stream) {
       Ok(D2C::Control(D2CControl::Goodbye)) => {
-        println!("Stopped session {}", sid.to_string().cyan());
+        log_success!("Stopped session {}", sid);
       }
       Ok(D2C::Control(D2CControl::Error { message })) => {
-        anyhow::bail!(format!("daemon error: {message}"));
+        anyhow::bail!("Daemon error: {message}");
       }
       _ => {
         // Silent success if protocol differs; keep user informed
-        println!("Requested stop for session {}", sid.to_string().cyan());
+        log_info!("Requested stop for session {}", sid);
       }
     }
     return Ok(());
@@ -52,26 +52,22 @@ pub fn run(ctx: &AppContext, ident: Option<&str>, session_id: Option<u64>) -> Re
     // Read ack and log count
     match read_frame::<_, D2C>(&mut stream) {
       Ok(D2C::Control(D2CControl::Ack { stopped })) => {
-        println!(
+        log_success!(
           "Stopped {} session(s) for {}-{}",
-          stopped.to_string().cyan(),
+          stopped,
           task.id,
           task.slug
         );
       }
       Ok(D2C::Control(D2CControl::Error { message })) => {
-        anyhow::bail!(format!("daemon error: {message}"));
+        anyhow::bail!("Daemon error: {message}");
       }
       _ => {
-        println!(
-          "Requested stop for task {}-{}",
-          task.id.to_string().cyan(),
-          task.slug
-        );
+        log_info!("Requested stop for task {}-{}", task.id, task.slug);
       }
     }
     return Ok(());
   }
 
-  anyhow::bail!("must specify --session <id> or task ident")
+  anyhow::bail!("Must specify --session <id> or task ident")
 }

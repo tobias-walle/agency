@@ -1,7 +1,6 @@
 use std::fs;
 
 use anyhow::{Context, Result, bail};
-use owo_colors::OwoColorize as _;
 
 use crate::config::AppContext;
 use crate::utils::daemon::stop_sessions_of_task;
@@ -12,6 +11,7 @@ use crate::utils::git::{
 use crate::utils::task::{
   branch_name, parse_task_markdown, resolve_id_or_slug, task_file, worktree_dir,
 };
+use crate::{log_success, log_warn};
 
 pub fn run(ctx: &AppContext, ident: &str, base_override: Option<&str>) -> Result<()> {
   let task = resolve_id_or_slug(&ctx.paths, ident)?;
@@ -19,7 +19,7 @@ pub fn run(ctx: &AppContext, ident: &str, base_override: Option<&str>) -> Result
   let wt_dir = worktree_dir(&ctx.paths, &task);
   let file_path = task_file(&ctx.paths, &task);
   if !file_path.exists() {
-    bail!("task file not found: {}", file_path.display());
+    bail!("Task file not found: {}", file_path.display());
   }
   let data = fs::read_to_string(&file_path)
     .with_context(|| format!("failed to read {}", file_path.display()))?;
@@ -41,30 +41,24 @@ pub fn run(ctx: &AppContext, ident: &str, base_override: Option<&str>) -> Result
     if cur == base_branch {
       if !worktree_is_clean(&repo)? {
         bail!(
-          "base branch {} is checked out and has uncommitted changes; commit or stash before merging",
+          "Base branch {} is checked out and has uncommitted changes; commit or stash before merging",
           base_branch
         );
       }
       refresh_checked_out_base = true;
-      anstream::println!(
-        "{} {}",
-        "Base is checked out and clean; will refresh after merge".yellow(),
-        base_branch.cyan()
+      log_warn!(
+        "Base is checked out and clean; will refresh after merge: {}",
+        base_branch
       );
     }
   }
 
-  anstream::println!(
-    "{} {} -> {}",
-    "Rebase".yellow(),
-    branch.cyan(),
-    base_branch.cyan()
-  );
+  log_warn!("Rebase {} -> {}", branch, base_branch);
 
   // Rebase. On conflicts, instruct the user to resolve and rerun.
   if let Err(err) = rebase_onto(&wt_dir, &base_branch) {
     bail!(
-      "rebase failed: {}. resolve conflicts in {} then rerun merge",
+      "Rebase failed: {}. Resolve conflicts in {} then rerun merge",
       err,
       wt_dir.display()
     );
@@ -72,31 +66,21 @@ pub fn run(ctx: &AppContext, ident: &str, base_override: Option<&str>) -> Result
 
   // Fast-forward base to task head without switching HEAD.
   if !is_fast_forward(&repo, &base_branch, &branch)? {
-    bail!("fast-forward not possible: base advanced; rerun after rebase");
+    bail!("Fast-forward not possible: Base advanced; rerun after rebase");
   }
   let new_head = rev_parse(&wt_dir, "HEAD")?;
-  anstream::println!(
-    "{} {} to {} at {}",
-    "Fast-forward".green(),
-    base_branch.cyan(),
-    branch.cyan(),
-    new_head.cyan()
-  );
+  log_success!("Fast-forward {} to {} at {}", base_branch, branch, new_head);
   update_branch_ref(&repo, &base_branch, &new_head)?;
   if refresh_checked_out_base {
     hard_reset_to_head(&repo)?;
-    anstream::println!(
-      "{} {}",
-      "Refreshed checked-out working tree for".green(),
-      base_branch.cyan()
-    );
+    log_success!("Refreshed checked-out working tree for {}", base_branch);
   }
 
   // Stop any running sessions for this task (best-effort)
   let _ = stop_sessions_of_task(ctx, &task);
 
   // Cleanup: worktree, branch, task file
-  anstream::println!("{}", "Cleaning up: worktree, branch, file".yellow());
+  log_warn!("Clean up: worktree, branch, file");
   {
     use crate::utils::git::{delete_branch_if_exists, prune_worktree_if_exists};
     let _ = prune_worktree_if_exists(&repo, &wt_dir)?;
@@ -106,7 +90,7 @@ pub fn run(ctx: &AppContext, ident: &str, base_override: Option<&str>) -> Result
     fs::remove_file(&file_path)
       .with_context(|| format!("failed to remove {}", file_path.display()))?;
   }
-  anstream::println!("{}", "Merge complete and cleaned up".green());
+  log_success!("Merge complete");
 
   Ok(())
 }
