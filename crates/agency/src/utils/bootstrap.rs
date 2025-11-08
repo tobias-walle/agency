@@ -5,6 +5,7 @@ use anyhow::{Context, Result};
 use reflink_copy::reflink_or_copy;
 
 use crate::config::BootstrapConfig;
+use crate::utils::cmd::{CmdCtx, expand_argv};
 use gix as git;
 
 const MAX_BOOTSTRAP_FILE_BYTES: u64 = 10 * 1024 * 1024;
@@ -87,17 +88,15 @@ pub fn run_bootstrap_cmd(
     return Ok(());
   }
 
-  // Replace <root> placeholders
+  // Build expansion context and expand argv
   let root_abs = repo_root
     .canonicalize()
     .unwrap_or_else(|_| repo_root.to_path_buf())
     .display()
     .to_string();
-  let argv: Vec<String> = cfg
-    .cmd
-    .iter()
-    .map(|s| s.replace("<root>", &root_abs))
-    .collect();
+  let env_map: std::collections::HashMap<String, String> = std::env::vars().collect();
+  let ctx = CmdCtx::with_env(root_abs.clone(), env_map);
+  let argv = expand_argv(&cfg.cmd, &ctx);
 
   // Special-case: default path missing should be a silent skip
   if cfg.cmd.len() == 1 && cfg.cmd[0] == "<root>/.agency/setup.sh" {

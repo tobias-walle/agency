@@ -6,7 +6,8 @@ use anyhow::{Context, Result};
 use crate::config::{AppContext, compute_socket_path};
 use crate::pty::client as pty_client;
 use crate::pty::protocol::{ProjectKey, SessionOpenMeta, TaskMeta, WireCommand};
-use crate::utils::command::{Command as LocalCommand, expand_vars_in_argv};
+use crate::utils::cmd::{CmdCtx, expand_argv};
+use crate::utils::command::Command as LocalCommand;
 use crate::utils::git::{open_main_repo, repo_workdir_or};
 use crate::utils::task::{parse_task_markdown, remove_title, resolve_id_or_slug, task_file};
 
@@ -58,7 +59,15 @@ pub fn run_with_task(ctx: &AppContext, ident: &str) -> Result<()> {
   // Validate configured agents
   let agent_cfg = ctx.config.get_agent(&agent_name)?;
   let argv_tmpl = agent_cfg.cmd.clone();
-  let argv = expand_vars_in_argv(&argv_tmpl, &env_map);
+  let ctx_expand = CmdCtx::with_env(
+    repo_root
+      .canonicalize()
+      .unwrap_or(repo_root.clone())
+      .display()
+      .to_string(),
+    env_map.clone(),
+  );
+  let argv = expand_argv(&argv_tmpl, &ctx_expand);
   let cmd_local = LocalCommand::new(&argv)?;
 
   // Build wire command
