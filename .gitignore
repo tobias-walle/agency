@@ -1,4 +1,5 @@
 /target
-.agency/
+.agency/*
 .env
 pty-demo
+!.agency/setup.sh

@@ -7,6 +7,9 @@ detach = "ctrl-q"
 
 # Configure the bootstrap process then creating new git worktrees
 [bootstrap]
+# Run an optional bootstrap script inside each new worktree.
+# Supports the placeholder <root> which expands to the repository root path.
+cmd = ["<root>/.agency/setup.sh"]
 # Include common directories
 include = [
   "target",
@@ -33,4 +36,3 @@ cmd = ["codex", "--full-auto", "$AGENCY_TASK"]
 # Used for testing
 [agents.fake]
 cmd = ["sh"]
-

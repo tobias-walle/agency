@@ -8,7 +8,7 @@ use anyhow::{Context, Result, bail};
 use owo_colors::OwoColorize as _;
 
 use crate::config::AppContext;
-use crate::utils::bootstrap::bootstrap_worktree;
+use crate::utils::bootstrap::{bootstrap_worktree, run_bootstrap_cmd};
 use crate::utils::git::{
   add_worktree_for_branch, current_branch_name, ensure_branch, open_main_repo, repo_workdir_or,
 };
@@ -62,7 +62,7 @@ pub fn run(ctx: &AppContext, slug: &str, no_edit: bool, agent: Option<&str>) -> 
   let _ = ensure_dir(&wt_root)?;
   let wt_dir = wt_root.join(&wt_name);
   // First concise task creation log
-  println!("Task {} with id {} created ✨", slug.cyan(), id.cyan());
+  println!("Create Task {} with id {}", slug.cyan(), id.cyan());
   // Bootstrap worktree log
   println!(
     "Bootstrap worktree {} ...",
@@ -79,6 +79,8 @@ pub fn run(ctx: &AppContext, slug: &str, no_edit: bool, agent: Option<&str>) -> 
   let root_workdir = repo_workdir_or(&repo, ctx.paths.cwd());
   let bcfg = ctx.config.bootstrap_config();
   bootstrap_worktree(&repo, &root_workdir, &wt_dir, &bcfg)?;
+  // Run optional bootstrap command within the new worktree
+  let _ = run_bootstrap_cmd(&root_workdir, &wt_dir, &bcfg);
 
   Ok(TaskRef { id, slug })
 }

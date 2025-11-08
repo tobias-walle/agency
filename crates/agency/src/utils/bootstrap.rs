@@ -1,5 +1,5 @@
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use reflink_copy::reflink_or_copy;
@@ -69,6 +69,52 @@ pub fn bootstrap_worktree(
     copy_dir_tree(&src_dir, &dst_dir)?;
   }
 
+  Ok(())
+}
+
+/// Run the configured bootstrap command inside the new worktree.
+///
+/// - Replaces `<root>` placeholders in argv with the repository root path.
+/// - If `cfg.cmd` equals the default and the file does not exist, it silently skips.
+/// - Streams child stdout/stderr directly to the user.
+pub fn run_bootstrap_cmd(
+  repo_root: &Path,
+  worktree_dir: &Path,
+  cfg: &BootstrapConfig,
+) -> Result<()> {
+  // No command configured -> no-op
+  if cfg.cmd.is_empty() {
+    return Ok(());
+  }
+
+  // Replace <root> placeholders
+  let root_abs = repo_root
+    .canonicalize()
+    .unwrap_or_else(|_| repo_root.to_path_buf())
+    .display()
+    .to_string();
+  let argv: Vec<String> = cfg
+    .cmd
+    .iter()
+    .map(|s| s.replace("<root>", &root_abs))
+    .collect();
+
+  // Special-case: default path missing should be a silent skip
+  if cfg.cmd.len() == 1 && cfg.cmd[0] == "<root>/.agency/setup.sh" {
+    let candidate = PathBuf::from(&argv[0]);
+    if !candidate.exists() {
+      return Ok(());
+    }
+  }
+
+  // Spawn the command, current_dir at the worktree
+  let _ = std::process::Command::new(&argv[0])
+    .current_dir(worktree_dir)
+    .args(&argv[1..])
+    .stdin(std::process::Stdio::inherit())
+    .stdout(std::process::Stdio::inherit())
+    .stderr(std::process::Stdio::inherit())
+    .status();
   Ok(())
 }
 

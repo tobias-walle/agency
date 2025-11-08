@@ -123,6 +123,10 @@ pub struct BootstrapConfig {
   pub include: Vec<String>,
   #[serde(default)]
   pub exclude: Vec<String>,
+  /// Command to run in newly created worktrees. Args support the `<root>` placeholder.
+  /// Empty means disabled. Defaults come from embedded `defaults/agency.toml`.
+  #[serde(default)]
+  pub cmd: Vec<String>,
 }
 
 fn merge_values(base: &mut TomlValue, overlay: TomlValue, path: &str) {
