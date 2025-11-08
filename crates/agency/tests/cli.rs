@@ -309,9 +309,11 @@ fn ps_lists_id_and_slug_in_order() -> Result<()> {
   cmd
     .assert()
     .success()
-    .stdout(predicates::str::contains("ID SLUG\n").from_utf8())
-    .stdout(predicates::str::contains(format!(" {id1} {slug1}\n")).from_utf8())
-    .stdout(predicates::str::contains(format!(" {id2} {slug2}\n")).from_utf8());
+    .stdout(predicates::str::contains("ID SLUG").from_utf8())
+    .stdout(predicates::str::contains("STATUS SESSION\n").from_utf8())
+    .stdout(predicates::str::contains(format!(" {id1} {slug1}")).from_utf8())
+    .stdout(predicates::str::contains(format!(" {id2} {slug2}")).from_utf8())
+    .stdout(predicates::str::contains("Draft").from_utf8());
 
   Ok(())
 }
@@ -327,7 +329,8 @@ fn ps_handles_empty_state() -> Result<()> {
   cmd
     .assert()
     .success()
-    .stdout(predicates::str::contains("ID SLUG\n").from_utf8());
+    .stdout(predicates::str::contains("ID SLUG").from_utf8())
+    .stdout(predicates::str::contains("STATUS SESSION\n").from_utf8());
 
   Ok(())
 }

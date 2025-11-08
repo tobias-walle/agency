@@ -67,9 +67,12 @@ fn format_table(headers: &[impl Display], rows: &[Vec<String>]) -> String {
     widths[i] = hw.max(rw);
   }
 
-  // Determine numeric columns (right align): header equals "ID"
+  // Determine numeric columns (right align): header equals "ID" or "SESSION"
   let numeric: Vec<bool> = (0..cols)
-    .map(|i| strip_ansi(&hdrs_raw[i]).to_uppercase() == "ID")
+    .map(|i| {
+      let h = strip_ansi(&hdrs_raw[i]).to_uppercase();
+      h == "ID" || h == "SESSION"
+    })
     .collect();
 
   // Header line: color if stdout is a TTY; align; avoid padding last column
