@@ -7,7 +7,7 @@ use crate::config::{AppContext, compute_socket_path};
 use crate::pty::client as pty_client;
 use crate::pty::protocol::{ProjectKey, SessionOpenMeta, TaskMeta, WireCommand};
 use crate::utils::command::{Command as LocalCommand, expand_vars_in_argv};
-use crate::utils::git::open_main_repo;
+use crate::utils::git::{open_main_repo, repo_workdir_or};
 use crate::utils::task::{parse_task_markdown, remove_title, resolve_id_or_slug, task_file};
 
 pub fn run_with_task(ctx: &AppContext, ident: &str) -> Result<()> {
@@ -28,10 +28,7 @@ pub fn run_with_task(ctx: &AppContext, ident: &str) -> Result<()> {
 
   // Compute project key (canonical main repo workdir)
   let repo = open_main_repo(ctx.paths.cwd())?;
-  let repo_root = repo
-    .workdir()
-    .map(|p| p.canonicalize().unwrap_or_else(|_| p.to_path_buf()))
-    .unwrap_or(ctx.paths.cwd().clone());
+  let repo_root = repo_workdir_or(&repo, ctx.paths.cwd());
   let project = ProjectKey {
     repo_root: repo_root.display().to_string(),
   };
@@ -88,10 +85,7 @@ pub fn run_with_task(ctx: &AppContext, ident: &str) -> Result<()> {
 pub fn run_join_session(ctx: &AppContext, session_id: u64) -> Result<()> {
   // For join, the open meta is unused by the handshake; provide minimal values.
   let repo = open_main_repo(ctx.paths.cwd())?;
-  let repo_root = repo
-    .workdir()
-    .map(|p| p.canonicalize().unwrap_or_else(|_| p.to_path_buf()))
-    .unwrap_or(ctx.paths.cwd().clone());
+  let repo_root = repo_workdir_or(&repo, ctx.paths.cwd());
   let project = ProjectKey {
     repo_root: repo_root.display().to_string(),
   };

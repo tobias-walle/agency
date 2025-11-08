@@ -1,6 +1,7 @@
 mod common;
 
 use anyhow::Result;
+use gix as git;
 use predicates::prelude::*;
 
 #[test]
@@ -143,12 +144,9 @@ fn rm_confirms_and_removes_on_y_or_y() -> Result<()> {
     .stdout(predicates::str::contains("Cancelled").from_utf8());
 
   // Ensure still present
-  let repo = git2::Repository::discover(env.path())?;
-  assert!(
-    repo
-      .find_branch(&env.branch_name(id, &slug), git2::BranchType::Local)
-      .is_ok()
-  );
+  let repo = git::discover(env.path())?;
+  let full = format!("refs/heads/{}", env.branch_name(id, &slug));
+  assert!(repo.find_reference(&full).is_ok());
   assert!(env.task_file_path(id, &slug).is_file());
   assert!(env.worktree_dir_path(id, &slug).is_dir());
 
@@ -163,12 +161,9 @@ fn rm_confirms_and_removes_on_y_or_y() -> Result<()> {
     .stdout(predicates::str::contains("Removed task, branch, and worktree").from_utf8());
 
   // Verify removal
-  let repo = git2::Repository::discover(env.path())?;
-  assert!(
-    repo
-      .find_branch(&env.branch_name(id, &slug), git2::BranchType::Local)
-      .is_err()
-  );
+  let repo = git::discover(env.path())?;
+  let full = format!("refs/heads/{}", env.branch_name(id, &slug));
+  assert!(repo.find_reference(&full).is_err());
   assert!(!env.task_file_path(id, &slug).exists());
   assert!(!env.worktree_dir_path(id, &slug).exists());
 
@@ -202,12 +197,9 @@ fn new_auto_suffixes_duplicate_slug_to_slug2() -> Result<()> {
   let file = env.task_file_path(id2, &slug2);
   assert!(file.is_file());
 
-  let repo = git2::Repository::discover(env.path())?;
-  assert!(
-    repo
-      .find_branch(&env.branch_name(id2, &slug2), git2::BranchType::Local)
-      .is_ok()
-  );
+  let repo = git::discover(env.path())?;
+  let full = format!("refs/heads/{}", env.branch_name(id2, &slug2));
+  assert!(repo.find_reference(&full).is_ok());
 
   let wt_dir = env.worktree_dir_path(id2, &slug2);
   assert!(wt_dir.is_dir());
@@ -226,12 +218,9 @@ fn new_increments_trailing_number_slug() -> Result<()> {
   let file = env.task_file_path(id2, &slug2);
   assert!(file.is_file());
 
-  let repo = git2::Repository::discover(env.path())?;
-  assert!(
-    repo
-      .find_branch(&env.branch_name(id2, &slug2), git2::BranchType::Local)
-      .is_ok()
-  );
+  let repo = git::discover(env.path())?;
+  let full = format!("refs/heads/{}", env.branch_name(id2, &slug2));
+  assert!(repo.find_reference(&full).is_ok());
 
   let wt_dir = env.worktree_dir_path(id2, &slug2);
   assert!(wt_dir.is_dir());
