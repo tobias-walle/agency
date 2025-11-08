@@ -173,3 +173,33 @@ pub fn update_branch_ref(repo: &git::Repository, branch: &str, new_commit: &str)
   let full = format!("refs/heads/{branch}");
   run_git(&["update-ref", &full, new_commit], workdir)
 }
+
+/// Returns true if the main worktree has no changes (including untracked files).
+pub fn worktree_is_clean(repo: &git::Repository) -> Result<bool> {
+  let workdir = repo
+    .workdir()
+    .ok_or_else(|| anyhow::anyhow!("no main worktree: cannot inspect status"))?;
+  let out = std::process::Command::new("git")
+    .current_dir(workdir)
+    .arg("status")
+    .arg("--porcelain")
+    .arg("--untracked-files=no")
+    .stdout(std::process::Stdio::piped())
+    .stderr(std::process::Stdio::null())
+    .spawn()
+    .with_context(|| "failed to spawn git status --porcelain")?
+    .wait_with_output()
+    .with_context(|| "failed to wait for git status --porcelain")?;
+  if !out.status.success() {
+    anyhow::bail!("git status --porcelain failed: status={}", out.status);
+  }
+  Ok(String::from_utf8_lossy(&out.stdout).trim().is_empty())
+}
+
+/// Hard resets the checked-out main worktree to its HEAD.
+pub fn hard_reset_to_head(repo: &git::Repository) -> Result<()> {
+  let workdir = repo
+    .workdir()
+    .ok_or_else(|| anyhow::anyhow!("no main worktree: cannot reset"))?;
+  run_git(&["reset", "--hard"], workdir)
+}

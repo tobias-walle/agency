@@ -485,3 +485,84 @@ fn merge_fast_forwards_and_cleans_up() -> Result<()> {
 
   Ok(())
 }
+
+#[test]
+fn merge_blocks_when_base_dirty() -> Result<()> {
+  let env = common::TestEnv::new();
+  env.init_repo()?;
+  let (id, slug) = env.new_task("merge-dirty", &["--no-edit", "--no-attach"])?;
+
+  // Create a new commit on the task branch (empty tree commit)
+  let repo = git::discover(env.path())?;
+  let empty_tree = git::ObjectId::empty_tree(repo.object_hash());
+  let head = repo.head_commit()?;
+  let parent_id = head.id();
+  let task_ref = format!("refs/heads/{}", env.branch_name(id, &slug));
+  let _ = repo.commit(task_ref.as_str(), "test", empty_tree, [parent_id])?;
+
+  // Create a tracked file and commit it on base
+  let tracked = env.path().join("tracked.txt");
+  std::fs::write(&tracked, b"v1")?;
+  let _ = std::process::Command::new("git")
+    .current_dir(env.path())
+    .args(["add", "."])
+    .status()?;
+  let _ = std::process::Command::new("git")
+    .current_dir(env.path())
+    .args(["commit", "-m", "add tracked"])
+    .status()?;
+  // Modify the tracked file without committing to make base dirty
+  std::fs::write(&tracked, b"v2")?;
+
+  // Attempt merge should fail with actionable error
+  let mut cmd = env.bin_cmd()?;
+  let assert = cmd.arg("merge").arg(id.to_string()).assert();
+  assert
+    .failure()
+    .stderr(predicates::str::contains("has uncommitted changes"));
+
+  // Verify nothing was cleaned up
+  assert!(env.branch_exists(id, &slug)?);
+  assert!(env.task_file_path(id, &slug).exists());
+  assert!(env.worktree_dir_path(id, &slug).exists());
+
+  Ok(())
+}
+
+#[test]
+fn merge_refreshes_checked_out_base_worktree() -> Result<()> {
+  let env = common::TestEnv::new();
+  env.init_repo()?;
+  let (id, slug) = env.new_task("merge-refresh", &["--no-edit", "--no-attach"])?;
+
+  // Create a new commit on the task branch (empty tree commit)
+  let repo = git::discover(env.path())?;
+  let empty_tree = git::ObjectId::empty_tree(repo.object_hash());
+  let head = repo.head_commit()?;
+  let parent_id = head.id();
+  let task_ref = format!("refs/heads/{}", env.branch_name(id, &slug));
+  let _ = repo.commit(task_ref.as_str(), "test", empty_tree, [parent_id])?;
+
+  // Merge back; since base is checked out and clean, we should refresh working tree
+  let mut cmd = env.bin_cmd()?;
+  let output = cmd.arg("merge").arg(id.to_string()).output()?;
+  assert!(output.status.success());
+  let stdout = String::from_utf8_lossy(&output.stdout);
+  assert!(stdout.contains("Refreshed checked-out working tree"));
+
+  // And the repo remains clean
+  let status_out = std::process::Command::new("git")
+    .current_dir(env.path())
+    .arg("status")
+    .arg("--porcelain")
+    .arg("--untracked-files=no")
+    .output()?;
+  assert!(status_out.status.success());
+  assert!(
+    String::from_utf8_lossy(&status_out.stdout)
+      .trim()
+      .is_empty()
+  );
+
+  Ok(())
+}
