@@ -78,7 +78,7 @@ fn format_table(headers: &[impl Display], rows: &[Vec<String>]) -> String {
   for i in 0..cols {
     let visible = strip_ansi(&hdrs_raw[i]);
     let text = if color_headers {
-      format!("{}", visible.bold().dimmed())
+      format!("{}", visible.dimmed())
     } else {
       visible
     };

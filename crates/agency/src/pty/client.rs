@@ -118,8 +118,8 @@ impl Client {
       }
       other => {
         let _ = other;
-        eprintln!("Protocol error: expected Welcome");
-        Err(anyhow!("protocol: expected Welcome"))
+        eprintln!("Protocol error: Expected Welcome");
+        Err(anyhow!("Protocol: Expected Welcome"))
       }
     }
   }
@@ -272,10 +272,11 @@ impl Client {
                 {
                   let _pause = RawModePauseGuard::pause();
                   eprintln!(
-                    "\nAgent exited. Stats: in={} out={} elapsed={}ms",
+                    "\nAgent exited: in={} out={} elapsed={}ms",
                     stats.bytes_in, stats.bytes_out, stats.elapsed_ms
                   );
-                  eprintln!("Press Enter to restart the session...");
+                  use owo_colors::OwoColorize as _;
+                  eprintln!("{}", "Press Enter to restart the session...".dimmed());
                 }
                 // Arm restart: input thread will swallow bytes until Enter and trigger restart
                 wait_restart.store(true, Ordering::Relaxed);

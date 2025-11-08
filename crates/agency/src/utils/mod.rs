@@ -5,5 +5,6 @@ pub mod daemon;
 pub mod editor;
 pub mod git;
 pub mod keybindings;
+pub mod log;
 pub mod task;
 pub mod term;

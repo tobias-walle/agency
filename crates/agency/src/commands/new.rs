@@ -2,16 +2,17 @@ use std::fs;
 use std::io::IsTerminal as _;
 use std::path::Path;
 
-use anstream::println;
 use anyhow::{Context, Result};
-use owo_colors::OwoColorize as _;
 
 use crate::config::AppContext;
+// Using macros via module path
+use crate::log_info;
 use crate::utils::bootstrap::{bootstrap_worktree, run_bootstrap_cmd};
 use crate::utils::editor::open_path as open_editor_path;
 use crate::utils::git::{
   add_worktree_for_branch, current_branch_name, ensure_branch, open_main_repo, repo_workdir_or,
 };
+use crate::utils::log::t;
 use crate::utils::task::{
   TaskFrontmatter, TaskRef, compute_unique_slug, format_task_markdown, next_id,
   normalize_and_validate_slug,
@@ -61,12 +62,11 @@ pub fn run(ctx: &AppContext, slug: &str, no_edit: bool, agent: Option<&str>) -> 
   let wt_root = ctx.paths.worktrees_dir();
   let _ = ensure_dir(&wt_root)?;
   let wt_dir = wt_root.join(&wt_name);
-  // First concise task creation log
-  println!("Create Task {} with id {}", slug.cyan(), id.cyan());
-  // Bootstrap worktree log
-  println!(
-    "Bootstrap worktree {} ...",
-    format!("agency/{id}-{slug}").cyan()
+  // Info messages with token highlights
+  log_info!("Create task {} (id {})", t::slug(&slug), t::id(id));
+  log_info!(
+    "Bootstrap worktree {}",
+    t::path(format!("agency/{id}-{slug}"))
   );
   add_worktree_for_branch(&repo, &wt_name, &wt_dir, &branch_name)?;
 
