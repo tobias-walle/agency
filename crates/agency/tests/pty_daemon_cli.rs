@@ -6,15 +6,20 @@ use std::time::Duration;
 use anyhow::Result;
 use assert_cmd::prelude::*;
 use serial_test::serial;
-use tempfile::tempdir;
 
 mod pty_helpers;
 use pty_helpers::*;
+mod common;
 
 #[test]
 #[serial]
 fn daemon_start_stop_restart_creates_and_removes_socket() -> Result<()> {
-  let td = tempdir()?;
+  // Skip on sandboxes that disallow PTY allocation
+  if !pty_available() {
+    eprintln!("Skipping daemon test: PTY not available in sandbox");
+    return Ok(());
+  }
+  let td = common::tempdir_in_sandbox();
   let workdir = td.path();
   let sock = workdir.join("tmp").join("agency.sock");
 
@@ -60,4 +65,18 @@ fn daemon_start_stop_restart_creates_and_removes_socket() -> Result<()> {
 
 fn bin() -> PathBuf {
   assert_cmd::cargo::cargo_bin!("agency").to_path_buf()
+}
+
+fn pty_available() -> bool {
+  use portable_pty::{PtySize, native_pty_system};
+  let pty = native_pty_system();
+  pty
+    .openpty(PtySize {
+      rows: 1,
+      cols: 1,
+      pixel_width: 0,
+      pixel_height: 0,
+    })
+    .map(drop)
+    .is_ok()
 }

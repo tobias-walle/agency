@@ -1,13 +1,14 @@
 use std::fs;
 
 use anyhow::Result;
-use tempfile::TempDir;
+use tempfile::Builder;
 
 use agency::config::load_config;
+mod common;
 
 #[test]
 fn defaults_only_provide_opencode_cmd() -> Result<()> {
-  let dir = TempDir::new()?;
+  let dir = Builder::new().tempdir_in(common::tmp_root())?;
   // No global or project config
   let cfg = load_config(dir.path())?;
   let opencode = cfg.agents.get("opencode").expect("default opencode agent");
@@ -17,8 +18,8 @@ fn defaults_only_provide_opencode_cmd() -> Result<()> {
 
 #[test]
 fn global_override_takes_precedence_over_defaults() -> Result<()> {
-  let dir = TempDir::new()?;
-  let xdg_root = TempDir::new()?;
+  let dir = Builder::new().tempdir_in(common::tmp_root())?;
+  let xdg_root = Builder::new().tempdir_in(common::tmp_root())?;
   temp_env::with_var(
     "XDG_CONFIG_HOME",
     Some(xdg_root.path().as_os_str()),
@@ -44,8 +45,8 @@ cmd = ["oc", "-p", "$AGENCY_TASK"]
 
 #[test]
 fn project_override_wins_over_global() -> Result<()> {
-  let dir = TempDir::new()?;
-  let xdg_root = TempDir::new()?;
+  let dir = Builder::new().tempdir_in(common::tmp_root())?;
+  let xdg_root = Builder::new().tempdir_in(common::tmp_root())?;
   temp_env::with_var(
     "XDG_CONFIG_HOME",
     Some(xdg_root.path().as_os_str()),
@@ -81,7 +82,7 @@ cmd = ["local", "--prompt", "$AGENCY_TASK"]
 
 #[test]
 fn missing_keys_default_to_empty() -> Result<()> {
-  let dir = TempDir::new()?;
+  let dir = Builder::new().tempdir_in(common::tmp_root())?;
   let project_dir = dir.path().join(".agency");
   fs::create_dir_all(&project_dir)?;
   // Provide an empty table to ensure defaulting works
@@ -100,7 +101,7 @@ fn missing_keys_default_to_empty() -> Result<()> {
 
 #[test]
 fn invalid_toml_fails_with_actionable_error() {
-  let dir = TempDir::new().expect("tmp");
+  let dir = Builder::new().tempdir_in(common::tmp_root()).expect("tmp");
   let project_dir = dir.path().join(".agency");
   fs::create_dir_all(&project_dir).expect("mkdir");
   fs::write(

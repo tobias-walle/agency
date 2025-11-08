@@ -9,21 +9,13 @@ The Agency tool orchestrates parallel-running AI CLI agents in isolated Git work
 
 ## Structure
 
-- `./docs/specs/SPEC-[id]-[slug].md` - Store for specifications. They include product and architecture decisions and should be kept up to date with changes.
 - `./docs/plans/PLN-[id]-[slug].md` - Concrete plans to add or modify features or to fix bugs.
 - `./docs/rules/[slug].md` - Special rules for you, the AI Agent, to read if needed. See also [Conditional Rules](#conditional-rules).
 - `./justfile` - Project scripts
 - `./crates` - Contains all the rust crates (apps & libraries) used for this project
 - `./crates/agency/src/` - Source files for the CLI app
-  - `commands/` - Contains all commands of agency (each command one file)
-    - `new.rs`
-    - `path.rs`
-    - ...
-  - `utils/` - General utilities that are used throughout the app. Grouped by topic.
-    - `git.rs`
-    - `task.rs`
-    - `term.rs`
-    - ...
+  - `commands/` - One file per CLI command (entrypoints)
+  - `utils/` - Shared helpers grouped by topic (e.g. git, task, term)
   - `config.rs` - Single source of truth for all kinds of configuration for agency
   - `lib.rs`
   - `main.rs`
@@ -31,12 +23,13 @@ The Agency tool orchestrates parallel-running AI CLI agents in isolated Git work
   - `common/`
     - `mod.rs` - Common test helpers
   - `cli.rs` - Integration tests for the cli apps
+- `./crates/agency/defaults/agency.toml` - Built-in default configuration for agents
 
 ## Justfile
 
-- All common scripts life in `./justfile`.
+- All common scripts live in `./justfile`.
 - Prefer using the `just` commands over the direct `cargo` commands.
-- Most important command:
+- Most important commands:
   - `just agency ...` - Runs the app with the given commands
   - `just test ...` - Runs the tests with `nextest run`
   - `just check` - Check the code for errors. Use this often and fix the errors immediately.
@@ -45,7 +38,7 @@ The Agency tool orchestrates parallel-running AI CLI agents in isolated Git work
 
 ## Commit Rules
 
-Then committing, always follow these rules
+When committing, always follow these rules
 
 - Follow Conventional Commits (e.g. `feat: add new feature`)
 - Keep most commits in a single line. Only use the body if there are unexpected changes in the commit.
@@ -64,12 +57,12 @@ Add the files and commit in a single command, e.g. `git add file1.ts file2.ts &&
 - Prefer ASCII punctuation in docs and code. Avoid long dashes (—), semicolons (;) and Unicode arrows (→, ↔); use `-`, `->`, `<->` instead.
 - Never use single letter variable names if they span more than 3 lines
 - You SHOULD merge nested ifs together if possible (Hint: `if let ...` is now supported with `&&` and `||`)
-- Pendantic clippy rules are checked regulary. You SHOULD follow the pendantic standard.
+- Pedantic clippy rules are checked regularly. You SHOULD follow the pedantic standard.
 
 ## Dependencies
 
 - You MUST add dependencies via `cargo add [pkg]` -> Never modify Cargo.toml directly.
-- You SHOULD use the `Contex7` mcp when working with libraries
+- You SHOULD use the `Context7` MCP when working with libraries
   - Lookup new APIs before you use them
   - Check correct API use when encountering errors
 
@@ -83,25 +76,35 @@ Add the files and commit in a single command, e.g. `git add file1.ts file2.ts &&
 - Use `git2` for local repositories instead of shelling out to `git`.
 - Avoid global env mutations; prefer per-command `.env()` or scoped guards.
 - For tests that need environment variables, use the `temp-env` crate (closure APIs like `with_var`/`with_vars`) to set/unset variables temporarily and restore them automatically.
-- You SHOULD use TDD then appropriate:
+- You SHOULD use TDD when appropriate:
   - Fixing bugs -> Write tests before implementation
   - Implement new features, with unclear final solution -> Write tests after implementation
+
+### CLI Test Practices
+
+- Use `assert_cmd::Command::cargo_bin("agency")` for CLI tests.
+- Chain calls: `.arg(...).write_stdin(...).assert().success()`.
+- Prefer pipes over PTY; only use PTY when testing PTY.
+- Write files under `<crate>/target/test-tmp` via `common::tmp_root()`.
+- Override XDG paths or sockets with `.env(...)` to the test workdir.
+- Keep output assertions minimal: prefer `contains(...)` over full-output diffs.
+- Verify a specific log/message in one focused test; avoid repeating it across tests.
 
 ## Code Style
 
 - Do not use single letter variables, as they are hard to understand
 - Favor readability, even if it is sometimes a bit more verbose. Avoid heavy nesting.
-- After you finished all your tasks
+- After you finish all your tasks
   - You MUST run `just check` and fix all warnings & errors
   - Afterwards you MUST run `cargo fmt` to format the code correctly
 
 ## Terminal IO
 
 - Use `println!` and `eprintln!` from `anstream` for stdout/stderr to ensure TTY-aware behavior.
-- Always use the macro via the alias (`use anstream::println` and/or `use anstream::eprintln`)
+- Always import and use the aliases (`use anstream::println` and/or `use anstream::eprintln`). Do not use `std::println!` or `std::eprintln!` anywhere.
 - Apply styles with `owo-colors::OwoColorize` and avoid asserting colors in tests as they depend on TTY.
-- You MUST use `bail!` for errors, if the should crash the program. They are automatically printed to stderr in red.
-- Make userfacing logs colorful. The user should get a modern feel then using our app. But either use the same color for the whole message or highlight specific sections, avoid doing both.
+- You MUST use `bail!` for errors, if they should crash the program. They are automatically printed to stderr in red.
+- Make user-facing logs colorful. The user should get a modern feel when using our app. But either use the same color for the whole message or highlight specific sections; avoid doing both.
 
 Example:
 
@@ -123,12 +126,12 @@ println!("My number is not {}!", 4.on_red());
 
 ### Plan Mode
 
-Everytime a prompt starts with `PLAN:` you must enter the plan mode. In the plan mode, you never write any files (except markdown plans if explicitly requested).
+Every time a prompt starts with `PLAN:` you must enter the plan mode. In the plan mode, you never write any files (except markdown plans if explicitly requested).
 
 General Workflow in Plan Mode:
 
 1. If there is ambiguity, ask clarifying questions. Give each question a number (for easy reference) and a recommended/default answer. Do this before starting the agentic workflow!
-2. After all questions were answered or the user ask you too, start with the research for the plan.
+2. After all questions were answered or the user asks you to, start with the research for the plan.
    The goal of the research is to read all necessary files to get a full picture how the change can be implemented.
    You MUST make sure you got all the relevant facts before generating the final plan.
    The plan should not contain sections like "Read file x to confirm strategy" as you should already know the content of all relevant files before creating the plan.
@@ -159,7 +162,7 @@ Structure your final plan into the following sections (replace placeholders in `
 Strictly follow the format for plans. Don't read old plans to get the format, as the format changes over time.
 
 The plan mode ends once the user explicitly tells you to implement the plan.
-Then implementing a plan use your TODO list tool to track the progress.
+Then, when implementing a plan, use your TODO list tool to track the progress.
 
 ### Build Mode
 
@@ -172,7 +175,7 @@ Start execution by managing your TODO list and then continue working on them unt
 
 - Not all rules are included in the `AGENTS.md` file (this file). Some rules are only relevant in specific scenarios.
 - You MUST read them before doing anything else, once they are becoming relevant for your task.
-- You MUST only read them once. If they are already in your context, don't read the again.
+- You MUST only read them once. If they are already in your context, don't read them again.
 
 In the following these conditional rule files are listed:
 

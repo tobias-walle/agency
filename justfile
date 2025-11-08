@@ -10,7 +10,7 @@ _list:
 
 # Run the tests with nextest
 test *ARGS:
-  cargo nextest run --cargo-quiet --status-level leak {{ARGS}}
+  RUSTFLAGS="${RUSTFLAGS:-} -Adead_code" cargo nextest run --cargo-quiet --status-level leak {{ARGS}}
 
 # Check for compiler or linting errors
 check:
