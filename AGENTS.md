@@ -64,6 +64,7 @@ Add the files and commit in a single command, e.g. `git add file1.ts file2.ts &&
 - Prefer ASCII punctuation in docs and code. Avoid long dashes (—), semicolons (;) and Unicode arrows (→, ↔); use `-`, `->`, `<->` instead.
 - Never use single letter variable names if they span more than 3 lines
 - You SHOULD merge nested ifs together if possible (Hint: `if let ...` is now supported with `&&` and `||`)
+- Pendantic clippy rules are checked regulary. You SHOULD follow the pendantic standard.
 
 ## Dependencies
 
@@ -176,4 +177,3 @@ Start execution by managing your TODO list and then continue working on them unt
 In the following these conditional rule files are listed:
 
 - `./docs/rules/rust-best-practices.md` - You MUST read this if you are working with Rust Code. Either if you are implementing rust code or planning to modify it.
-- `./docs/rules/plan-format.md` - You MUST read this then creating plans to understand the best practices.

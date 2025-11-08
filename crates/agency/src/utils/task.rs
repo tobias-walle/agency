@@ -146,6 +146,7 @@ pub fn format_task_markdown(
   let title = format!("# Task {id}: {slug}\n");
   if let Some(fm) = frontmatter {
     let yaml = serde_yaml::to_string(fm).context("failed to serialize front matter")?;
+    let yaml = yaml.trim();
     Ok(format!(
       "{FRONT_MATTER_START}{yaml}{FRONT_MATTER_END}\n{title}"
     ))
