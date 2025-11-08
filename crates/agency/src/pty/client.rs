@@ -4,6 +4,7 @@ use crate::pty::protocol::{
   make_c2d_control_channel, make_c2d_input_channel, read_frame, write_frame,
 };
 use crate::utils::keybindings::{Keybinding, parse_detach_key};
+use anstream::eprintln;
 use anyhow::{Context, Result, anyhow};
 use crossbeam_channel::Receiver;
 use crossterm::terminal;
@@ -270,13 +271,11 @@ impl Client {
               if !printed_exited {
                 {
                   let _pause = RawModePauseGuard::pause();
-                  anstream::eprintln!(
+                  eprintln!(
                     "\nAgent exited. Stats: in={} out={} elapsed={}ms",
-                    stats.bytes_in,
-                    stats.bytes_out,
-                    stats.elapsed_ms
+                    stats.bytes_in, stats.bytes_out, stats.elapsed_ms
                   );
-                  anstream::eprintln!("Press Enter to restart the session...");
+                  eprintln!("Press Enter to restart the session...");
                 }
                 // Arm restart: input thread will swallow bytes until Enter and trigger restart
                 wait_restart.store(true, Ordering::Relaxed);
