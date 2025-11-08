@@ -440,7 +440,7 @@ fn new_bootstrap_respects_config_includes_and_excludes() -> Result<()> {
 fn open_opens_worktree_via_editor() -> Result<()> {
   let env = common::TestEnv::new();
   env.init_repo()?;
-  let (id, slug) = env.new_task("open-task", &["--no-edit", "--no-attach"])?;
+  let (id, _slug) = env.new_task("open-task", &["--no-edit", "--no-attach"])?;
 
   with_vars([("EDITOR", Some("true".to_string()))], || {
     let mut cmd = env.bin_cmd().unwrap();

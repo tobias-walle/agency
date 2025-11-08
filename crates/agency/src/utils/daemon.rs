@@ -9,7 +9,7 @@ use std::path::Path;
 /// Sends exactly one control message to the daemon over a short-lived connection.
 ///
 /// Protocol: the daemon reads one control frame, replies, then closes the socket.
-/// Control commands are one-shot (StopTask, StopSession, ListSessions, Shutdown);
+/// Control commands are one-shot (`StopTask`, `StopSession`, `ListSessions`, Shutdown);
 /// opening a new connection per message avoids ambiguity with attach (multi-frame)
 /// flows and prevents protocol state mismatches.
 pub fn send_message_to_daemon(socket: &Path, msg: C2DControl) -> Result<()> {
@@ -23,7 +23,7 @@ pub fn send_message_to_daemon(socket: &Path, msg: C2DControl) -> Result<()> {
 /// Best-effort helper to request the daemon to stop all sessions for a task.
 ///
 /// This does not fail the caller if the daemon is unavailable or any step
-/// errors; it aims to avoid duplication of the StopTask notify logic.
+/// errors; it aims to avoid duplication of the `StopTask` notify logic.
 pub fn stop_sessions_of_task(ctx: &AppContext, task: &TaskRef) -> anyhow::Result<()> {
   let socket = compute_socket_path(&ctx.config);
   // Compute project key from the main repo workdir

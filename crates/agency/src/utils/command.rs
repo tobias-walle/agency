@@ -1,7 +1,5 @@
 use anyhow::{Result, bail};
-use regex::Regex;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::path::PathBuf;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -38,8 +36,12 @@ impl Command {
 }
 
 /// Expand "$VAR" references in argv using the given env map. Does not support ${} forms.
-pub fn expand_vars_in_argv(argv: &[String], env: &HashMap<String, String>) -> Vec<String> {
-  let re = Regex::new(r"\$([A-Za-z_][A-Za-z0-9_]*)").expect("valid var regex");
+#[cfg(test)]
+pub fn expand_vars_in_argv(
+  argv: &[String],
+  env: &std::collections::HashMap<String, String>,
+) -> Vec<String> {
+  let re = regex::Regex::new(r"\$([A-Za-z_][A-Za-z0-9_]*)").expect("valid var regex");
   argv
     .iter()
     .map(|input| {

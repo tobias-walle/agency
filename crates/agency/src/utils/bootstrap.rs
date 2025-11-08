@@ -23,9 +23,8 @@ pub fn bootstrap_worktree(
   let mut file_paths: Vec<std::path::PathBuf> = Vec::new();
   let mut dir_entries: Vec<(String, std::path::PathBuf)> = Vec::new();
   for entry in entries {
-    let file_type = match entry.file_type() {
-      Ok(t) => t,
-      Err(_) => continue,
+    let Ok(file_type) = entry.file_type() else {
+      continue;
     };
     let name = entry.file_name().to_string_lossy().to_string();
     if is_excluded(&name, cfg) {
@@ -43,7 +42,10 @@ pub fn bootstrap_worktree(
   // Batch evaluate ignore status for root files once
   let ignored = run_git_check_ignore_batch(
     repo.workdir().unwrap_or(root_workdir),
-    &file_names.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
+    &file_names
+      .iter()
+      .map(std::string::String::as_str)
+      .collect::<Vec<_>>(),
   )?;
   let ignored_set: std::collections::HashSet<String> = ignored.into_iter().collect();
 
@@ -78,14 +80,10 @@ pub fn bootstrap_worktree(
 /// - Replaces `<root>` placeholders in argv with the repository root path.
 /// - If `cfg.cmd` equals the default and the file does not exist, it silently skips.
 /// - Streams child stdout/stderr directly to the user.
-pub fn run_bootstrap_cmd(
-  repo_root: &Path,
-  worktree_dir: &Path,
-  cfg: &BootstrapConfig,
-) -> Result<()> {
+pub fn run_bootstrap_cmd(repo_root: &Path, worktree_dir: &Path, cfg: &BootstrapConfig) {
   // No command configured -> no-op
   if cfg.cmd.is_empty() {
-    return Ok(());
+    return;
   }
 
   // Build expansion context and expand argv
@@ -94,15 +92,14 @@ pub fn run_bootstrap_cmd(
     .unwrap_or_else(|_| repo_root.to_path_buf())
     .display()
     .to_string();
-  let env_map: std::collections::HashMap<String, String> = std::env::vars().collect();
-  let ctx = CmdCtx::with_env(root_abs.clone(), env_map);
+  let ctx = CmdCtx::from_process_env(root_abs.clone());
   let argv = expand_argv(&cfg.cmd, &ctx);
 
   // Special-case: default path missing should be a silent skip
   if cfg.cmd.len() == 1 && cfg.cmd[0] == "<root>/.agency/setup.sh" {
     let candidate = PathBuf::from(&argv[0]);
     if !candidate.exists() {
-      return Ok(());
+      return;
     }
   }
 
@@ -114,7 +111,6 @@ pub fn run_bootstrap_cmd(
     .stdout(std::process::Stdio::inherit())
     .stderr(std::process::Stdio::inherit())
     .status();
-  Ok(())
 }
 
 fn discover_root_entries(root_workdir: &Path) -> Result<Vec<fs::DirEntry>> {
@@ -160,7 +156,7 @@ fn run_git_check_ignore_batch(root_workdir: &Path, rel_paths: &[&str]) -> Result
     stdout
       .lines()
       .filter(|l| !l.is_empty())
-      .map(|s| s.to_string())
+      .map(std::string::ToString::to_string)
       .collect(),
   )
 }
@@ -206,7 +202,7 @@ fn copy_dir_tree(src_dir: &Path, dst_dir: &Path) -> Result<()> {
       copy_dir_tree(&src, &dst)?;
     } else if file_type.is_symlink() {
       // Skip symlinks
-      continue;
+      // no-op; fall through to next entry
     }
   }
   Ok(())
