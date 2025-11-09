@@ -10,17 +10,9 @@ detach = "ctrl-q"
 # Run an optional bootstrap script inside each new worktree.
 # Supports the placeholder <root> which expands to the repository root path.
 cmd = ["<root>/.agency/setup.sh"]
-# Include common directories
-include = [
-  "target",
-  "node_modules",
-  ".venv",
-  ".direnv",
-  ".tox",
-  ".gradle",
-  "vendor",
-]
-# Always exclude these names from bootstrapping
+# Files and folders to copy to the new worktrees
+include = []
+# Files and folders to never copy
 exclude = [".git", ".agency"]
 
 # Configuration of common agents, you can also add your own
