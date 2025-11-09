@@ -113,6 +113,43 @@ pub fn run_bootstrap_cmd(repo_root: &Path, worktree_dir: &Path, cfg: &BootstrapC
     .status();
 }
 
+/// Ensure the task's worktree directory exists and is bootstrapped.
+///
+/// Assumes the task branch has already been created.
+/// Returns the absolute path of the worktree directory (canonicalized if possible).
+pub fn prepare_worktree_for_task(
+  ctx: &crate::config::AppContext,
+  repo: &git::Repository,
+  task: &crate::utils::task::TaskRef,
+  branch: &str,
+) -> anyhow::Result<std::path::PathBuf> {
+  use anyhow::Context as _;
+  use crate::utils::git::{add_worktree_for_branch, repo_workdir_or};
+  use crate::utils::task::{worktree_dir, worktree_name};
+
+  let worktree_dir_path = worktree_dir(&ctx.paths, task);
+  if !worktree_dir_path.exists() {
+    let wt_root = ctx.paths.worktrees_dir();
+    std::fs::create_dir_all(&wt_root)
+      .with_context(|| format!("failed to create {}", wt_root.display()))?;
+    add_worktree_for_branch(
+      repo,
+      &worktree_name(task),
+      &worktree_dir_path,
+      branch,
+    )?;
+    let root_workdir = repo_workdir_or(repo, ctx.paths.cwd());
+    let bcfg = ctx.config.bootstrap_config();
+    bootstrap_worktree(repo, &root_workdir, &worktree_dir_path, &bcfg)?;
+    run_bootstrap_cmd(&root_workdir, &worktree_dir_path, &bcfg);
+  }
+  Ok(
+    worktree_dir_path
+      .canonicalize()
+      .unwrap_or(worktree_dir_path.clone()),
+  )
+}
+
 fn discover_root_entries(root_workdir: &Path) -> Result<Vec<fs::DirEntry>> {
   let mut out = Vec::new();
   for e in fs::read_dir(root_workdir)

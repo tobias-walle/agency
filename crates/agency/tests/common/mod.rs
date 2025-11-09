@@ -45,6 +45,14 @@ impl TestEnv {
     Self { temp }
   }
 
+  /// Prepare a task's branch/worktree and run bootstrap (no PTY attach).
+  pub fn bootstrap_task(&self, id: u32) -> Result<()> {
+    let mut cmd = self.bin_cmd()?;
+    cmd.arg("bootstrap").arg(id.to_string());
+    cmd.assert().success();
+    Ok(())
+  }
+
   pub fn path(&self) -> &std::path::Path {
     self.temp.path()
   }
