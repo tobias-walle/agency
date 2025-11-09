@@ -21,14 +21,20 @@ fn new_creates_markdown_branch_and_worktree() -> Result<()> {
     file.display()
   );
 
-  // Check branch and worktree
-  assert!(env.branch_exists(id, &slug)?);
+  // Lazy worktrees: branch and worktree are created on attach
+  assert!(!env.branch_exists(id, &slug)?);
   let wt_dir = env.worktree_dir_path(id, &slug);
-  assert!(
-    wt_dir.is_dir(),
-    "worktree dir should exist at {}",
-    wt_dir.display()
-  );
+  assert!(!wt_dir.exists());
+
+  // Start daemon and attach now to verify branch/worktree
+  let mut d = env.bin_cmd()?;
+  d.arg("daemon").arg("start");
+  d.assert().success();
+  let mut cmd = env.bin_cmd()?;
+  cmd.arg("attach").arg("--prepare-only").arg(id.to_string());
+  cmd.assert().success();
+  assert!(env.branch_exists(id, &slug)?);
+  assert!(wt_dir.is_dir());
 
   Ok(())
 }
@@ -68,6 +74,13 @@ fn new_runs_default_bootstrap_cmd_when_present() -> Result<()> {
   }
 
   let (id, slug) = env.new_task("boot-cmd", &["--no-edit", "--no-attach"])?;
+  // Start daemon and attach to trigger bootstrap
+  let mut d = env.bin_cmd()?;
+  d.arg("daemon").arg("start");
+  d.assert().success();
+  let mut cmd = env.bin_cmd()?;
+  cmd.arg("attach").arg("--prepare-only").arg(id.to_string());
+  cmd.assert().success();
   let wt = env.worktree_dir_path(id, &slug);
   assert!(wt.join("boot.out").is_file());
 
@@ -82,6 +95,13 @@ fn new_skips_default_bootstrap_when_missing() -> Result<()> {
   std::fs::create_dir_all(env.path().join(".agency"))?;
 
   let (id, slug) = env.new_task("no-boot-script", &["--no-edit"])?;
+  // Start daemon and attach to create worktree
+  let mut d = env.bin_cmd()?;
+  d.arg("daemon").arg("start");
+  d.assert().success();
+  let mut cmd = env.bin_cmd()?;
+  cmd.arg("attach").arg("--prepare-only").arg(id.to_string());
+  cmd.assert().success();
   let wt = env.worktree_dir_path(id, &slug);
   assert!(!wt.join("boot.out").exists());
   Ok(())
@@ -101,6 +121,13 @@ fn new_supports_placeholder_root_in_bootstrap_cmd() -> Result<()> {
   )?;
 
   let (id, slug) = env.new_task("boot-root", &["--no-edit"])?;
+  // Start daemon and attach to run bootstrap command
+  let mut d = env.bin_cmd()?;
+  d.arg("daemon").arg("start");
+  d.assert().success();
+  let mut cmd = env.bin_cmd()?;
+  cmd.arg("attach").arg("--prepare-only").arg(id.to_string());
+  cmd.assert().success();
   let wt = env.worktree_dir_path(id, &slug);
   let data = std::fs::read_to_string(wt.join("root.txt"))?;
   let expect_root = env
@@ -201,6 +228,16 @@ fn rm_confirms_and_removes_on_y_or_y() -> Result<()> {
   env.init_repo()?;
   let (id, slug) = env.new_task("delta-task", &["--no-edit"])?;
 
+  // Ensure daemon is running and branch/worktree exist via attach for this test
+  {
+    let mut d = env.bin_cmd()?;
+    d.arg("daemon").arg("start");
+    d.assert().success();
+    let mut cmd = env.bin_cmd()?;
+    cmd.arg("attach").arg("--prepare-only").arg(id.to_string());
+    cmd.assert().success();
+  }
+
   // Run rm and cancel (pipe stdin via assert_cmd)
   let mut cmd = env.bin_cmd()?;
   cmd
@@ -261,16 +298,9 @@ fn new_auto_suffixes_duplicate_slug_to_slug2() -> Result<()> {
   let (_id1, _slug1) = env.new_task("alpha", &["--no-edit"])?;
   let (id2, slug2) = env.new_task("alpha", &["--no-edit"])?;
 
-  // Check file, branch, worktree for the second task
+  // Check file for the second task (branch/worktree are created on attach)
   let file = env.task_file_path(id2, &slug2);
   assert!(file.is_file());
-
-  let repo = git::discover(env.path())?;
-  let full = format!("refs/heads/{}", env.branch_name(id2, &slug2));
-  assert!(repo.find_reference(&full).is_ok());
-
-  let wt_dir = env.worktree_dir_path(id2, &slug2);
-  assert!(wt_dir.is_dir());
 
   Ok(())
 }
@@ -282,16 +312,9 @@ fn new_increments_trailing_number_slug() -> Result<()> {
   let (_id1, _slug1) = env.new_task("alpha2", &["--no-edit"])?;
   let (id2, slug2) = env.new_task("alpha2", &["--no-edit"])?;
 
-  // Check artifacts for the second task
+  // Check artifacts for the second task (branch/worktree are created on attach)
   let file = env.task_file_path(id2, &slug2);
   assert!(file.is_file());
-
-  let repo = git::discover(env.path())?;
-  let full = format!("refs/heads/{}", env.branch_name(id2, &slug2));
-  assert!(repo.find_reference(&full).is_ok());
-
-  let wt_dir = env.worktree_dir_path(id2, &slug2);
-  assert!(wt_dir.is_dir());
 
   Ok(())
 }
@@ -310,7 +333,7 @@ fn ps_lists_id_and_slug_in_order() -> Result<()> {
     .assert()
     .success()
     .stdout(predicates::str::contains("ID SLUG").from_utf8())
-    .stdout(predicates::str::contains("STATUS SESSION\n").from_utf8())
+    .stdout(predicates::str::contains("STATUS SESSION BASE AGENT\n").from_utf8())
     .stdout(predicates::str::contains(format!(" {id1} {slug1}")).from_utf8())
     .stdout(predicates::str::contains(format!(" {id2} {slug2}")).from_utf8())
     .stdout(predicates::str::contains("Draft").from_utf8());
@@ -330,7 +353,7 @@ fn ps_handles_empty_state() -> Result<()> {
     .assert()
     .success()
     .stdout(predicates::str::contains("ID SLUG").from_utf8())
-    .stdout(predicates::str::contains("STATUS SESSION\n").from_utf8());
+    .stdout(predicates::str::contains("STATUS SESSION BASE AGENT\n").from_utf8());
 
   Ok(())
 }
@@ -361,8 +384,11 @@ fn new_bootstraps_git_ignored_root_files_with_defaults() -> Result<()> {
   std::fs::create_dir_all(env.path().join(".direnv"))?;
   std::fs::write(env.path().join(".direnv").join("env.txt"), "x\n")?;
 
-  // Create task
+  // Create task and attach to trigger bootstrap
   let (id, slug) = env.new_task("bootstrap-a", &["--no-edit"])?;
+  let mut cmd = env.bin_cmd()?;
+  cmd.arg("attach").arg("--prepare-only").arg(id.to_string());
+  cmd.assert().success();
   let wt = env.worktree_dir_path(id, &slug);
 
   // Files present (<=10MB)
@@ -422,6 +448,13 @@ fn new_bootstrap_respects_config_includes_and_excludes() -> Result<()> {
     [("XDG_CONFIG_HOME", Some(xdg_root.display().to_string()))],
     || {
       let (id, slug) = env.new_task("bootstrap-b", &["--no-edit"]).unwrap();
+      // Start daemon and attach to create worktree and run bootstrap
+      let mut d = env.bin_cmd().unwrap();
+      d.arg("daemon").arg("start");
+      d.assert().success();
+      let mut cmd = env.bin_cmd().unwrap();
+      cmd.arg("attach").arg("--prepare-only").arg(id.to_string());
+      cmd.assert().success();
       let wt = env.worktree_dir_path(id, &slug);
       assert!(wt.join(".env").is_file());
       assert!(wt.join("secrets.txt").is_file());
@@ -459,6 +492,15 @@ fn merge_fast_forwards_and_cleans_up() -> Result<()> {
   let env = common::TestEnv::new();
   env.init_repo()?;
   let (id, slug) = env.new_task("merge-task", &["--no-edit", "--no-attach"])?;
+  // Start daemon and attach to create branch/worktree for merge
+  {
+    let mut d = env.bin_cmd()?;
+    d.arg("daemon").arg("start");
+    d.assert().success();
+    let mut cmd = env.bin_cmd()?;
+    cmd.arg("attach").arg("--prepare-only").arg(id.to_string());
+    cmd.assert().success();
+  }
 
   // Create a new commit on the task branch (empty tree commit)
   let repo = git::discover(env.path())?;
@@ -494,6 +536,15 @@ fn merge_blocks_when_base_dirty() -> Result<()> {
   let env = common::TestEnv::new();
   env.init_repo()?;
   let (id, slug) = env.new_task("merge-dirty", &["--no-edit", "--no-attach"])?;
+  // Start daemon and attach to create branch/worktree
+  {
+    let mut d = env.bin_cmd()?;
+    d.arg("daemon").arg("start");
+    d.assert().success();
+    let mut cmd = env.bin_cmd()?;
+    cmd.arg("attach").arg("--prepare-only").arg(id.to_string());
+    cmd.assert().success();
+  }
 
   // Create a new commit on the task branch (empty tree commit)
   let repo = git::discover(env.path())?;
@@ -537,6 +588,15 @@ fn merge_refreshes_checked_out_base_worktree() -> Result<()> {
   let env = common::TestEnv::new();
   env.init_repo()?;
   let (id, slug) = env.new_task("merge-refresh", &["--no-edit", "--no-attach"])?;
+  // Start daemon and attach to create branch/worktree
+  {
+    let mut d = env.bin_cmd()?;
+    d.arg("daemon").arg("start");
+    d.assert().success();
+    let mut cmd = env.bin_cmd()?;
+    cmd.arg("attach").arg("--prepare-only").arg(id.to_string());
+    cmd.assert().success();
+  }
 
   // Create a new commit on the task branch (empty tree commit)
   let repo = git::discover(env.path())?;

@@ -218,6 +218,30 @@ pub fn parse_task_markdown(input: &str) -> (Option<TaskFrontmatter>, &str) {
   (None, input)
 }
 
+/// Read and parse a task's front matter from disk, if present.
+pub fn read_task_frontmatter(paths: &AgencyPaths, task: &TaskRef) -> Option<TaskFrontmatter> {
+  let tf = task_file(paths, task);
+  let Ok(text) = std::fs::read_to_string(&tf) else {
+    return None;
+  };
+  let (fm, _body) = parse_task_markdown(&text);
+  fm
+}
+
+/// Resolve the effective agent for a task: front matter `agent` first,
+/// then config default. Returns `None` if neither is set.
+pub fn agent_for_task(
+  cfg: &crate::config::AgencyConfig,
+  fm: Option<&TaskFrontmatter>,
+) -> Option<String> {
+  if let Some(fm) = fm
+    && let Some(a) = &fm.agent
+  {
+    return Some(a.clone());
+  }
+  cfg.agent.clone()
+}
+
 /// Produce a human title from a task slug, e.g. "some-slug" -> "# Some Slug\n".
 pub fn title_from_slug(slug: &str) -> String {
   let title: String = slug
