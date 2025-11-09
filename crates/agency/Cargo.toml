@@ -28,6 +28,7 @@ xdg = "3.0.0"
 parking_lot = { version = "0.12.5", features = ["deadlock_detection"] }
 anstyle-parse = "0.2"
 anstyle = "1.0"
+inquire = "0.9.1"
 
 [lints]
 workspace = true

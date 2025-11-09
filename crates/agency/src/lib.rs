@@ -5,11 +5,11 @@ use std::io::IsTerminal as _;
 mod commands;
 pub mod config;
 pub mod pty;
+mod texts;
 pub mod tui;
 mod utils;
 
-use crate::config::load_config;
-use crate::config::{AgencyPaths, AppContext};
+use crate::config::{AgencyPaths, AppContext, global_config_exists, load_config};
 
 /// Agency - An AI agent manager and orchestrator in your command line.
 #[derive(Debug, Parser)]
@@ -78,6 +78,12 @@ enum Commands {
   },
   /// List running sessions in this project
   Sessions {},
+  /// Run the setup wizard to configure Agency
+  Setup {},
+  /// Print embedded defaults for inspection
+  Defaults {},
+  /// Scaffold a .agency/ directory with starter files
+  Init {},
   /// Interactive terminal UI
   Tui {},
 }
@@ -168,11 +174,29 @@ pub fn run() -> Result<()> {
     Some(Commands::Sessions {}) => {
       commands::sessions::run(&ctx)?;
     }
+    Some(Commands::Setup {}) => {
+      commands::setup::run(&ctx)?;
+    }
+    Some(Commands::Defaults {}) => {
+      commands::defaults::run()?;
+    }
+    Some(Commands::Init {}) => {
+      commands::init::run(&ctx)?;
+    }
     Some(Commands::Tui {}) => {
       crate::tui::run(&ctx)?;
     }
     None => {
-      if std::io::stdout().is_terminal() {
+      let stdout_tty = std::io::stdout().is_terminal();
+      if !global_config_exists() {
+        if stdout_tty {
+          commands::setup::run(&ctx)?;
+        } else {
+          crate::log_warn!("Global config missing -> run `agency setup` in a terminal");
+        }
+        return Ok(());
+      }
+      if stdout_tty {
         crate::tui::run(&ctx)?;
       } else {
         crate::log_info!("Usage: agency <SUBCOMMAND>. Try 'agency --help'");

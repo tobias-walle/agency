@@ -43,7 +43,7 @@ pub fn print_table(headers: &[&str], rows: &[Vec<String>]) {
     for (i, cell) in row.iter().enumerate().take(cols) {
       let cell = cell.as_str();
       let vlen = visible_len(cell);
-      print!("{}", cell);
+      print!("{cell}");
       if i + 1 < cols {
         let spaces = widths[i].saturating_sub(vlen) + 1;
         for _ in 0..spaces {
@@ -58,8 +58,8 @@ pub fn print_table(headers: &[&str], rows: &[Vec<String>]) {
 /// Ask the user to confirm an action. Returns true if input starts with 'y' or 'Y'.
 pub fn confirm(prompt: &str) -> Result<bool> {
   let mut stdout = io::stdout().lock();
-  let _ = write!(stdout, "{} ", prompt);
-  let _ = stdout.flush();
+  write!(stdout, "{prompt} ")?;
+  stdout.flush()?;
   let mut line = String::new();
   let mut stdin = io::stdin().lock();
   // Read a single line (best-effort); empty or non-y -> false
@@ -78,7 +78,7 @@ pub fn confirm(prompt: &str) -> Result<bool> {
           break;
         }
       }
-      Err(_) => break,
+      Err(err) => return Err(err.into()),
     }
   }
   let ans = line.trim();

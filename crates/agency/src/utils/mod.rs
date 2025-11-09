@@ -12,3 +12,5 @@ pub mod sessions;
 pub mod status;
 pub mod task;
 pub mod term;
+pub mod which;
+pub mod wizard;

@@ -11,6 +11,20 @@ use toml::Value as TomlValue;
 const DEFAULT_TOML: &str =
   include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/defaults/agency.toml"));
 
+pub fn global_config_path() -> Result<PathBuf> {
+  let xdg = xdg::BaseDirectories::with_prefix("agency");
+  let config_home = xdg
+    .get_config_home()
+    .ok_or_else(|| anyhow::anyhow!("unable to resolve XDG config home"))?;
+  Ok(config_home.join("agency.toml"))
+}
+
+#[must_use]
+pub fn global_config_exists() -> bool {
+  let xdg = xdg::BaseDirectories::with_prefix("agency");
+  xdg.find_config_file("agency.toml").is_some()
+}
+
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct AgentConfig {
   #[serde(default)]
