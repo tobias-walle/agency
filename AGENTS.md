@@ -51,14 +51,6 @@ When committing, always follow these rules
 
 Add the files and commit in a single command, e.g. `git add file1.ts file2.ts && git commit -m "..."`
 
-## Code Formatting
-
-- Indent code always with 2 spaces
-- Prefer ASCII punctuation in docs and code. Avoid long dashes (—), semicolons (;) and Unicode arrows (→, ↔); use `-`, `->`, `<->` instead.
-- Never use single letter variable names if they span more than 3 lines
-- You SHOULD merge nested ifs together if possible (Hint: `if let ...` is now supported with `&&` and `||`)
-- Pedantic clippy rules are checked regularly. You SHOULD follow the pedantic standard.
-
 ## Dependencies
 
 - You MUST add dependencies via `cargo add [pkg]` -> Never modify Cargo.toml directly.
@@ -92,11 +84,32 @@ Add the files and commit in a single command, e.g. `git add file1.ts file2.ts &&
 
 ## Code Style
 
+- Indent code always with 2 spaces
+- Prefer ASCII punctuation in docs and code. Avoid long dashes (—), semicolons (;) and Unicode arrows (→, ↔); use `-`, `->`, `<->` instead.
 - Do not use single letter variables, as they are hard to understand
 - Favor readability, even if it is sometimes a bit more verbose. Avoid heavy nesting.
 - After you finish all your tasks
   - You MUST run `just check` and fix all warnings & errors
   - Afterwards you MUST run `cargo fmt` to format the code correctly
+- You MUST collapse if statements. Only use nested ifs not not collapsing is not possible.
+
+  ```rust
+  // ❌ BAD - Nested if statements
+  if event::poll(Duration::from_millis(150))? {
+    if let Event::Key(key) = event::read()? {
+      // ...
+    }
+  }
+
+  // ✅ GOOD - Use &&
+  if event::poll(Duration::from_millis(150))?
+    && let Event::Key(key) = event::read()? {
+    // ...
+  }
+
+  ```
+
+- After the code works and the tests are green, you MUST double check if you could simplify the code or remove unnecessary comments.
 
 ## Terminal IO
 

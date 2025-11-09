@@ -37,20 +37,20 @@ pub fn run(ctx: &AppContext, ident: &str, base_override: Option<&str>) -> Result
   // If the base branch is currently checked out in the main worktree,
   // ensure it is clean to avoid leaving the working tree in a dirty state.
   let mut refresh_checked_out_base = false;
-  if let Ok(cur) = current_branch_name(&repo) {
-    if cur == base_branch {
-      if !worktree_is_clean(&repo)? {
-        bail!(
-          "Base branch {} is checked out and has uncommitted changes; commit or stash before merging",
-          base_branch
-        );
-      }
-      refresh_checked_out_base = true;
-      log_warn!(
-        "Base is checked out and clean; will refresh after merge: {}",
+  if let Ok(cur) = current_branch_name(&repo)
+    && cur == base_branch
+  {
+    if !worktree_is_clean(&repo)? {
+      bail!(
+        "Base branch {} is checked out and has uncommitted changes; commit or stash before merging",
         base_branch
       );
     }
+    refresh_checked_out_base = true;
+    log_warn!(
+      "Base is checked out and clean; will refresh after merge: {}",
+      base_branch
+    );
   }
 
   log_warn!("Rebase {} -> {}", branch, base_branch);
