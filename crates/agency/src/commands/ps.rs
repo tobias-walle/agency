@@ -1,6 +1,5 @@
 use anyhow::Result;
 use owo_colors::OwoColorize as _;
-use std::io::IsTerminal as _;
 
 use crate::config::AppContext;
 use crate::pty::protocol::SessionInfo;

@@ -4,7 +4,6 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use crate::{log_success, log_warn};
-use anstream::println;
 use anyhow::{Context, Result};
 
 use crate::config::{compute_socket_path, load_config};

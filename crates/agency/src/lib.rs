@@ -5,8 +5,8 @@ use std::io::IsTerminal as _;
 mod commands;
 pub mod config;
 pub mod pty;
-mod utils;
 pub mod tui;
+mod utils;
 
 use crate::config::load_config;
 use crate::config::{AgencyPaths, AppContext};
