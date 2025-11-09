@@ -36,3 +36,23 @@ pub fn run(ctx: &AppContext, ident: &str) -> Result<()> {
 
   Ok(())
 }
+
+/// Remove without interactive confirmation. Intended for non-interactive TUI use.
+pub fn run_force(ctx: &AppContext, ident: &str) -> Result<()> {
+  let tref = resolve_id_or_slug(&ctx.paths, ident)?;
+  let branch = branch_name(&tref);
+  let wt_dir = worktree_dir(&ctx.paths, &tref);
+  let file = task_file(&ctx.paths, &tref);
+  let repo = open_main_repo(ctx.paths.cwd())?;
+  let _ = prune_worktree_if_exists(&repo, &wt_dir)?;
+  let _ = delete_branch_if_exists(&repo, &branch)?;
+  if file.exists() {
+    fs::remove_file(&file).with_context(|| format!("failed to remove {}", file.display()))?;
+  }
+  // Condensed confirmation for TUI log
+  log_success!("Removed task {}-{}", tref.id, tref.slug);
+
+  let _ = stop_sessions_of_task(ctx, &tref);
+  let _ = notify_tasks_changed(ctx);
+  Ok(())
+}
