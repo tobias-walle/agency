@@ -123,21 +123,16 @@ pub fn prepare_worktree_for_task(
   task: &crate::utils::task::TaskRef,
   branch: &str,
 ) -> anyhow::Result<std::path::PathBuf> {
-  use anyhow::Context as _;
   use crate::utils::git::{add_worktree_for_branch, repo_workdir_or};
   use crate::utils::task::{worktree_dir, worktree_name};
+  use anyhow::Context as _;
 
   let worktree_dir_path = worktree_dir(&ctx.paths, task);
   if !worktree_dir_path.exists() {
     let wt_root = ctx.paths.worktrees_dir();
     std::fs::create_dir_all(&wt_root)
       .with_context(|| format!("failed to create {}", wt_root.display()))?;
-    add_worktree_for_branch(
-      repo,
-      &worktree_name(task),
-      &worktree_dir_path,
-      branch,
-    )?;
+    add_worktree_for_branch(repo, &worktree_name(task), &worktree_dir_path, branch)?;
     let root_workdir = repo_workdir_or(repo, ctx.paths.cwd());
     let bcfg = ctx.config.bootstrap_config();
     bootstrap_worktree(repo, &root_workdir, &worktree_dir_path, &bcfg)?;

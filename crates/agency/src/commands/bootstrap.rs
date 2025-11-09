@@ -22,4 +22,3 @@ pub fn run(ctx: &AppContext, ident: &str) -> Result<()> {
   let _wt = crate::utils::bootstrap::prepare_worktree_for_task(ctx, &repo, &task, &branch)?;
   Ok(())
 }
-

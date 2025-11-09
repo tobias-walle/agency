@@ -9,8 +9,8 @@ use ratatui::backend::CrosstermBackend;
 use ratatui::layout::{Alignment, Constraint, Layout};
 use ratatui::prelude::Stylize;
 use ratatui::style::{Color, Style};
-use ratatui::text::Line;
-use ratatui::widgets::{Block, Borders, Cell, Row, Table};
+use ratatui::text::{Line, Span};
+use ratatui::widgets::{Block, Borders, Cell, Paragraph, Row, Table};
 
 use crate::config::AppContext;
 use crate::config::compute_socket_path;
@@ -24,6 +24,9 @@ use crate::utils::git::{open_main_repo, repo_workdir_or};
 use crate::utils::task::{TaskRef, list_tasks, task_file};
 use crossbeam_channel::{Receiver, unbounded};
 use std::os::unix::net::UnixStream;
+mod colors;
+
+use crate::utils::log::{LogEvent, clear_log_sink, set_log_sink};
 
 #[derive(Clone, Debug)]
 struct TaskRow {
@@ -41,6 +44,7 @@ struct AppState {
   selected: usize,
   mode: Mode,
   slug_input: String,
+  cmd_log: Vec<LogEvent>,
 }
 
 impl AppState {
@@ -52,6 +56,15 @@ impl AppState {
     self.rows = rows;
     self.selected = sel;
     Ok(())
+  }
+
+  fn push_log(&mut self, ev: LogEvent) {
+    const MAX_LOG: usize = 200;
+    self.cmd_log.push(ev);
+    if self.cmd_log.len() > MAX_LOG {
+      let overflow = self.cmd_log.len() - MAX_LOG;
+      self.cmd_log.drain(0..overflow);
+    }
   }
 }
 
@@ -89,10 +102,21 @@ fn ui_loop(
   // Subscribe to daemon events
   let events_rx = subscribe_events(ctx)?;
 
+  // Wire log sink for routed CLI log lines
+  let (log_tx, log_rx) = unbounded::<LogEvent>();
+  set_log_sink(log_tx.clone());
+
   loop {
+    // Drain routed logs without blocking
+    while let Ok(ev) = log_rx.try_recv() {
+      state.push_log(ev);
+    }
+
     // Draw
     terminal.draw(|f| {
-      let rects = Layout::vertical([Constraint::Fill(1), Constraint::Length(1)]).split(f.area());
+      let rects =
+        Layout::vertical([Constraint::Fill(1), Constraint::Length(5), Constraint::Length(1)])
+          .split(f.area());
 
       // Table
       let header = Row::new([
@@ -135,6 +159,28 @@ fn ui_loop(
       tstate.select(Some(state.selected));
       f.render_stateful_widget(table, rects[0], &mut tstate);
 
+      // Command Log
+      let mut lines: Vec<Line> = Vec::with_capacity(state.cmd_log.len());
+      for ev in &state.cmd_log {
+        match ev {
+          LogEvent::Command(s) => {
+            lines.push(Line::from(format!("> {}", s)).fg(Color::Gray));
+          }
+          LogEvent::Line { ansi, .. } => {
+            let spans: Vec<Span> = colors::ansi_to_spans(ansi);
+            lines.push(Line::from(spans));
+          }
+        }
+      }
+      let log_block = Block::default().borders(Borders::ALL).title("Command Log");
+      // Render only the visible lines (auto-scroll to latest)
+      let content_h = rects[1].height.saturating_sub(2) as usize; // minus borders
+      let total_lines = lines.len();
+      let start = total_lines.saturating_sub(content_h);
+      let visible = lines[start..].to_vec();
+      let log_para = Paragraph::new(visible).block(log_block);
+      f.render_widget(log_para, rects[1]);
+
       // Help bar
       let help = Line::from(
         "Select: ↑/↓ j/k | Edit/Attach: ⏎ | New: n/N | Start: s | Stop: S | Delete: X | Reset: R | Quit: q",
@@ -142,7 +188,7 @@ fn ui_loop(
       .fg(Color::Blue);
       f.render_widget(
         ratatui::widgets::Paragraph::new(help).alignment(Alignment::Center),
-        rects[1],
+        rects[2],
       );
 
       // Input overlay
@@ -203,6 +249,8 @@ fn ui_loop(
           }
           KeyCode::Enter => {
             if let Some(cur) = state.rows.get(state.selected).cloned() {
+              // Temporarily clear sink to print interactive logs to stdout
+              clear_log_sink();
               restore_terminal(terminal)?;
               if let Some(sid) = cur.session {
                 let _ = crate::commands::attach::run_join_session(ctx, sid);
@@ -215,6 +263,7 @@ fn ui_loop(
                 let _ = open_path(&tf);
               }
               reinit_terminal(terminal)?;
+              set_log_sink(log_tx.clone());
               state.refresh(ctx)?;
             }
           }
@@ -232,49 +281,81 @@ fn ui_loop(
           }
           KeyCode::Char('s') => {
             if let Some(cur) = state.rows.get(state.selected).cloned() {
+              clear_log_sink();
               restore_terminal(terminal)?;
               let _ = crate::commands::daemon::start();
               let _ = crate::commands::attach::run_with_task(ctx, &cur.id.to_string());
               reinit_terminal(terminal)?;
+              set_log_sink(log_tx.clone());
               state.refresh(ctx)?;
             }
           }
           KeyCode::Char('S') => {
             if let Some(cur) = state.rows.get(state.selected).cloned() {
-              restore_terminal(terminal)?;
               let tref = TaskRef {
                 id: cur.id,
                 slug: cur.slug.clone(),
               };
-              let _ = crate::utils::daemon::stop_sessions_of_task(ctx, &tref);
-              reinit_terminal(terminal)?;
-              state.refresh(ctx)?;
+              state.push_log(LogEvent::Command(format!("agency stop --task {}", tref.id)));
+              std::thread::spawn({
+                let ctx = ctx.clone();
+                let tref = tref;
+                move || {
+                  let _ = crate::utils::daemon::stop_sessions_of_task(&ctx, &tref);
+                  crate::log_info!(
+                    "Requested stop for task {}-{}",
+                    crate::utils::log::t::id(tref.id),
+                    crate::utils::log::t::slug(&tref.slug)
+                  );
+                  let _ = crate::utils::daemon::notify_tasks_changed(&ctx);
+                }
+              });
             }
           }
           KeyCode::Char('X') => {
             if let Some(cur) = state.rows.get(state.selected).cloned() {
-              restore_terminal(terminal)?;
-              let _ = crate::commands::rm::run(ctx, &cur.id.to_string());
-              reinit_terminal(terminal)?;
-              state.refresh(ctx)?;
+              state.push_log(LogEvent::Command(format!("agency rm {}", cur.id)));
+              let ident = cur.id.to_string();
+              std::thread::spawn({
+                let ctx = ctx.clone();
+                move || {
+                  let _ = crate::commands::rm::run_force(&ctx, &ident);
+                }
+              });
             }
           }
           KeyCode::Char('R') => {
             if let Some(cur) = state.rows.get(state.selected).cloned() {
-              restore_terminal(terminal)?;
               let tref = TaskRef {
                 id: cur.id,
                 slug: cur.slug.clone(),
               };
-              let _ = crate::utils::daemon::stop_sessions_of_task(ctx, &tref);
-              let repo = open_main_repo(ctx.paths.cwd())?;
-              let branch = crate::utils::task::branch_name(&tref);
-              let wt_dir = crate::utils::task::worktree_dir(&ctx.paths, &tref);
-              let _ = crate::utils::git::prune_worktree_if_exists(&repo, &wt_dir)?;
-              let _ = crate::utils::git::delete_branch_if_exists(&repo, &branch)?;
-              let _ = crate::utils::daemon::notify_tasks_changed(ctx);
-              reinit_terminal(terminal)?;
-              state.refresh(ctx)?;
+              state.push_log(LogEvent::Command(format!("agency reset {}", tref.id)));
+              std::thread::spawn({
+                let ctx = ctx.clone();
+                let tref = tref;
+                move || {
+                  let _ = crate::utils::daemon::stop_sessions_of_task(&ctx, &tref);
+                  crate::log_info!(
+                    "Requested stop for task {}-{}",
+                    crate::utils::log::t::id(tref.id),
+                    crate::utils::log::t::slug(&tref.slug)
+                  );
+                  let repo = open_main_repo(ctx.paths.cwd()).expect("repo");
+                  let branch = crate::utils::task::branch_name(&tref);
+                  let wt_dir = crate::utils::task::worktree_dir(&ctx.paths, &tref);
+                  if crate::utils::git::prune_worktree_if_exists(&repo, &wt_dir).is_ok() {
+                    crate::log_success!(
+                      "Pruned worktree {}",
+                      crate::utils::log::t::path(wt_dir.display())
+                    );
+                  }
+                  if crate::utils::git::delete_branch_if_exists(&repo, &branch).is_ok() {
+                    crate::log_success!("Deleted branch {}", branch);
+                  }
+                  let _ = crate::utils::daemon::notify_tasks_changed(&ctx);
+                }
+              });
             }
           }
           _ => {}
@@ -289,14 +370,24 @@ fn ui_loop(
               state.mode = Mode::List;
               continue;
             };
-            restore_terminal(terminal)?;
-            let created = crate::commands::new::run(ctx, &slug, false, None)?;
             if start_and_attach {
+              clear_log_sink();
+              restore_terminal(terminal)?;
+              let created = crate::commands::new::run(ctx, &slug, false, None)?;
               let _ = crate::commands::daemon::start();
               let _ = crate::commands::attach::run_with_task(ctx, &created.id.to_string());
+              let _ = crate::utils::daemon::notify_tasks_changed(ctx);
+              reinit_terminal(terminal)?;
+              set_log_sink(log_tx.clone());
+            } else {
+              // Interactive editor open without attach
+              clear_log_sink();
+              restore_terminal(terminal)?;
+              let _ = crate::commands::new::run(ctx, &slug, false, None)?;
+              let _ = crate::utils::daemon::notify_tasks_changed(ctx);
+              reinit_terminal(terminal)?;
+              set_log_sink(log_tx.clone());
             }
-            let _ = crate::utils::daemon::notify_tasks_changed(ctx);
-            reinit_terminal(terminal)?;
             state.mode = Mode::List;
             state.slug_input.clear();
             state.refresh(ctx)?;
@@ -313,6 +404,7 @@ fn ui_loop(
     }
   }
 
+  clear_log_sink();
   Ok(())
 }
 
