@@ -4,13 +4,11 @@ use regex::Regex;
 use std::io::{self, Read, Write};
 use std::sync::OnceLock;
 
-/// Soft-clear the current terminal view without losing scrollback.
-///
-/// This scrolls the viewport by a large amount (clamped by the terminal
-/// height) and then moves the cursor to home. It keeps scrollback intact.
-pub fn soft_reset_scroll() {
+/// Soft-clear viewport and disable extended keyboard modes.
+pub fn restore_terminal_state() {
   let mut stdout = io::stdout().lock();
   let _ = stdout.write_all(b"\x1b[999S\x1b[H");
+  let _ = stdout.write_all(b"\x1b[>0u\x1b[?2004l\x1b[?1004l");
   let _ = stdout.flush();
 }
 
