@@ -11,8 +11,8 @@
 //!   the shell, and send a fresh `Hello` + `Snapshot`.
 
 use crate::pty::protocol::{
-  C2D, C2DControl, D2C, D2CControl, D2CControlChannel, SessionOpenMeta, make_d2c_control_channel,
-  make_output_channel, read_frame, write_frame,
+  C2D, C2DControl, D2C, D2CControl, D2CControlChannel, ProjectKey, SessionOpenMeta,
+  make_d2c_control_channel, make_output_channel, read_frame, write_frame,
 };
 use crate::pty::registry::SessionRegistry;
 use anyhow::Context;
@@ -61,6 +61,8 @@ pub struct Daemon {
   socket_path: PathBuf,
   /// Shutdown flag set when a `Shutdown` control is received.
   shutdown: Arc<std::sync::atomic::AtomicBool>,
+  /// Subscribers to control events per project.
+  subscribers: Arc<Mutex<Vec<Subscriber>>>,
 }
 
 impl Daemon {
@@ -76,6 +78,7 @@ impl Daemon {
       registry: Arc::new(Mutex::new(SessionRegistry::new())),
       socket_path: socket_path.to_path_buf(),
       shutdown: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+      subscribers: Arc::new(Mutex::new(Vec::new())),
     })
   }
 
@@ -108,6 +111,8 @@ impl Daemon {
     };
     if !exited.is_empty() {
       let reg = self.registry.lock().unwrap();
+      // Collect affected projects for SessionsChanged broadcast
+      let mut affected: Vec<ProjectKey> = Vec::new();
       for (sid, stats) in exited {
         let msg = D2CControl::Exited {
           code: None,
@@ -115,6 +120,13 @@ impl Daemon {
           stats: stats.clone(),
         };
         reg.broadcast(sid, &msg);
+        if let Some(entry) = reg.sessions.get(&sid) {
+          affected.push(entry.meta.project.clone());
+        }
+      }
+      drop(reg);
+      for pk in affected {
+        self.broadcast_sessions_changed(&pk);
       }
     }
   }
@@ -160,10 +172,31 @@ impl Daemon {
         let _ = stream.shutdown(std::net::Shutdown::Both);
         Ok(())
       }
+      Ok(C2D::Control(C2DControl::SubscribeEvents { project })) => {
+        self.handle_subscribe(stream, project)?;
+        Ok(())
+      }
+      Ok(C2D::Control(C2DControl::NotifyTasksChanged { project })) => {
+        self.broadcast_tasks_changed(&project);
+        let _ = write_frame(&mut stream, &D2C::Control(D2CControl::Goodbye));
+        let _ = stream.shutdown(std::net::Shutdown::Both);
+        Ok(())
+      }
       Ok(C2D::Control(C2DControl::StopSession { session_id })) => {
+        // Determine project for broadcast
+        let pk_opt = {
+          let reg = self.registry.lock().unwrap();
+          reg
+            .sessions
+            .get(&session_id)
+            .map(|e| e.meta.project.clone())
+        };
         {
           let mut reg = self.registry.lock().unwrap();
           let _ = reg.stop_session(session_id);
+        }
+        if let Some(pk) = pk_opt {
+          self.broadcast_sessions_changed(&pk);
         }
         // Acknowledge with Goodbye for clients expecting it
         let _ = write_frame(&mut stream, &D2C::Control(D2CControl::Goodbye));
@@ -179,6 +212,8 @@ impl Daemon {
           let mut reg = self.registry.lock().unwrap();
           reg.stop_task(&project, task_id, &slug)
         };
+        // Broadcast sessions changed for this project
+        self.broadcast_sessions_changed(&project);
         // Send acknowledgement with number of sessions stopped
         let _ = write_frame(&mut stream, &D2C::Control(D2CControl::Ack { stopped }));
         let _ = stream.shutdown(std::net::Shutdown::Both);
@@ -228,9 +263,11 @@ impl Daemon {
         let _ = reg.ensure_running_for_attach(existing, rows, cols);
         existing
       } else {
-        reg.create_session(meta, rows, cols)?
+        reg.create_session(meta.clone(), rows, cols)?
       }
     };
+    // Broadcast sessions changed for this project
+    self.broadcast_sessions_changed(&meta.project);
     self.attach_to_session(stream, session_id, rows, cols)
   }
 
@@ -242,6 +279,16 @@ impl Daemon {
     rows: u16,
     cols: u16,
   ) -> anyhow::Result<()> {
+    // Best-effort: determine project and broadcast clients count changes
+    if let Some(pk) = {
+      let reg = self.registry.lock().unwrap();
+      reg
+        .sessions
+        .get(&session_id)
+        .map(|e| e.meta.project.clone())
+    } {
+      self.broadcast_sessions_changed(&pk);
+    }
     self.attach_to_session(stream, session_id, rows, cols)
   }
 
@@ -415,6 +462,8 @@ impl Daemon {
               }
               C2DControl::StopTask { .. }
               | C2DControl::ListSessions { .. }
+              | C2DControl::SubscribeEvents { .. }
+              | C2DControl::NotifyTasksChanged { .. }
               | C2DControl::Shutdown => {
                 let _ = control_tx.send_error("Invalid control in attachment".to_string());
                 break;
@@ -425,6 +474,105 @@ impl Daemon {
         info!("Reader thread exiting");
       })?;
     Ok(handle)
+  }
+}
+
+/// Subscriber entry used to broadcast control events to TUI clients.
+pub struct Subscriber {
+  pub project: ProjectKey,
+  pub control: D2CControlChannel,
+}
+
+impl Daemon {
+  fn handle_subscribe(&self, stream: UnixStream, project: ProjectKey) -> anyhow::Result<()> {
+    let (control_tx, control_rx) = make_d2c_control_channel();
+    let mut writer_stream = stream;
+    let reader_stream = writer_stream.try_clone()?;
+
+    // Register subscriber
+    {
+      let mut subs = self.subscribers.lock().unwrap();
+      subs.push(Subscriber {
+        project: project.clone(),
+        control: control_tx.clone(),
+      });
+    }
+
+    // Initial sessions snapshot for client convenience
+    let initial_entries = {
+      let reg = self.registry.lock().unwrap();
+      reg.list_sessions(Some(&project))
+    };
+    let _ = control_tx.send(D2CControl::SessionsChanged {
+      entries: initial_entries,
+    });
+
+    // Writer thread: only control frames
+    let writer_handle = std::thread::Builder::new()
+      .name("subscriber-writer".to_string())
+      .spawn(move || {
+        while let Ok(cm) = control_rx.recv() {
+          if let Err(e) = write_frame(&mut writer_stream, &D2C::Control(cm)) {
+            error!("Subscriber writer error: {e}");
+            break;
+          }
+        }
+        info!("Subscriber writer exiting");
+      })?;
+
+    // Reader thread: accept ping, ignore others, exit on disconnect
+    let subs_list = self.subscribers.clone();
+    std::thread::Builder::new()
+      .name("subscriber-reader".to_string())
+      .spawn(move || {
+        loop {
+          let msg: C2D = match read_frame(&reader_stream) {
+            Ok(m) => m,
+            Err(_) => break,
+          };
+          if let C2D::Control(C2DControl::Ping { nonce }) = msg {
+            let _ = control_tx.send(D2CControl::Pong { nonce });
+          }
+        }
+        let _ = writer_handle.join();
+        // Remove subscriber entry
+        let mut subs = subs_list.lock().unwrap();
+        let idx = subs
+          .iter()
+          .position(|s| s.project == project && std::ptr::eq(&s.control, &control_tx));
+        if let Some(i) = idx {
+          subs.remove(i);
+        }
+        info!("Subscriber disconnected for project {}", project.repo_root);
+      })?;
+
+    Ok(())
+  }
+
+  fn broadcast_sessions_changed(&self, project: &ProjectKey) {
+    let entries = {
+      let reg = self.registry.lock().unwrap();
+      reg.list_sessions(Some(project))
+    };
+    let subs = self.subscribers.lock().unwrap();
+    for s in subs.iter() {
+      if &s.project == project {
+        let _ = s.control.send(D2CControl::SessionsChanged {
+          entries: entries.clone(),
+        });
+      }
+    }
+  }
+
+  fn broadcast_tasks_changed(&self, project: &ProjectKey) {
+    let subs = self.subscribers.lock().unwrap();
+    for s in subs.iter() {
+      if &s.project == project {
+        let _ = s.control.send(D2CControl::TasksChanged {
+          project: project.clone(),
+        });
+      }
+    }
   }
 }
 
