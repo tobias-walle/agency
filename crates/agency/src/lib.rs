@@ -192,7 +192,7 @@ pub fn run() -> Result<()> {
         if stdout_tty {
           commands::setup::run(&ctx)?;
         } else {
-          crate::log_warn!("Global config missing -> run `agency setup` in a terminal");
+          crate::log_warn!("Global config missing: run `agency setup` in a terminal");
         }
         return Ok(());
       }

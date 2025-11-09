@@ -52,7 +52,7 @@ pub fn run(ctx: &AppContext, ident: &str, base_override: Option<&str>) -> Result
     );
   }
 
-  log_warn!("Rebase {} -> {}", branch, base_branch);
+  log_warn!("Rebase {} onto {}", branch, base_branch);
 
   // Rebase. On conflicts, instruct the user to resolve and rerun.
   if let Err(err) = rebase_onto(&wt_dir, &base_branch) {
