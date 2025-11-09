@@ -5,15 +5,13 @@ use std::path::Path;
 use anyhow::{Context, Result};
 
 use crate::config::AppContext;
-// Using macros via module path
 use crate::log_info;
 use crate::utils::daemon::notify_tasks_changed;
-use crate::utils::editor::open_path as open_editor_path;
 use crate::utils::git::{current_branch_name, open_main_repo};
 use crate::utils::log::t;
 use crate::utils::task::{
-  TaskFrontmatter, TaskRef, compute_unique_slug, format_task_markdown, next_id,
-  normalize_and_validate_slug,
+  TaskContent, TaskFrontmatter, TaskRef, compute_unique_slug, edit_task_description, next_id,
+  normalize_and_validate_slug, write_task_content,
 };
 
 pub fn run(ctx: &AppContext, slug: &str, no_edit: bool, agent: Option<&str>) -> Result<TaskRef> {
@@ -25,8 +23,6 @@ pub fn run(ctx: &AppContext, slug: &str, no_edit: bool, agent: Option<&str>) -> 
   // Compute global next id and a unique slug
   let id = next_id(&tasks)?;
   let slug = compute_unique_slug(&tasks, &base_slug)?;
-
-  let file_path = tasks.join(format!("{id}-{slug}.md"));
 
   // Determine base branch from current repo HEAD
   let repo = open_main_repo(ctx.paths.cwd())?;
@@ -49,23 +45,35 @@ pub fn run(ctx: &AppContext, slug: &str, no_edit: bool, agent: Option<&str>) -> 
       base_branch: Some(base_branch),
     }
   };
-  let content = format_task_markdown(&slug, Some(&fm))?;
-  fs::write(&file_path, content)
-    .with_context(|| format!("failed to write {}", file_path.display()))?;
+
+  let task = TaskRef {
+    id,
+    slug: slug.clone(),
+  };
+  let mut content = TaskContent {
+    frontmatter: Some(fm),
+    body: String::new(),
+  };
+  write_task_content(&ctx.paths, &task, &content)?;
 
   // Info messages with token highlights
   log_info!("Create task {} (id {})", t::slug(&slug), t::id(id));
 
   // Optionally open the task file in the user's editor
   if std::io::stdout().is_terminal() && !no_edit {
-    open_editor_path(&file_path)?;
+    if let Some(updated_body) =
+      edit_task_description(&ctx.paths, &task, ctx.paths.cwd(), &content.body)?
+    {
+      content.body = updated_body;
+      write_task_content(&ctx.paths, &task, &content)?;
+    }
   }
 
   // Worktree and bootstrap are now created lazily at attach time
 
   let _ = notify_tasks_changed(ctx);
 
-  Ok(TaskRef { id, slug })
+  Ok(task)
 }
 
 fn ensure_dir(dir: &Path) -> Result<bool> {

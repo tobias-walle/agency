@@ -5,7 +5,6 @@ use std::sync::OnceLock;
 use anyhow::{Context, Result, bail};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use std::borrow::Cow;
 
 use crate::config::AgencyPaths;
 
@@ -193,12 +192,18 @@ pub fn list_tasks(paths: &AgencyPaths) -> Result<Vec<TaskRef>> {
   Ok(out)
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct TaskFrontmatter {
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub agent: Option<String>,
   #[serde(default)]
   pub base_branch: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct TaskContent {
+  pub frontmatter: Option<TaskFrontmatter>,
+  pub body: String,
 }
 
 const FRONT_MATTER_START: &str = "---\n";
@@ -216,6 +221,74 @@ pub fn parse_task_markdown(input: &str) -> (Option<TaskFrontmatter>, &str) {
     return (fm, body);
   }
   (None, input)
+}
+
+pub fn read_task_content(paths: &AgencyPaths, task: &TaskRef) -> Result<TaskContent> {
+  let tf = task_file(paths, task);
+  let data =
+    std::fs::read_to_string(&tf).with_context(|| format!("failed to read {}", tf.display()))?;
+  let (frontmatter, body) = parse_task_markdown(&data);
+  Ok(TaskContent {
+    frontmatter,
+    body: body.to_string(),
+  })
+}
+
+pub fn write_task_content(
+  paths: &AgencyPaths,
+  task: &TaskRef,
+  content: &TaskContent,
+) -> Result<()> {
+  let tf = task_file(paths, task);
+  if let Some(dir) = tf.parent() {
+    std::fs::create_dir_all(dir).with_context(|| format!("failed to create {}", dir.display()))?;
+  }
+
+  let mut output = String::new();
+  if let Some(fm) = &content.frontmatter {
+    let yaml = serde_yaml::to_string(fm).context("failed to serialize front matter")?;
+    output.push_str(FRONT_MATTER_START);
+    output.push_str(yaml.trim());
+    output.push_str(FRONT_MATTER_END);
+  }
+
+  if !content.body.is_empty() {
+    output.push_str(&content.body);
+    if !content.body.ends_with('\n') {
+      output.push('\n');
+    }
+  }
+
+  std::fs::write(&tf, output).with_context(|| format!("failed to write {}", tf.display()))?;
+  Ok(())
+}
+
+pub fn edit_task_description(
+  paths: &AgencyPaths,
+  task: &TaskRef,
+  project_root: &Path,
+  initial_body: &str,
+) -> Result<Option<String>> {
+  let state_dir = paths.state_dir();
+  std::fs::create_dir_all(&state_dir)
+    .with_context(|| format!("failed to create {}", state_dir.display()))?;
+
+  let temp_path = state_dir.join(format!("{}-{}.desc.md", task.id, task.slug));
+  std::fs::write(&temp_path, initial_body)
+    .with_context(|| format!("failed to write {}", temp_path.display()))?;
+
+  let editor_result = crate::utils::editor::open_path(&temp_path, project_root);
+  let updated = std::fs::read_to_string(&temp_path)
+    .with_context(|| format!("failed to read {}", temp_path.display()));
+  let _ = std::fs::remove_file(&temp_path);
+
+  editor_result?;
+  let updated = updated?;
+  if updated.trim().is_empty() {
+    return Ok(None);
+  }
+
+  Ok(Some(updated))
 }
 
 /// Read and parse a task's front matter from disk, if present.
@@ -240,57 +313,6 @@ pub fn agent_for_task(
     return Some(a.clone());
   }
   cfg.agent.clone()
-}
-
-/// Produce a human title from a task slug, e.g. "some-slug" -> "# Some Slug\n".
-pub fn title_from_slug(slug: &str) -> String {
-  let title: String = slug
-    .split('-')
-    .filter(|s| !s.is_empty())
-    .map(|word| {
-      let mut chars = word.chars();
-      match chars.next() {
-        Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
-        None => String::new(),
-      }
-    })
-    .collect::<Vec<_>>()
-    .join(" ");
-  format!("# {title}\n")
-}
-
-/// Remove the default, unmodified title line (derived from the slug) from the
-/// provided body. If the first line equals the exact default title, it is
-/// removed and the remaining content is returned with leading whitespace
-/// trimmed. Otherwise the original input is returned unchanged.
-pub fn remove_title<'a>(body: &'a str, slug: &str) -> Cow<'a, str> {
-  let expected = title_from_slug(slug);
-  // Compare without trailing newline for first-line equality
-  let expected_line = expected.trim_end();
-  if let Some(first_line) = body.lines().next()
-    && first_line == expected_line
-  {
-    // Skip the first line and trim leading whitespace from the remainder
-    let mut iter = body.lines();
-    let _ = iter.next();
-    let rest = iter.collect::<Vec<_>>().join("\n");
-    return Cow::Owned(rest.trim_start().to_string());
-  }
-  Cow::Borrowed(body)
-}
-
-/// Format task markdown with optional YAML front matter and a standard title line.
-pub fn format_task_markdown(slug: &str, frontmatter: Option<&TaskFrontmatter>) -> Result<String> {
-  let title = title_from_slug(slug);
-  if let Some(fm) = frontmatter {
-    let yaml = serde_yaml::to_string(fm).context("failed to serialize front matter")?;
-    let yaml = yaml.trim();
-    Ok(format!(
-      "{FRONT_MATTER_START}{yaml}{FRONT_MATTER_END}{title}"
-    ))
-  } else {
-    Ok(title)
-  }
 }
 
 #[cfg(test)]
@@ -380,5 +402,61 @@ mod tests {
 
     let not_found = resolve_id_or_slug(&paths, "baz");
     assert!(not_found.is_err());
+  }
+
+  #[test]
+  fn write_and_read_task_content_without_header() {
+    let dir = TempDir::new().expect("tmp");
+    let paths = AgencyPaths::new(dir.path());
+    let task = TaskRef {
+      id: 1,
+      slug: "sample-task".to_string(),
+    };
+    let frontmatter = TaskFrontmatter {
+      agent: Some("agent-one".to_string()),
+      base_branch: Some("main".to_string()),
+    };
+    let body = "Implement the feature\nwith bullet points\n".to_string();
+    let content = TaskContent {
+      frontmatter: Some(frontmatter.clone()),
+      body: body.clone(),
+    };
+
+    write_task_content(&paths, &task, &content).expect("write succeeds");
+    let stored_path = task_file(&paths, &task);
+    let stored = std::fs::read_to_string(stored_path).expect("read stored file");
+
+    assert!(
+      !stored.contains("# Sample Task"),
+      "stored content should not contain generated headers"
+    );
+
+    let roundtrip = read_task_content(&paths, &task).expect("roundtrip read");
+    assert_eq!(roundtrip.body, body);
+    assert_eq!(roundtrip.frontmatter, Some(frontmatter));
+  }
+
+  #[test]
+  fn write_task_content_preserves_trailing_newline() {
+    let dir = TempDir::new().expect("tmp");
+    let paths = AgencyPaths::new(dir.path());
+    let task = TaskRef {
+      id: 2,
+      slug: "another-task".to_string(),
+    };
+
+    let content = TaskContent {
+      frontmatter: None,
+      body: "Single line body".to_string(),
+    };
+    write_task_content(&paths, &task, &content).expect("write succeeds");
+
+    let stored_path = task_file(&paths, &task);
+    let stored = std::fs::read_to_string(stored_path).expect("read stored file");
+    assert!(
+      stored.ends_with('\n'),
+      "stored body should end with newline, got: {:?}",
+      stored
+    );
   }
 }

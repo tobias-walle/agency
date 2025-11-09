@@ -120,6 +120,11 @@ impl AgencyPaths {
   pub fn worktrees_dir(&self) -> PathBuf {
     self.cwd.join(".agency").join("worktrees")
   }
+
+  #[must_use]
+  pub fn state_dir(&self) -> PathBuf {
+    self.cwd.join(".agency").join("state")
+  }
 }
 
 #[derive(Debug, Clone)]
