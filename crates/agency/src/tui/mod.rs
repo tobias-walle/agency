@@ -88,6 +88,8 @@ pub fn run(ctx: &AppContext) -> Result<()> {
   let out = terminal.backend_mut();
   crossterm::execute!(out, crossterm::terminal::LeaveAlternateScreen).ok();
   disable_raw_mode().ok();
+  // Soft-reset the view (keep scrollback) after leaving the TUI
+  crate::utils::term::soft_reset_scroll();
   res
 }
 

@@ -20,6 +20,7 @@ use termwiz::input::{InputEvent, InputParser, KeyEvent};
 
 mod tty;
 use tty::{RawModeGuard, RawModePauseGuard};
+use crate::utils::term::soft_reset_scroll;
 
 /// Attaches to the daemon and delegates lifecycle orchestration to `Client`.
 ///
@@ -334,6 +335,9 @@ impl Client {
     let _ = input_handle.join();
     let _ = writer_handle.join();
     let _ = resize_handle.join();
+
+    // Soft-reset the view (keep scrollback) after detach/exit
+    soft_reset_scroll();
 
     Ok(())
   }
