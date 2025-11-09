@@ -14,10 +14,11 @@
 use crate::pty::protocol::D2COutputChannel;
 use crate::utils::command::Command;
 use anyhow::Context;
+use parking_lot::Mutex;
 use portable_pty::{CommandBuilder, ExitStatus, MasterPty, PtySize, native_pty_system};
 use std::io::{Read, Write};
 use std::sync::{
-  Arc, Mutex,
+  Arc,
   atomic::{AtomicU64, Ordering},
 };
 use std::thread;
@@ -106,7 +107,8 @@ impl Session {
     self.child = child;
 
     // Reset parser to the new size
-    if let Ok(mut p) = self.parser.lock() {
+    {
+      let mut p = self.parser.lock();
       *p = vt100::Parser::new(rows, cols, 10_000);
     }
 
@@ -141,24 +143,24 @@ impl Session {
     let sinks = self.output_sinks.clone();
 
     thread::spawn(move || {
-      let mut reader = match master_for_read.lock() {
-        Ok(m) => m.try_clone_reader().expect("failed to clone PTY reader"),
-        Err(_) => return,
-      };
+      let mut reader = master_for_read
+        .lock()
+        .try_clone_reader()
+        .expect("failed to clone PTY reader");
       let mut buf = [0u8; 8192];
       loop {
         match reader.read(&mut buf) {
           Ok(0) | Err(_) => break, // PTY closed or error
           Ok(n) => {
-            if let Ok(mut p) = parser.lock() {
+            {
+              let mut p = parser.lock();
               p.process(&buf[..n]);
             }
             bytes_out.fetch_add(n as u64, Ordering::Relaxed);
             // Forward to all attached clients (non-blocking, lossy)
-            if let Ok(guard) = sinks.lock() {
-              for out in guard.iter() {
-                let _ = out.try_send_bytes(&buf[..n]);
-              }
+            let guard = sinks.lock();
+            for out in guard.iter() {
+              let _ = out.try_send_bytes(&buf[..n]);
             }
           }
         }
@@ -167,7 +169,8 @@ impl Session {
   }
 
   pub fn apply_resize(&self, rows: u16, cols: u16) {
-    if let Ok(m) = self.master.lock() {
+    {
+      let m = self.master.lock();
       let _ = m.resize(PtySize {
         rows,
         cols,
@@ -175,7 +178,8 @@ impl Session {
         pixel_height: 0,
       });
     }
-    if let Ok(mut p) = self.parser.lock() {
+    {
+      let mut p = self.parser.lock();
       p.screen_mut().set_size(rows, cols);
     }
   }
@@ -184,17 +188,16 @@ impl Session {
     self
       .bytes_in
       .fetch_add(bytes.len() as u64, Ordering::Relaxed);
-    if let Ok(mut w) = self.writer.lock() {
-      w.write_all(bytes)?;
-      let _ = w.flush();
-    }
+    let mut w = self.writer.lock();
+    w.write_all(bytes)?;
+    let _ = w.flush();
     Ok(())
   }
 
   #[must_use]
   #[allow(clippy::missing_panics_doc)]
   pub fn snapshot(&self) -> (Vec<u8>, (u16, u16)) {
-    let p = self.parser.lock().unwrap();
+    let p = self.parser.lock();
     let screen = p.screen();
     let ansi = screen.contents_formatted();
     let (rows, cols) = screen.size();
@@ -205,7 +208,7 @@ impl Session {
   #[must_use]
   #[allow(clippy::missing_panics_doc)]
   pub fn size(&self) -> (u16, u16) {
-    let p = self.parser.lock().unwrap();
+    let p = self.parser.lock();
     let screen = p.screen();
     let (rows, cols) = screen.size();
     (rows, cols)
@@ -236,23 +239,20 @@ impl Session {
 
   /// Add a new output sink for a client attachment.
   pub fn add_output_sink(&mut self, sink: D2COutputChannel) {
-    if let Ok(mut guard) = self.output_sinks.lock() {
-      guard.push(sink);
-    }
+    let mut guard = self.output_sinks.lock();
+    guard.push(sink);
   }
 
   /// Remove an output sink for a client detachment.
   pub fn remove_output_sink(&mut self, sink: &D2COutputChannel) {
-    if let Ok(mut guard) = self.output_sinks.lock() {
-      guard.retain(|s| !std::ptr::eq(s, sink));
-    }
+    let mut guard = self.output_sinks.lock();
+    guard.retain(|s| !std::ptr::eq(s, sink));
   }
 
   /// Clear all output sinks (used when last client detaches or on restart).
   pub fn clear_all_sinks(&mut self) {
-    if let Ok(mut guard) = self.output_sinks.lock() {
-      guard.clear();
-    }
+    let mut guard = self.output_sinks.lock();
+    guard.clear();
   }
 
   /// Attempt to stop the child process.

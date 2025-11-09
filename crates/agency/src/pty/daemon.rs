@@ -17,12 +17,13 @@ use crate::pty::protocol::{
 use crate::pty::registry::SessionRegistry;
 use anyhow::Context;
 use log::{debug, error, info, warn};
+use parking_lot::Mutex;
 use std::fs;
 use std::io::ErrorKind;
 use std::os::unix::fs::PermissionsExt;
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
@@ -85,6 +86,19 @@ impl Daemon {
   /// Runs the main accept loop interleaving child exit checks with accepts.
   pub fn run(&self) -> anyhow::Result<()> {
     info!("Daemon running");
+    // Debug-only deadlock detection loop
+    #[cfg(debug_assertions)]
+    {
+      std::thread::spawn(|| {
+        loop {
+          std::thread::sleep(std::time::Duration::from_millis(200));
+          let deadlocks = parking_lot::deadlock::check_deadlock();
+          if !deadlocks.is_empty() {
+            error!("Deadlock detected: {} cycles", deadlocks.len());
+          }
+        }
+      });
+    }
     while !self.shutdown.load(std::sync::atomic::Ordering::Relaxed) {
       // Handle session exits and broadcast notifications.
       self.poll_session_exits();
@@ -105,28 +119,22 @@ impl Daemon {
 
   /// Poll all sessions for exits and broadcast notifications to attached clients.
   fn poll_session_exits(&self) {
-    let exited = {
-      let mut reg = self.registry.lock().unwrap();
-      reg.collect_exited()
-    };
+    let exited = { self.registry.lock().collect_exited() };
     if !exited.is_empty() {
-      let reg = self.registry.lock().unwrap();
-      // Collect affected projects for SessionsChanged broadcast
-      let mut affected: Vec<ProjectKey> = Vec::new();
+      // For each exited session, send Exited to its clients and notify subscribers
       for (sid, stats) in exited {
+        let chans = self.read_registry(|reg| reg.read_client_controls_for_session(sid));
         let msg = D2CControl::Exited {
           code: None,
           signal: None,
           stats: stats.clone(),
         };
-        reg.broadcast(sid, &msg);
-        if let Some(entry) = reg.sessions.get(&sid) {
-          affected.push(entry.meta.project.clone());
+        for ch in chans {
+          let _ = ch.send(msg.clone());
         }
-      }
-      drop(reg);
-      for pk in affected {
-        self.broadcast_sessions_changed(&pk);
+        if let Some(pk) = self.read_session_project(sid) {
+          self.broadcast_sessions_changed(&pk);
+        }
       }
     }
   }
@@ -164,10 +172,7 @@ impl Daemon {
         Ok(())
       }
       Ok(C2D::Control(C2DControl::ListSessions { project })) => {
-        let entries = {
-          let reg = self.registry.lock().unwrap();
-          reg.list_sessions(project.as_ref())
-        };
+        let entries = self.read_registry(|reg| reg.list_sessions(project.as_ref()));
         let _ = write_frame(&mut stream, &D2C::Control(D2CControl::Sessions { entries }));
         let _ = stream.shutdown(std::net::Shutdown::Both);
         Ok(())
@@ -184,18 +189,12 @@ impl Daemon {
       }
       Ok(C2D::Control(C2DControl::StopSession { session_id })) => {
         // Determine project for broadcast
-        let pk_opt = {
-          let reg = self.registry.lock().unwrap();
-          reg
-            .sessions
-            .get(&session_id)
-            .map(|e| e.meta.project.clone())
-        };
-        {
-          let mut reg = self.registry.lock().unwrap();
-          let _ = reg.stop_session(session_id);
-        }
-        if let Some(pk) = pk_opt {
+        if let Some(pk) = self.read_session_project(session_id) {
+          // Stop and collect channels, then send Goodbye outside lock
+          let chans = self.write_registry(|reg| reg.stop_session_and_collect_channels(session_id));
+          for ch in chans {
+            let _ = ch.send(D2CControl::Goodbye);
+          }
           self.broadcast_sessions_changed(&pk);
         }
         // Acknowledge with Goodbye for clients expecting it
@@ -208,11 +207,26 @@ impl Daemon {
         task_id,
         slug,
       })) => {
-        let stopped = {
-          let mut reg = self.registry.lock().unwrap();
-          reg.stop_task(&project, task_id, &slug)
-        };
-        // Broadcast sessions changed for this project
+        // Stop all sessions and collect client channels to notify
+        let (stopped, chans): (usize, Vec<D2CControlChannel>) = self.write_registry(|reg| {
+          let ids: Vec<u64> = reg
+            .sessions
+            .iter()
+            .filter(|(_id, e)| {
+              &e.meta.project == &project && e.meta.task.id == task_id && e.meta.task.slug == slug
+            })
+            .map(|(id, _)| *id)
+            .collect();
+          let mut collected = Vec::new();
+          for sid in &ids {
+            let cs = reg.stop_session_and_collect_channels(*sid);
+            collected.extend(cs);
+          }
+          (ids.len(), collected)
+        });
+        for ch in chans {
+          let _ = ch.send(D2CControl::Goodbye);
+        }
         self.broadcast_sessions_changed(&project);
         // Send acknowledgement with number of sessions stopped
         let _ = write_frame(&mut stream, &D2C::Control(D2CControl::Ack { stopped }));
@@ -255,11 +269,10 @@ impl Daemon {
   ) -> anyhow::Result<()> {
     // Attempt to find an existing session for the same project/task and reuse it.
     let session_id = {
-      let mut reg = self.registry.lock().unwrap();
+      let mut reg = self.registry.lock();
       if let Some(existing) =
         reg.find_latest_session_for_task(&meta.project, meta.task.id, &meta.task.slug)
       {
-        // If the existing session was previously exited and has no clients, restart it.
         let _ = reg.ensure_running_for_attach(existing, rows, cols);
         existing
       } else {
@@ -280,13 +293,7 @@ impl Daemon {
     cols: u16,
   ) -> anyhow::Result<()> {
     // Best-effort: determine project and broadcast clients count changes
-    if let Some(pk) = {
-      let reg = self.registry.lock().unwrap();
-      reg
-        .sessions
-        .get(&session_id)
-        .map(|e| e.meta.project.clone())
-    } {
+    if let Some(pk) = self.read_session_project(session_id) {
       self.broadcast_sessions_changed(&pk);
     }
     self.attach_to_session(stream, session_id, rows, cols)
@@ -306,7 +313,7 @@ impl Daemon {
 
     // Register client with session and apply initial size
     let client_id = {
-      let mut reg = self.registry.lock().unwrap();
+      let mut reg = self.registry.lock();
       reg.apply_resize(session_id, rows, cols);
       reg.attach_client(session_id, control_tx.clone(), output_tx.clone())?
     };
@@ -316,7 +323,7 @@ impl Daemon {
     let stream_writer = stream_reader.try_clone()?;
 
     // Send Welcome with snapshot
-    if let Some((ansi, (sr, sc))) = self.registry.lock().unwrap().snapshot(session_id) {
+    if let Some((ansi, (sr, sc))) = self.registry.lock().snapshot(session_id) {
       let _ = control_tx.send_welcome(session_id, sr, sc, ansi);
     }
 
@@ -329,7 +336,7 @@ impl Daemon {
     thread::spawn(move || {
       let _ = reader.join();
       {
-        let mut reg = registry.lock().unwrap();
+        let mut reg = registry.lock();
         reg.detach_client(session_id, client_id);
       }
       let _ = writer.join();
@@ -415,12 +422,12 @@ impl Daemon {
           };
           match msg {
             C2D::Input { bytes } => {
-              let reg = registry_for_reader.lock().unwrap();
+              let reg = registry_for_reader.lock();
               reg.write_input(session_id, &bytes);
             }
             C2D::Control(cm) => match cm {
               C2DControl::Resize { rows, cols } => {
-                let reg = registry_for_reader.lock().unwrap();
+                let reg = registry_for_reader.lock();
                 reg.apply_resize(session_id, rows, cols);
               }
               C2DControl::Detach => {
@@ -439,41 +446,42 @@ impl Daemon {
                 // Determine current size without holding the lock for the send
                 let (rows_now, cols_now) = registry_for_reader
                   .lock()
-                  .unwrap()
                   .snapshot(session_id)
                   .map_or((24, 80), |(_, sz)| sz);
 
                 // Restart the shell with the current size
                 let _ = registry_for_reader
                   .lock()
-                  .unwrap()
                   .restart_session(session_id, rows_now, cols_now);
 
                 // After restart, send a fresh snapshot to the attached client
-                if let Some((ansi, (sr, sc))) =
-                  registry_for_reader.lock().unwrap().snapshot(session_id)
-                {
+                if let Some((ansi, (sr, sc))) = registry_for_reader.lock().snapshot(session_id) {
                   let _ = control_tx.send_welcome(session_id, sr, sc, ansi);
                 }
 
                 // Broadcast sessions changed for this session's project so TUI updates status
                 let project_opt = {
-                  let reg = registry_for_reader.lock().unwrap();
+                  let reg = registry_for_reader.lock();
                   reg
                     .sessions
                     .get(&session_id)
                     .map(|e| e.meta.project.clone())
                 };
                 if let Some(project) = project_opt {
-                  Self::broadcast_sessions_changed_with_arcs(
-                    &registry_for_reader,
-                    &subscribers_for_reader,
-                    &project,
-                  );
+                  // Build entries and broadcast without holding locks
+                  let entries = registry_for_reader.lock().list_sessions(Some(&project));
+                  let subs = subscribers_for_reader.lock();
+                  for s in subs.iter() {
+                    if &s.project == &project {
+                      let _ = s.control.send(D2CControl::SessionsChanged {
+                        entries: entries.clone(),
+                      });
+                    }
+                  }
                 }
               }
               C2DControl::StopSession { .. } => {
-                let _ = registry_for_reader.lock().unwrap().stop_session(session_id);
+                let _ = registry_for_reader.lock().stop_session(session_id);
                 let _ = control_tx.send_goodbye();
                 break;
               }
@@ -508,7 +516,7 @@ impl Daemon {
 
     // Register subscriber
     {
-      let mut subs = self.subscribers.lock().unwrap();
+      let mut subs = self.subscribers.lock();
       subs.push(Subscriber {
         project: project.clone(),
         control: control_tx.clone(),
@@ -516,10 +524,7 @@ impl Daemon {
     }
 
     // Initial sessions snapshot for client convenience
-    let initial_entries = {
-      let reg = self.registry.lock().unwrap();
-      reg.list_sessions(Some(&project))
-    };
+    let initial_entries = self.read_registry(|reg| reg.list_sessions(Some(&project)));
     let _ = control_tx.send(D2CControl::SessionsChanged {
       entries: initial_entries,
     });
@@ -553,7 +558,7 @@ impl Daemon {
         }
         let _ = writer_handle.join();
         // Remove subscriber entry
-        let mut subs = subs_list.lock().unwrap();
+        let mut subs = subs_list.lock();
         let idx = subs
           .iter()
           .position(|s| s.project == project && std::ptr::eq(&s.control, &control_tx));
@@ -567,11 +572,8 @@ impl Daemon {
   }
 
   fn broadcast_sessions_changed(&self, project: &ProjectKey) {
-    let entries = {
-      let reg = self.registry.lock().unwrap();
-      reg.list_sessions(Some(project))
-    };
-    let subs = self.subscribers.lock().unwrap();
+    let entries = self.read_registry(|reg| reg.list_sessions(Some(project)));
+    let subs = self.subscribers.lock();
     for s in subs.iter() {
       if &s.project == project {
         let _ = s.control.send(D2CControl::SessionsChanged {
@@ -581,29 +583,11 @@ impl Daemon {
     }
   }
 
-  /// Variant used by reader threads where `&self` isn't available. Locks are held
-  /// only for the minimal time needed to read from the registry or iterate subscribers.
-  fn broadcast_sessions_changed_with_arcs(
-    registry: &std::sync::Arc<std::sync::Mutex<SessionRegistry>>,
-    subscribers: &std::sync::Arc<std::sync::Mutex<Vec<Subscriber>>>,
-    project: &ProjectKey,
-  ) {
-    let entries = {
-      let reg = registry.lock().unwrap();
-      reg.list_sessions(Some(project))
-    };
-    let subs = subscribers.lock().unwrap();
-    for s in subs.iter() {
-      if &s.project == project {
-        let _ = s.control.send(D2CControl::SessionsChanged {
-          entries: entries.clone(),
-        });
-      }
-    }
-  }
+  // Removed legacy arcs helper; use instance method `broadcast_sessions_changed` or
+  // inline read-then-send pattern in threads where `&self` is not available.
 
   fn broadcast_tasks_changed(&self, project: &ProjectKey) {
-    let subs = self.subscribers.lock().unwrap();
+    let subs = self.subscribers.lock();
     for s in subs.iter() {
       if &s.project == project {
         let _ = s.control.send(D2CControl::TasksChanged {
@@ -611,6 +595,26 @@ impl Daemon {
         });
       }
     }
+  }
+
+  // ---- Helpers (locks at bottom for clarity) ----
+  fn read_registry<T>(&self, f: impl FnOnce(&SessionRegistry) -> T) -> T {
+    let reg = self.registry.lock();
+    f(&*reg)
+  }
+
+  fn write_registry<T>(&self, f: impl FnOnce(&mut SessionRegistry) -> T) -> T {
+    let mut reg = self.registry.lock();
+    f(&mut *reg)
+  }
+
+  fn read_session_project(&self, session_id: u64) -> Option<ProjectKey> {
+    self.read_registry(|reg| {
+      reg
+        .sessions
+        .get(&session_id)
+        .map(|e| e.meta.project.clone())
+    })
   }
 }
 

@@ -231,9 +231,15 @@ impl SessionRegistry {
   }
 
   pub fn broadcast(&self, session_id: u64, ctrl: &D2CControl) {
+    // Deprecated: prefer collecting channels via `read_client_controls_for_session`
     if let Some(entry) = self.sessions.get(&session_id) {
-      for att in entry.clients.values() {
-        let _ = att.control.send(ctrl.clone());
+      let chans: Vec<_> = entry
+        .clients
+        .values()
+        .map(|att| att.control.clone())
+        .collect();
+      for ch in chans {
+        let _ = ch.send(ctrl.clone());
       }
     }
   }
@@ -307,5 +313,32 @@ impl SessionRegistry {
       }
     }
     out
+  }
+
+  /// Clone client control channels for a session to allow sending outside of locks.
+  pub fn read_client_controls_for_session(&self, session_id: u64) -> Vec<D2CControlChannel> {
+    if let Some(entry) = self.sessions.get(&session_id) {
+      entry
+        .clients
+        .values()
+        .map(|att| att.control.clone())
+        .collect()
+    } else {
+      Vec::new()
+    }
+  }
+
+  /// Stop a session and collect client control channels for Goodbye notification.
+  pub fn stop_session_and_collect_channels(&mut self, session_id: u64) -> Vec<D2CControlChannel> {
+    if let Some(mut entry) = self.sessions.remove(&session_id) {
+      let _ = entry.session.stop();
+      entry
+        .clients
+        .drain()
+        .map(|(_id, att)| att.control.clone())
+        .collect()
+    } else {
+      Vec::new()
+    }
   }
 }
