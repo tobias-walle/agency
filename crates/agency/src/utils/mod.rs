@@ -1,9 +1,11 @@
 pub mod bootstrap;
+pub mod child;
 pub mod cmd;
 pub mod command;
 pub mod daemon;
 pub mod editor;
 pub mod git;
+pub mod interactive;
 pub mod keybindings;
 pub mod log;
 pub mod sessions;
