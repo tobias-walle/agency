@@ -1,6 +1,7 @@
 use std::path::Path;
 use std::process::Command;
 
+use crate::utils::interactive;
 use anyhow::{Context, Result, bail};
 
 /// Open a file or directory path using the user's `$EDITOR`.
@@ -21,12 +22,14 @@ pub fn open_path(path: &Path) -> Result<()> {
   let mut args: Vec<String> = tokens[1..].to_vec();
   args.push(target);
 
-  let status = Command::new(program)
-    .args(&args)
-    .status()
-    .with_context(|| format!("failed to spawn editor program: {program}"))?;
-  if !status.success() {
-    bail!("editor exited with non-zero status");
-  }
-  Ok(())
+  interactive::scope(|| {
+    let status = Command::new(program)
+      .args(&args)
+      .status()
+      .with_context(|| format!("failed to spawn editor program: {program}"))?;
+    if !status.success() {
+      bail!("editor exited with non-zero status");
+    }
+    Ok(())
+  })
 }

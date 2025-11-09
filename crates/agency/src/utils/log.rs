@@ -66,6 +66,11 @@ pub fn clear_log_sink() {
   *SINK.lock() = None;
 }
 
+/// Returns true when a TUI log sink is currently registered
+pub fn is_sink_set() -> bool {
+  SINK.lock().is_some()
+}
+
 pub(crate) fn emit(level: LogLevel, text: String) {
   if let Some(tx) = SINK.lock().clone() {
     // Route into TUI sink

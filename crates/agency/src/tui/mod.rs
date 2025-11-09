@@ -26,6 +26,7 @@ use crossbeam_channel::{Receiver, unbounded};
 use std::os::unix::net::UnixStream;
 mod colors;
 
+use crate::utils::interactive::{InteractiveReq, register_sender as register_interactive_sender};
 use crate::utils::log::{LogEvent, clear_log_sink, set_log_sink};
 
 #[derive(Clone, Debug)]
@@ -45,6 +46,7 @@ struct AppState {
   mode: Mode,
   slug_input: String,
   cmd_log: Vec<LogEvent>,
+  paused: bool,
 }
 
 impl AppState {
@@ -108,10 +110,39 @@ fn ui_loop(
   let (log_tx, log_rx) = unbounded::<LogEvent>();
   set_log_sink(log_tx.clone());
 
+  // Interactive control channel (Begin/End) for just-in-time terminal switching
+  let (itx, irx) = unbounded::<InteractiveReq>();
+  register_interactive_sender(itx);
+
   loop {
     // Drain routed logs without blocking
     while let Ok(ev) = log_rx.try_recv() {
       state.push_log(ev);
+    }
+
+    // Handle interactive begin/end requests
+    while let Ok(req) = irx.try_recv() {
+      match req {
+        InteractiveReq::Begin { ack } => {
+          restore_terminal(terminal)?;
+          state.paused = true;
+          let _ = ack.send(());
+        }
+        InteractiveReq::End { ack } => {
+          reinit_terminal(terminal)?;
+          state.paused = false;
+          let _ = ack.send(());
+          state.refresh(ctx)?;
+        }
+      }
+    }
+
+    // When paused an interactive program owns the terminal. Do not draw or read keys
+    // here to avoid stealing input or corrupting its screen. Keep the loop alive to
+    // service interactive End acks, but throttle to avoid busy spinning.
+    if state.paused {
+      std::thread::sleep(Duration::from_millis(50));
+      continue;
     }
 
     // Draw
@@ -271,21 +302,22 @@ fn ui_loop(
           }
           KeyCode::Enter => {
             if let Some(cur) = state.rows.get(state.selected).cloned() {
-              // Temporarily clear sink to print interactive logs to stdout
-              clear_log_sink();
-              restore_terminal(terminal)?;
-              if let Some(sid) = cur.session {
-                let _ = crate::commands::attach::run_join_session(ctx, sid);
-              } else {
-                let tref = TaskRef {
-                  id: cur.id,
-                  slug: cur.slug.clone(),
-                };
-                let _ = crate::commands::edit::run(ctx, &tref.id.to_string());
-              }
-              reinit_terminal(terminal)?;
-              set_log_sink(log_tx.clone());
-              state.refresh(ctx)?;
+              // Launch interactive action on a background thread; the command will
+              // wrap its interactive boundary using utils::interactive::scope
+              std::thread::spawn({
+                let ctx = ctx.clone();
+                move || {
+                  if let Some(sid) = cur.session {
+                    let _ = crate::commands::attach::run_join_session(&ctx, sid);
+                  } else {
+                    let tref = TaskRef {
+                      id: cur.id,
+                      slug: cur.slug.clone(),
+                    };
+                    let _ = crate::commands::edit::run(&ctx, &tref.id.to_string());
+                  }
+                }
+              });
             }
           }
           KeyCode::Char('n') => {
@@ -350,13 +382,15 @@ fn ui_loop(
           }
           KeyCode::Char('o') => {
             if let Some(cur) = state.rows.get(state.selected).cloned() {
-              // Temporarily leave TUI to open the worktree
-              clear_log_sink();
-              restore_terminal(terminal)?;
-              let _ = crate::commands::open::run(ctx, &cur.id.to_string());
-              reinit_terminal(terminal)?;
-              set_log_sink(log_tx.clone());
-              state.refresh(ctx)?;
+              // Open worktree on a background thread; open action internally
+              // wraps interactive boundary when needed
+              std::thread::spawn({
+                let ctx = ctx.clone();
+                let id = cur.id.to_string();
+                move || {
+                  let _ = crate::commands::open::run(&ctx, &id);
+                }
+              });
             }
           }
           KeyCode::Char('X') => {
@@ -401,27 +435,34 @@ fn ui_loop(
               continue;
             };
             if start_and_attach {
-              // Create and start in background, no attach and no daemon auto-start
-              let created = crate::commands::new::run(ctx, &slug, false, None)?;
-              state.push_log(LogEvent::Command(format!("agency start {}", created.id)));
+              // Create and start on a background thread to avoid blocking the TUI
+              // (editor for the new task runs within an interactive scope)
+              state.push_log(LogEvent::Command(format!("agency new {} + start", slug)));
               std::thread::spawn({
                 let ctx = ctx.clone();
-                let id_str = created.id.to_string();
-                move || {
-                  if let Err(err) = crate::commands::start::run(&ctx, &id_str) {
-                    crate::log_error!("Start failed: {}", err);
+                let slug = slug.clone();
+                move || match crate::commands::new::run(&ctx, &slug, false, None) {
+                  Ok(created) => {
+                    let id_str = created.id.to_string();
+                    if let Err(err) = crate::commands::start::run(&ctx, &id_str) {
+                      crate::log_error!("Start failed: {}", err);
+                    }
+                    let _ = crate::utils::daemon::notify_tasks_changed(&ctx);
                   }
-                  let _ = crate::utils::daemon::notify_tasks_changed(&ctx);
+                  Err(err) => {
+                    crate::log_error!("New failed: {}", err);
+                  }
                 }
               });
             } else {
-              // Interactive editor open without attach
-              clear_log_sink();
-              restore_terminal(terminal)?;
-              let _ = crate::commands::new::run(ctx, &slug, false, None)?;
-              let _ = crate::utils::daemon::notify_tasks_changed(ctx);
-              reinit_terminal(terminal)?;
-              set_log_sink(log_tx.clone());
+              // Interactive editor open without attach; run on background thread
+              std::thread::spawn({
+                let ctx = ctx.clone();
+                move || {
+                  let _ = crate::commands::new::run(&ctx, &slug, false, None);
+                  let _ = crate::utils::daemon::notify_tasks_changed(&ctx);
+                }
+              });
             }
             state.mode = Mode::List;
             state.slug_input.clear();

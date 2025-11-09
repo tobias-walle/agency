@@ -5,6 +5,9 @@ use anyhow::{Context, Result};
 use reflink_copy::reflink_or_copy;
 
 use crate::config::BootstrapConfig;
+use crate::log_info;
+use crate::log_warn;
+use crate::utils::child::run_child_process;
 use crate::utils::cmd::{CmdCtx, expand_argv};
 use gix as git;
 
@@ -100,14 +103,19 @@ pub fn run_bootstrap_cmd(repo_root: &Path, worktree_dir: &Path, cfg: &BootstrapC
     }
   }
 
-  // Spawn the command, current_dir at the worktree
-  let _ = std::process::Command::new(&argv[0])
-    .current_dir(worktree_dir)
-    .args(&argv[1..])
-    .stdin(std::process::Stdio::inherit())
-    .stdout(std::process::Stdio::inherit())
-    .stderr(std::process::Stdio::inherit())
-    .status();
+  // Preface and run via unified child runner (routes I/O into TUI when active)
+  log_info!("Run bootstrap {}", argv.join(" "));
+  let env_overrides: Vec<(String, String)> = Vec::new();
+  match run_child_process(&argv[0], &argv[1..].to_vec(), worktree_dir, &env_overrides) {
+    Ok(status) => {
+      if !status.success() {
+        log_warn!("Bootstrap exited with status {}", status);
+      }
+    }
+    Err(err) => {
+      log_warn!("Bootstrap failed to start: {}", err);
+    }
+  }
 }
 
 /// Ensure the task's worktree directory exists and is bootstrapped.

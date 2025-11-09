@@ -10,6 +10,7 @@ use crate::utils::bootstrap::prepare_worktree_for_task;
 use crate::utils::cmd::{CmdCtx, expand_argv};
 use crate::utils::command::Command as LocalCommand;
 use crate::utils::git::{ensure_branch_at, open_main_repo, repo_workdir_or};
+use crate::utils::interactive;
 use crate::utils::task::{
   TaskFrontmatter, branch_name, parse_task_markdown, remove_title, resolve_id_or_slug, task_file,
 };
@@ -97,7 +98,7 @@ pub fn run_with_task(ctx: &AppContext, ident: &str) -> Result<()> {
     cmd: cmd_wire,
   };
 
-  pty_client::run_attach(&socket, open, None, &ctx.config)
+  interactive::scope(|| pty_client::run_attach(&socket, open, None, &ctx.config))
 }
 
 pub fn run_join_session(ctx: &AppContext, session_id: u64) -> Result<()> {
@@ -123,5 +124,5 @@ pub fn run_join_session(ctx: &AppContext, session_id: u64) -> Result<()> {
     },
   };
   let socket = compute_socket_path(&ctx.config);
-  pty_client::run_attach(&socket, open, Some(session_id), &ctx.config)
+  interactive::scope(|| pty_client::run_attach(&socket, open, Some(session_id), &ctx.config))
 }
