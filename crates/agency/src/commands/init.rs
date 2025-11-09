@@ -35,10 +35,14 @@ pub fn run(ctx: &AppContext) -> Result<()> {
   let script_path = agency_dir.join("setup.sh");
   ensure_script(&script_path)?;
 
+  let gitignore_path = root.join(".gitignore");
+  ensure_gitignore(&gitignore_path)?;
+
   log_info!("");
   log_info!("Created project config:");
   log_info!("  {}", t::path(".agency/agency.toml"));
   log_info!("  {}", t::path(".agency/setup.sh"));
+  log_info!("  {}", t::path(".gitignore"));
   log_info!("");
   Ok(())
 }
@@ -63,5 +67,22 @@ fn ensure_script(path: &Path) -> Result<()> {
     fs::set_permissions(path, perms)
       .with_context(|| format!("failed to set exec bit on {}", path.display()))?;
   }
+  Ok(())
+}
+
+fn ensure_gitignore(path: &Path) -> Result<()> {
+  let mut contents = if path.exists() {
+    fs::read_to_string(path).with_context(|| format!("failed to read {}", path.display()))?
+  } else {
+    String::new()
+  };
+  if contents.contains(".agency") {
+    return Ok(());
+  }
+  if !contents.is_empty() && !contents.ends_with('\n') {
+    contents.push('\n');
+  }
+  contents.push_str(".agency/*\n!.agency/setup.sh\n");
+  fs::write(path, contents).with_context(|| format!("failed to write {}", path.display()))?;
   Ok(())
 }
