@@ -30,7 +30,7 @@ pub struct SessionEntry {
   pub session: Session,
   pub meta: SessionMeta,
   pub clients: HashMap<u64, ClientAttachment>,
-  pub exited_notified: bool,
+  pub status: SessionStatus,
 }
 
 impl SessionEntry {
@@ -38,6 +38,15 @@ impl SessionEntry {
   pub fn stats_lite(&self) -> SessionStatsLite {
     self.session.stats_lite()
   }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum SessionStatus {
+  Running,
+  Exited {
+    code: Option<i32>,
+    signal: Option<i32>,
+  },
 }
 
 /// Manages all sessions and attached clients in the daemon.
@@ -112,11 +121,11 @@ impl SessionRegistry {
     cols: u16,
   ) -> anyhow::Result<()> {
     if let Some(entry) = self.sessions.get_mut(&session_id)
-      && entry.exited_notified
+      && matches!(entry.status, SessionStatus::Exited { .. })
       && entry.clients.is_empty()
     {
       entry.session.restart_shell(rows, cols)?;
-      entry.exited_notified = false;
+      entry.status = SessionStatus::Running;
     }
     Ok(())
   }
@@ -146,7 +155,7 @@ impl SessionRegistry {
         created_at: SystemTime::now(),
       },
       clients: HashMap::new(),
-      exited_notified: false,
+      status: SessionStatus::Running,
     };
     self.sessions.insert(id, entry);
     Ok(id)
@@ -203,10 +212,9 @@ impl SessionRegistry {
           .as_millis(),
       )
       .unwrap_or(u64::MAX);
-      let status = if entry.exited_notified {
-        "Exited".to_string()
-      } else {
-        "Running".to_string()
+      let status = match entry.status {
+        SessionStatus::Running => "Running".to_string(),
+        SessionStatus::Exited { .. } => "Exited".to_string(),
       };
       out.push(SessionInfo {
         session_id: entry.session_id,
@@ -245,7 +253,7 @@ impl SessionRegistry {
   pub fn restart_session(&mut self, session_id: u64, rows: u16, cols: u16) -> anyhow::Result<()> {
     if let Some(entry) = self.sessions.get_mut(&session_id) {
       entry.session.restart_shell(rows, cols)?;
-      entry.exited_notified = false;
+      entry.status = SessionStatus::Running;
     }
     Ok(())
   }
@@ -286,12 +294,15 @@ impl SessionRegistry {
   pub fn collect_exited(&mut self) -> Vec<(u64, SessionStatsLite)> {
     let mut out = Vec::new();
     for (sid, entry) in &mut self.sessions {
-      if entry.exited_notified {
+      if let SessionStatus::Exited { .. } = entry.status {
         continue;
       }
       if let Some(_status) = entry.session.try_wait_child() {
         let stats = entry.session.stats_lite();
-        entry.exited_notified = true;
+        entry.status = SessionStatus::Exited {
+          code: None,
+          signal: None,
+        };
         out.push((*sid, stats));
       }
     }

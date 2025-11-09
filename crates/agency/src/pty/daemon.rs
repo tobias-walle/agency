@@ -401,6 +401,7 @@ impl Daemon {
     session_id: u64,
   ) -> anyhow::Result<std::thread::JoinHandle<()>> {
     let registry_for_reader = self.registry.clone();
+    let subscribers_for_reader = self.subscribers.clone();
     let handle = thread::Builder::new()
       .name("daemon-reader".to_string())
       .spawn(move || {
@@ -453,6 +454,22 @@ impl Daemon {
                   registry_for_reader.lock().unwrap().snapshot(session_id)
                 {
                   let _ = control_tx.send_welcome(session_id, sr, sc, ansi);
+                }
+
+                // Broadcast sessions changed for this session's project so TUI updates status
+                let project_opt = {
+                  let reg = registry_for_reader.lock().unwrap();
+                  reg
+                    .sessions
+                    .get(&session_id)
+                    .map(|e| e.meta.project.clone())
+                };
+                if let Some(project) = project_opt {
+                  Self::broadcast_sessions_changed_with_arcs(
+                    &registry_for_reader,
+                    &subscribers_for_reader,
+                    &project,
+                  );
                 }
               }
               C2DControl::StopSession { .. } => {
@@ -555,6 +572,27 @@ impl Daemon {
       reg.list_sessions(Some(project))
     };
     let subs = self.subscribers.lock().unwrap();
+    for s in subs.iter() {
+      if &s.project == project {
+        let _ = s.control.send(D2CControl::SessionsChanged {
+          entries: entries.clone(),
+        });
+      }
+    }
+  }
+
+  /// Variant used by reader threads where `&self` isn't available. Locks are held
+  /// only for the minimal time needed to read from the registry or iterate subscribers.
+  fn broadcast_sessions_changed_with_arcs(
+    registry: &std::sync::Arc<std::sync::Mutex<SessionRegistry>>,
+    subscribers: &std::sync::Arc<std::sync::Mutex<Vec<Subscriber>>>,
+    project: &ProjectKey,
+  ) {
+    let entries = {
+      let reg = registry.lock().unwrap();
+      reg.list_sessions(Some(project))
+    };
+    let subs = subscribers.lock().unwrap();
     for s in subs.iter() {
       if &s.project == project {
         let _ = s.control.send(D2CControl::SessionsChanged {

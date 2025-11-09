@@ -520,5 +520,7 @@ fn inner(area: ratatui::layout::Rect) -> ratatui::layout::Rect {
 enum Mode {
   #[default]
   List,
-  InputSlug { start_and_attach: bool },
+  InputSlug {
+    start_and_attach: bool,
+  },
 }
