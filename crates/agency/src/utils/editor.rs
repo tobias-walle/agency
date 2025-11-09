@@ -6,7 +6,7 @@ use anyhow::{Context, Result, bail};
 
 /// Open a file or directory path using the user's `$EDITOR`.
 /// Parses `$EDITOR` via shell-words and appends the canonicalized path.
-pub fn open_path(path: &Path) -> Result<()> {
+pub fn open_path(path: &Path, cwd: &Path) -> Result<()> {
   let editor = std::env::var("EDITOR").unwrap_or_else(|_| "vi".to_string());
   let target = path
     .canonicalize()
@@ -25,6 +25,7 @@ pub fn open_path(path: &Path) -> Result<()> {
   interactive::scope(|| {
     let status = Command::new(program)
       .args(&args)
+      .current_dir(cwd)
       .status()
       .with_context(|| format!("failed to spawn editor program: {program}"))?;
     if !status.success() {

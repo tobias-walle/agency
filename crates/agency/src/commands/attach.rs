@@ -1,7 +1,5 @@
+use anyhow::Result;
 use std::collections::HashMap;
-use std::fs;
-
-use anyhow::{Context, Result};
 
 use crate::config::{AppContext, compute_socket_path};
 use crate::pty::client as pty_client;
@@ -11,9 +9,7 @@ use crate::utils::cmd::{CmdCtx, expand_argv};
 use crate::utils::command::Command as LocalCommand;
 use crate::utils::git::{ensure_branch_at, open_main_repo, repo_workdir_or};
 use crate::utils::interactive;
-use crate::utils::task::{
-  TaskFrontmatter, branch_name, parse_task_markdown, remove_title, resolve_id_or_slug, task_file,
-};
+use crate::utils::task::{branch_name, read_task_content, resolve_id_or_slug};
 
 pub fn run_with_task(ctx: &AppContext, ident: &str) -> Result<()> {
   // Initialize env_logger similar to pty-demo main
@@ -23,10 +19,8 @@ pub fn run_with_task(ctx: &AppContext, ident: &str) -> Result<()> {
 
   // Resolve task and load its content
   let task = resolve_id_or_slug(&ctx.paths, ident)?;
-  let tf_path = task_file(&ctx.paths, &task);
-  let task_text = fs::read_to_string(&tf_path)
-    .with_context(|| format!("failed to read {}", tf_path.display()))?;
-  let (frontmatter, body) = parse_task_markdown(&task_text);
+  let content = read_task_content(&ctx.paths, &task)?;
+  let frontmatter = content.frontmatter.clone();
 
   // Compute socket path from config
   let socket = compute_socket_path(&ctx.config);
@@ -41,7 +35,7 @@ pub fn run_with_task(ctx: &AppContext, ident: &str) -> Result<()> {
   // Determine base branch from front matter or current HEAD
   let base_branch = frontmatter
     .as_ref()
-    .and_then(|fm: &TaskFrontmatter| fm.base_branch.clone())
+    .and_then(|fm| fm.base_branch.clone())
     .unwrap_or_else(|| crate::utils::git::head_branch(ctx));
 
   // Ensure task branch exists at the desired start point
@@ -52,11 +46,12 @@ pub fn run_with_task(ctx: &AppContext, ident: &str) -> Result<()> {
 
   // Build env map and argv
   let mut env_map: HashMap<String, String> = std::env::vars().collect();
-  let stripped = remove_title(body, &task.slug);
-  env_map.insert("AGENCY_TASK".to_string(), stripped.to_string());
+  let description = content.body.trim().to_string();
+  env_map.insert("AGENCY_TASK".to_string(), description);
 
   // Select agent: front matter overrides config default
   let selected_agent = frontmatter
+    .clone()
     .and_then(|fm| fm.agent)
     .or_else(|| ctx.config.agent.clone());
   let agent_name = selected_agent.ok_or_else(|| {
