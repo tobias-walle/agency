@@ -63,9 +63,8 @@ pub fn notify_tasks_changed(ctx: &AppContext) -> anyhow::Result<()> {
 pub fn list_sessions_for_project(ctx: &AppContext) -> Vec<SessionInfo> {
   let socket = compute_socket_path(&ctx.config);
   // Compute project key from the main repo workdir
-  let repo = match open_main_repo(ctx.paths.cwd()) {
-    Ok(r) => r,
-    Err(_) => return Vec::new(),
+  let Ok(repo) = open_main_repo(ctx.paths.cwd()) else {
+    return Vec::new();
   };
   let repo_root = repo_workdir_or(&repo, ctx.paths.cwd());
   let project = ProjectKey {
@@ -73,9 +72,8 @@ pub fn list_sessions_for_project(ctx: &AppContext) -> Vec<SessionInfo> {
   };
 
   // Connect and request sessions; swallow errors
-  let mut stream = match UnixStream::connect(&socket) {
-    Ok(s) => s,
-    Err(_) => return Vec::new(),
+  let Ok(mut stream) = UnixStream::connect(&socket) else {
+    return Vec::new();
   };
   if write_frame(
     &mut stream,

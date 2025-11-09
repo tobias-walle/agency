@@ -76,6 +76,7 @@ pub fn run(ctx: &AppContext) -> Result<()> {
   res
 }
 
+#[allow(clippy::too_many_lines)]
 fn ui_loop(
   terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>,
   ctx: &AppContext,
@@ -166,10 +167,7 @@ fn ui_loop(
     // Handle daemon events
     while let Ok(ev) = events_rx.try_recv() {
       match ev {
-        UiEvent::TasksChanged => {
-          state.refresh(ctx)?;
-        }
-        UiEvent::SessionsChanged => {
+        UiEvent::TasksChanged | UiEvent::SessionsChanged => {
           state.refresh(ctx)?;
         }
       }
@@ -266,12 +264,10 @@ fn ui_loop(
             state.mode = Mode::List;
           }
           KeyCode::Enter => {
-            let slug = match crate::utils::task::normalize_and_validate_slug(&state.slug_input) {
-              Ok(s) => s,
-              Err(_) => {
-                state.mode = Mode::List;
-                continue;
-              }
+            let Ok(slug) = crate::utils::task::normalize_and_validate_slug(&state.slug_input)
+            else {
+              state.mode = Mode::List;
+              continue;
             };
             restore_terminal(terminal)?;
             let created = crate::commands::new::run(ctx, &slug, false, None)?;
@@ -333,7 +329,7 @@ fn build_task_rows(
 ) -> (Vec<TaskRow>, usize) {
   let mut latest: std::collections::HashMap<(u32, String), SessionInfo> =
     std::collections::HashMap::new();
-  for s in sessions.iter() {
+  for s in sessions {
     let key = (s.task.id, s.task.slug.clone());
     match latest.get(&key) {
       None => {
@@ -348,7 +344,7 @@ fn build_task_rows(
   }
 
   let mut out = Vec::with_capacity(tasks.len());
-  for t in tasks.iter() {
+  for t in tasks {
     if let Some(info) = latest.get(&(t.id, t.slug.clone())) {
       out.push(TaskRow {
         id: t.id,
@@ -466,9 +462,8 @@ fn subscribe_events(ctx: &AppContext) -> Result<Receiver<UiEvent>> {
   std::thread::Builder::new()
     .name("tui-subscribe".to_string())
     .spawn(move || {
-      let mut stream = match UnixStream::connect(&socket) {
-        Ok(s) => s,
-        Err(_) => return,
+      let Ok(mut stream) = UnixStream::connect(&socket) else {
+        return;
       };
       let _ = write_frame(
         &mut stream,

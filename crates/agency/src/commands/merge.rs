@@ -42,8 +42,7 @@ pub fn run(ctx: &AppContext, ident: &str, base_override: Option<&str>) -> Result
   {
     if !worktree_is_clean(&repo)? {
       bail!(
-        "Base branch {} is checked out and has uncommitted changes; commit or stash before merging",
-        base_branch
+        "Base branch {base_branch} is checked out and has uncommitted changes; commit or stash before merging"
       );
     }
     refresh_checked_out_base = true;
