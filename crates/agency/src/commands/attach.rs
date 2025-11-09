@@ -12,7 +12,6 @@ use crate::utils::command::Command as LocalCommand;
 use crate::utils::git::{ensure_branch_at, open_main_repo, repo_workdir_or};
 use crate::utils::task::{
   TaskFrontmatter, branch_name, parse_task_markdown, remove_title, resolve_id_or_slug, task_file,
-  worktree_dir,
 };
 
 pub fn run_with_task(ctx: &AppContext, ident: &str) -> Result<()> {

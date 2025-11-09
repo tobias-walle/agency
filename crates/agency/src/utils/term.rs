@@ -1,5 +1,8 @@
 use std::io::{self, Write, Read};
+use owo_colors::OwoColorize as _;
 use anyhow::Result;
+use regex::Regex;
+use std::sync::OnceLock;
 
 /// Soft-clear the current terminal view without losing scrollback.
 ///
@@ -15,45 +18,37 @@ pub fn soft_reset_scroll() {
 /// Column widths are derived from headers and string lengths of rows.
 pub fn print_table(headers: &[&str], rows: &[Vec<String>]) {
   let cols = headers.len();
+  // 1) Measure max width per column across header and values (visible length)
   let mut widths: Vec<usize> = headers.iter().map(|h| h.len()).collect();
   for row in rows {
     for (i, cell) in row.iter().enumerate().take(cols) {
-      if cell.len() > widths[i] {
-        widths[i] = cell.len();
+      let vlen = visible_len(cell);
+      if vlen > widths[i] {
+        widths[i] = vlen;
       }
     }
   }
 
-  // Header
-  // Print header as single-space-separated tokens (no padding) to satisfy CLI tests
-  for (i, h) in headers.iter().enumerate() {
-    if i > 0 { print!(" "); }
-    print!("{}", h);
+  // 2) Render headers: header + spaces(col_max - header.len + 1) between columns
+  let mut header_line = String::new();
+  for (i, text) in headers.iter().enumerate() {
+    header_line.push_str(text);
+    if i + 1 < cols {
+      let spaces = widths[i].saturating_sub(text.len()) + 1;
+      header_line.push_str(&" ".repeat(spaces));
+    }
   }
-  println!();
+  println!("{}", header_line.dimmed());
 
-  // Rows
+  // 3) Render rows with the same spacing rule based on visible lengths
   for row in rows {
-    for i in 0..cols {
-      let cell = row.get(i).map(String::as_str).unwrap_or("");
-      let is_last = i + 1 == cols;
-      if i == 0 {
-        // First column (ID): right-align to header width, then space
-        if is_last {
-          let w = widths[i];
-          print!("{:>width$}", cell, width = w);
-        } else {
-          let w = widths[i];
-          print!("{:>width$} ", cell, width = w);
-        }
-      } else if i == 1 {
-        // Second column (SLUG): no padding
-        if is_last { print!("{}", cell); } else { print!("{} ", cell); }
-      } else if is_last {
-        print!("{}", cell);
-      } else {
-        let w = widths[i];
-        print!("{:<width$} ", cell, width = w);
+    for (i, cell) in row.iter().enumerate().take(cols) {
+      let cell = cell.as_str();
+      let vlen = visible_len(cell);
+      print!("{}", cell);
+      if i + 1 < cols {
+        let spaces = widths[i].saturating_sub(vlen) + 1;
+        for _ in 0..spaces { print!(" "); }
       }
     }
     println!();
@@ -84,4 +79,20 @@ pub fn confirm(prompt: &str) -> Result<bool> {
   }
   let ans = line.trim();
   Ok(matches!(ans.chars().next(), Some('y' | 'Y')))
+}
+
+fn visible_len(s: &str) -> usize {
+  // Strip ANSI CSI and OSC sequences, then count remaining characters.
+  // CSI: ESC [ ... final in @-~
+  // OSC: ESC ] ... BEL or ST (ESC \)
+  static ANSI_RE: OnceLock<Regex> = OnceLock::new();
+  let re = ANSI_RE.get_or_init(|| {
+    Regex::new(r"(?x)
+      \x1B\[[0-?]*[ -/]*[@-~]    # CSI sequence
+      |                            # or
+      \x1B\][^\x07\x1B]*(?:\x07|\x1B\\)  # OSC sequence terminated by BEL or ST
+    ").expect("valid ANSI regex")
+  });
+  let plain = re.replace_all(s, "");
+  plain.chars().count()
 }
