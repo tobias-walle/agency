@@ -306,9 +306,13 @@ fn ps_lists_id_and_slug_in_order() -> Result<()> {
     .assert()
     .success()
     .stdout(predicates::str::contains("ID SLUG").from_utf8())
-    .stdout(predicates::str::contains("STATUS SESSION BASE AGENT\n").from_utf8())
-    .stdout(predicates::str::contains(format!(" {id1} {slug1}")).from_utf8())
-    .stdout(predicates::str::contains(format!(" {id2} {slug2}")).from_utf8())
+    .stdout(predicates::str::is_match(r"STATUS +SESSION +BASE +AGENT[^\n]*\n").unwrap().from_utf8())
+    .stdout(
+      predicates::str::is_match(format!(r"\b{}\s+{}\b", id1, regex::escape(&slug1))).unwrap().from_utf8()
+    )
+    .stdout(
+      predicates::str::is_match(format!(r"\b{}\s+{}\b", id2, regex::escape(&slug2))).unwrap().from_utf8()
+    )
     .stdout(predicates::str::contains("Draft").from_utf8());
 
   Ok(())
@@ -326,7 +330,7 @@ fn ps_handles_empty_state() -> Result<()> {
     .assert()
     .success()
     .stdout(predicates::str::contains("ID SLUG").from_utf8())
-    .stdout(predicates::str::contains("STATUS SESSION BASE AGENT\n").from_utf8());
+    .stdout(predicates::str::is_match(r"STATUS +SESSION +BASE +AGENT.*\n").unwrap().from_utf8());
 
   Ok(())
 }

@@ -39,6 +39,7 @@ pub mod t {
 use crossbeam_channel::Sender;
 use parking_lot::Mutex;
 
+#[allow(dead_code)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum LogLevel {
   Info,
@@ -150,15 +151,10 @@ mod tests {
     // Success/warn/error should contain ANSI escapes ("\x1b[")
     let mut found_tinted = 0;
     for ev in evs.into_iter().skip(1) {
-      if let LogEvent::Line { level, ansi } = ev {
-        match level {
-          LogLevel::Success | LogLevel::Warn | LogLevel::Error => {
-            if ansi.contains("\u{1b}[") {
-              found_tinted += 1;
-            }
-          }
-          _ => {}
-        }
+      if let LogEvent::Line { level: LogLevel::Success | LogLevel::Warn | LogLevel::Error, ansi } = ev
+        && ansi.contains("\u{1b}[")
+      {
+        found_tinted += 1;
       }
     }
     assert!(found_tinted >= 3);

@@ -301,7 +301,6 @@ fn ui_loop(
               state.push_log(LogEvent::Command(format!("agency stop --task {}", tref.id)));
               std::thread::spawn({
                 let ctx = ctx.clone();
-                let tref = tref;
                 move || {
                   let _ = crate::utils::daemon::stop_sessions_of_task(&ctx, &tref);
                   crate::log_info!(
@@ -335,7 +334,6 @@ fn ui_loop(
               state.push_log(LogEvent::Command(format!("agency reset {}", tref.id)));
               std::thread::spawn({
                 let ctx = ctx.clone();
-                let tref = tref;
                 move || {
                   let _ = crate::utils::daemon::stop_sessions_of_task(&ctx, &tref);
                   crate::log_info!(
