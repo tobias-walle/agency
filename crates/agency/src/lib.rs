@@ -43,12 +43,16 @@ enum Commands {
   },
   /// Open the task's worktree directory in $EDITOR
   Open { ident: String },
+  /// Open the task's markdown in $EDITOR
+  Edit { ident: String },
   /// Print the absolute worktree path
   Path { ident: String },
   /// Print the branch name
   Branch { ident: String },
   /// Remove task file, worktree, and branch
   Rm { ident: String },
+  /// Reset a task's worktree and branch (keep markdown)
+  Reset { ident: String },
   /// List tasks (ID and SLUG)
   Ps {},
   /// Daemon control commands
@@ -62,6 +66,8 @@ enum Commands {
     #[arg(long)]
     session: Option<u64>,
   },
+  /// Start a task session in the background without attaching
+  Start { ident: String },
   /// Prepare branch/worktree and run bootstrap (no PTY)
   Bootstrap { ident: String },
   /// Stop a task's sessions or a specific session
@@ -121,6 +127,9 @@ pub fn run() -> Result<()> {
     Some(Commands::Open { ident }) => {
       commands::open::run(&ctx, &ident)?;
     }
+    Some(Commands::Edit { ident }) => {
+      commands::edit::run(&ctx, &ident)?;
+    }
     Some(Commands::Path { ident }) => {
       commands::path::run(&ctx, &ident)?;
     }
@@ -129,6 +138,9 @@ pub fn run() -> Result<()> {
     }
     Some(Commands::Rm { ident }) => {
       commands::rm::run(&ctx, &ident)?;
+    }
+    Some(Commands::Reset { ident }) => {
+      commands::reset::run(&ctx, &ident)?;
     }
     Some(Commands::Ps {}) => {
       commands::ps::run(&ctx)?;
@@ -146,6 +158,9 @@ pub fn run() -> Result<()> {
     },
     Some(Commands::Bootstrap { ident }) => {
       commands::bootstrap::run(&ctx, &ident)?;
+    }
+    Some(Commands::Start { ident }) => {
+      commands::start::run(&ctx, &ident)?;
     }
     Some(Commands::Stop { task, session }) => {
       commands::stop::run(&ctx, task.as_deref(), session)?;

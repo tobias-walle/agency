@@ -1,7 +1,7 @@
-use std::io::{self, Write, Read};
-use owo_colors::OwoColorize as _;
 use anyhow::Result;
+use owo_colors::OwoColorize as _;
 use regex::Regex;
+use std::io::{self, Read, Write};
 use std::sync::OnceLock;
 
 /// Soft-clear the current terminal view without losing scrollback.
@@ -48,7 +48,9 @@ pub fn print_table(headers: &[&str], rows: &[Vec<String>]) {
       print!("{}", cell);
       if i + 1 < cols {
         let spaces = widths[i].saturating_sub(vlen) + 1;
-        for _ in 0..spaces { print!(" "); }
+        for _ in 0..spaces {
+          print!(" ");
+        }
       }
     }
     println!();
@@ -69,10 +71,14 @@ pub fn confirm(prompt: &str) -> Result<bool> {
       Ok(0) => break,
       Ok(_) => {
         let b = buf[0];
-        if b == b'\n' || b == b'\r' { break; }
+        if b == b'\n' || b == b'\r' {
+          break;
+        }
         line.push(b as char);
         // Prevent overly long reads
-        if line.len() > 100 { break; }
+        if line.len() > 100 {
+          break;
+        }
       }
       Err(_) => break,
     }
@@ -87,11 +93,14 @@ fn visible_len(s: &str) -> usize {
   // OSC: ESC ] ... BEL or ST (ESC \)
   static ANSI_RE: OnceLock<Regex> = OnceLock::new();
   let re = ANSI_RE.get_or_init(|| {
-    Regex::new(r"(?x)
+    Regex::new(
+      r"(?x)
       \x1B\[[0-?]*[ -/]*[@-~]    # CSI sequence
       |                            # or
       \x1B\][^\x07\x1B]*(?:\x07|\x1B\\)  # OSC sequence terminated by BEL or ST
-    ").expect("valid ANSI regex")
+    ",
+    )
+    .expect("valid ANSI regex")
   });
   let plain = re.replace_all(s, "");
   plain.chars().count()
