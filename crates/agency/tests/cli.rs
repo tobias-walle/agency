@@ -306,12 +306,20 @@ fn ps_lists_id_and_slug_in_order() -> Result<()> {
     .assert()
     .success()
     .stdout(predicates::str::contains("ID SLUG").from_utf8())
-    .stdout(predicates::str::is_match(r"STATUS +SESSION +BASE +AGENT[^\n]*\n").unwrap().from_utf8())
     .stdout(
-      predicates::str::is_match(format!(r"\b{}\s+{}\b", id1, regex::escape(&slug1))).unwrap().from_utf8()
+      predicates::str::is_match(r"STATUS +SESSION +BASE +AGENT[^\n]*\n")
+        .unwrap()
+        .from_utf8(),
     )
     .stdout(
-      predicates::str::is_match(format!(r"\b{}\s+{}\b", id2, regex::escape(&slug2))).unwrap().from_utf8()
+      predicates::str::is_match(format!(r"\b{}\s+{}\b", id1, regex::escape(&slug1)))
+        .unwrap()
+        .from_utf8(),
+    )
+    .stdout(
+      predicates::str::is_match(format!(r"\b{}\s+{}\b", id2, regex::escape(&slug2)))
+        .unwrap()
+        .from_utf8(),
     )
     .stdout(predicates::str::contains("Draft").from_utf8());
 
@@ -330,7 +338,11 @@ fn ps_handles_empty_state() -> Result<()> {
     .assert()
     .success()
     .stdout(predicates::str::contains("ID SLUG").from_utf8())
-    .stdout(predicates::str::is_match(r"STATUS +SESSION +BASE +AGENT.*\n").unwrap().from_utf8());
+    .stdout(
+      predicates::str::is_match(r"STATUS +SESSION +BASE +AGENT.*\n")
+        .unwrap()
+        .from_utf8(),
+    );
 
   Ok(())
 }
@@ -575,6 +587,52 @@ fn merge_refreshes_checked_out_base_worktree() -> Result<()> {
       .trim()
       .is_empty()
   );
+
+  Ok(())
+}
+
+#[test]
+fn edit_opens_markdown_via_editor() -> Result<()> {
+  let env = common::TestEnv::new();
+  env.init_repo()?;
+  let (id, _slug) = env.new_task("edit-task", &["--no-edit", "--no-attach"])?;
+
+  // Use a no-op editor that exits successfully
+  with_vars([("EDITOR", Some("bash -lc true".to_string()))], || {
+    let mut cmd = env.bin_cmd().unwrap();
+    cmd.arg("edit").arg(id.to_string());
+    cmd.assert().success();
+  });
+
+  Ok(())
+}
+
+#[test]
+fn reset_prunes_worktree_and_branch_keeps_markdown() -> Result<()> {
+  let env = common::TestEnv::new();
+  env.init_repo()?;
+  let (id, slug) = env.new_task("reset-task", &["--no-edit", "--no-attach"])?;
+
+  // Ensure branch/worktree exist before reset
+  env.bootstrap_task(id)?;
+  assert!(env.branch_exists(id, &slug)?);
+  assert!(env.worktree_dir_path(id, &slug).is_dir());
+  assert!(env.task_file_path(id, &slug).is_file());
+
+  // First reset
+  let mut cmd = env.bin_cmd()?;
+  cmd.arg("reset").arg(id.to_string());
+  cmd.assert().success();
+
+  // Verify branch/worktree removed, markdown kept
+  assert!(!env.branch_exists(id, &slug)?);
+  assert!(!env.worktree_dir_path(id, &slug).exists());
+  assert!(env.task_file_path(id, &slug).is_file());
+
+  // Idempotent second reset
+  let mut cmd = env.bin_cmd()?;
+  cmd.arg("reset").arg(id.to_string());
+  cmd.assert().success();
 
   Ok(())
 }

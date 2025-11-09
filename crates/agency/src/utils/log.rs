@@ -151,7 +151,10 @@ mod tests {
     // Success/warn/error should contain ANSI escapes ("\x1b[")
     let mut found_tinted = 0;
     for ev in evs.into_iter().skip(1) {
-      if let LogEvent::Line { level: LogLevel::Success | LogLevel::Warn | LogLevel::Error, ansi } = ev
+      if let LogEvent::Line {
+        level: LogLevel::Success | LogLevel::Warn | LogLevel::Error,
+        ansi,
+      } = ev
         && ansi.contains("\u{1b}[")
       {
         found_tinted += 1;

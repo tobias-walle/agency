@@ -19,8 +19,8 @@ use std::time::Duration;
 use termwiz::input::{InputEvent, InputParser, KeyEvent};
 
 mod tty;
-use tty::{RawModeGuard, RawModePauseGuard};
 use crate::utils::term::soft_reset_scroll;
+use tty::{RawModeGuard, RawModePauseGuard};
 
 /// Attaches to the daemon and delegates lifecycle orchestration to `Client`.
 ///

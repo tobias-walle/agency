@@ -2,7 +2,7 @@ use std::io::{self, IsTerminal as _};
 use std::time::Duration;
 
 use anyhow::{Context, Result};
-use crossterm::event::{self, Event, KeyCode, KeyEventKind};
+use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
@@ -116,9 +116,28 @@ fn ui_loop(
 
     // Draw
     terminal.draw(|f| {
-      let rects =
-        Layout::vertical([Constraint::Fill(1), Constraint::Length(5), Constraint::Length(1)])
-          .split(f.area());
+      // Build help lines using smart item-boundary wrapping
+      let help_items = [
+        "Select: ↑/↓ j/k",
+        "Edit/Attach: ⏎",
+        "New: n/N",
+        "Start: s",
+        "Stop: S",
+        "Merge: m",
+        "Open: o",
+        "Delete: X",
+        "Reset: R",
+        "Quit: ^C",
+      ];
+      let mut help_lines = layout_help_lines(&help_items, f.area().width);
+      let help_rows = help_lines.len().try_into().unwrap_or(1_u16).clamp(1, 3);
+
+      let rects = Layout::vertical([
+        Constraint::Fill(1),
+        Constraint::Length(5),
+        Constraint::Length(help_rows),
+      ])
+      .split(f.area());
 
       // Table
       let header = Row::new([
@@ -184,12 +203,13 @@ fn ui_loop(
       f.render_widget(log_para, rects[1]);
 
       // Help bar
-      let help = Line::from(
-        "Select: ↑/↓ j/k | Edit/Attach: ⏎ | New: n/N | Start: s | Stop: S | Delete: X | Reset: R | Quit: q",
-      )
-      .fg(Color::Blue);
+      // Style lines
+      help_lines = help_lines
+        .into_iter()
+        .map(|ln| ln.fg(Color::Blue))
+        .collect();
       f.render_widget(
-        ratatui::widgets::Paragraph::new(help).alignment(Alignment::Center),
+        ratatui::widgets::Paragraph::new(help_lines).alignment(Alignment::Center),
         rects[2],
       );
 
@@ -238,7 +258,7 @@ fn ui_loop(
       }
       match state.mode {
         Mode::List => match key.code {
-          KeyCode::Char('q') | KeyCode::Esc => break,
+          KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => break,
           KeyCode::Up | KeyCode::Char('k') => {
             if !state.rows.is_empty() {
               state.selected = state.selected.saturating_sub(1);
@@ -261,8 +281,7 @@ fn ui_loop(
                   id: cur.id,
                   slug: cur.slug.clone(),
                 };
-                let tf = task_file(&ctx.paths, &tref);
-                let _ = open_path(&tf);
+                let _ = crate::commands::edit::run(ctx, &tref.id.to_string());
               }
               reinit_terminal(terminal)?;
               set_log_sink(log_tx.clone());
@@ -283,13 +302,17 @@ fn ui_loop(
           }
           KeyCode::Char('s') => {
             if let Some(cur) = state.rows.get(state.selected).cloned() {
-              clear_log_sink();
-              restore_terminal(terminal)?;
-              let _ = crate::commands::daemon::start();
-              let _ = crate::commands::attach::run_with_task(ctx, &cur.id.to_string());
-              reinit_terminal(terminal)?;
-              set_log_sink(log_tx.clone());
-              state.refresh(ctx)?;
+              // Background start (no attach)
+              let id_str = cur.id.to_string();
+              state.push_log(LogEvent::Command(format!("agency start {}", id_str)));
+              std::thread::spawn({
+                let ctx = ctx.clone();
+                move || {
+                  if let Err(err) = crate::commands::start::run(&ctx, &id_str) {
+                    crate::log_error!("Start failed: {}", err);
+                  }
+                }
+              });
             }
           }
           KeyCode::Char('S') => {
@@ -302,15 +325,38 @@ fn ui_loop(
               std::thread::spawn({
                 let ctx = ctx.clone();
                 move || {
-                  let _ = crate::utils::daemon::stop_sessions_of_task(&ctx, &tref);
-                  crate::log_info!(
-                    "Requested stop for task {}-{}",
-                    crate::utils::log::t::id(tref.id),
-                    crate::utils::log::t::slug(&tref.slug)
-                  );
-                  let _ = crate::utils::daemon::notify_tasks_changed(&ctx);
+                  if let Err(err) =
+                    crate::commands::stop::run(&ctx, Some(&tref.id.to_string()), None)
+                  {
+                    crate::log_error!("Stop failed: {}", err);
+                  }
                 }
               });
+            }
+          }
+          KeyCode::Char('m') => {
+            if let Some(cur) = state.rows.get(state.selected).cloned() {
+              let id_str = cur.id.to_string();
+              state.push_log(LogEvent::Command(format!("agency merge {}", id_str)));
+              std::thread::spawn({
+                let ctx = ctx.clone();
+                move || {
+                  if let Err(err) = crate::commands::merge::run(&ctx, &id_str, None) {
+                    crate::log_error!("Merge failed: {}", err);
+                  }
+                }
+              });
+            }
+          }
+          KeyCode::Char('o') => {
+            if let Some(cur) = state.rows.get(state.selected).cloned() {
+              // Temporarily leave TUI to open the worktree
+              clear_log_sink();
+              restore_terminal(terminal)?;
+              let _ = crate::commands::open::run(ctx, &cur.id.to_string());
+              reinit_terminal(terminal)?;
+              set_log_sink(log_tx.clone());
+              state.refresh(ctx)?;
             }
           }
           KeyCode::Char('X') => {
@@ -335,25 +381,9 @@ fn ui_loop(
               std::thread::spawn({
                 let ctx = ctx.clone();
                 move || {
-                  let _ = crate::utils::daemon::stop_sessions_of_task(&ctx, &tref);
-                  crate::log_info!(
-                    "Requested stop for task {}-{}",
-                    crate::utils::log::t::id(tref.id),
-                    crate::utils::log::t::slug(&tref.slug)
-                  );
-                  let repo = open_main_repo(ctx.paths.cwd()).expect("repo");
-                  let branch = crate::utils::task::branch_name(&tref);
-                  let wt_dir = crate::utils::task::worktree_dir(&ctx.paths, &tref);
-                  if crate::utils::git::prune_worktree_if_exists(&repo, &wt_dir).is_ok() {
-                    crate::log_success!(
-                      "Pruned worktree {}",
-                      crate::utils::log::t::path(wt_dir.display())
-                    );
+                  if let Err(err) = crate::commands::reset::run(&ctx, &tref.id.to_string()) {
+                    crate::log_error!("Reset failed: {}", err);
                   }
-                  if crate::utils::git::delete_branch_if_exists(&repo, &branch).is_ok() {
-                    crate::log_success!("Deleted branch {}", branch);
-                  }
-                  let _ = crate::utils::daemon::notify_tasks_changed(&ctx);
                 }
               });
             }
@@ -371,14 +401,19 @@ fn ui_loop(
               continue;
             };
             if start_and_attach {
-              clear_log_sink();
-              restore_terminal(terminal)?;
+              // Create and start in background, no attach and no daemon auto-start
               let created = crate::commands::new::run(ctx, &slug, false, None)?;
-              let _ = crate::commands::daemon::start();
-              let _ = crate::commands::attach::run_with_task(ctx, &created.id.to_string());
-              let _ = crate::utils::daemon::notify_tasks_changed(ctx);
-              reinit_terminal(terminal)?;
-              set_log_sink(log_tx.clone());
+              state.push_log(LogEvent::Command(format!("agency start {}", created.id)));
+              std::thread::spawn({
+                let ctx = ctx.clone();
+                let id_str = created.id.to_string();
+                move || {
+                  if let Err(err) = crate::commands::start::run(&ctx, &id_str) {
+                    crate::log_error!("Start failed: {}", err);
+                  }
+                  let _ = crate::utils::daemon::notify_tasks_changed(&ctx);
+                }
+              });
             } else {
               // Interactive editor open without attach
               clear_log_sink();
@@ -481,6 +516,34 @@ fn build_task_rows(
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn help_layout_item_boundary_wrap() {
+    let items = [
+      "Select: ↑/↓ j/k",
+      "Edit/Attach: ⏎",
+      "New: n/N",
+      "Start: s",
+      "Stop: S",
+      "Merge: m",
+      "Open: o",
+      "Delete: X",
+      "Reset: R",
+      "Quit: ^C",
+    ];
+    // Very narrow should result in many lines but keep pairs intact
+    let lines = layout_help_lines(&items, 20);
+    assert!(lines.len() >= 2);
+
+    // Ensure the last line contains Reset and Quit together when width allows
+    let lines2 = layout_help_lines(&items, 60);
+    let all_line_texts: Vec<String> = lines2
+      .iter()
+      .map(|ln| ln.spans.iter().map(|s| s.content.to_string()).collect())
+      .collect();
+    assert!(all_line_texts.iter().any(|t| t.contains("Reset: R")));
+    assert!(all_line_texts.iter().any(|t| t.contains("Quit: ^C")));
+  }
 
   #[test]
   fn status_style_mapping() {
@@ -629,6 +692,40 @@ fn inner(area: ratatui::layout::Rect) -> ratatui::layout::Rect {
     width: area.width.saturating_sub(2),
     height: area.height.saturating_sub(2),
   }
+}
+
+/// Build help lines from discrete items without breaking an item across lines.
+fn layout_help_lines<'a>(items: &'a [&'a str], width: u16) -> Vec<Line<'a>> {
+  let w = usize::from(width.max(1));
+  let sep = " | ";
+  let sep_len = sep.chars().count();
+  let mut lines: Vec<Line> = Vec::new();
+  let mut cur_len = 0_usize;
+  let mut cur_spans: Vec<Span> = Vec::new();
+
+  for item in items {
+    let item_len = item.chars().count();
+    if cur_len == 0 {
+      cur_spans.push(Span::raw(*item));
+      cur_len = item_len;
+      continue;
+    }
+
+    if cur_len + sep_len + item_len <= w {
+      cur_spans.push(Span::raw(sep));
+      cur_spans.push(Span::raw(*item));
+      cur_len += sep_len + item_len;
+    } else {
+      lines.push(Line::from(cur_spans));
+      cur_spans = vec![Span::raw(*item)];
+      cur_len = item_len;
+    }
+  }
+
+  if !cur_spans.is_empty() {
+    lines.push(Line::from(cur_spans));
+  }
+  lines
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 enum Mode {

@@ -65,9 +65,6 @@ pub fn bootstrap_worktree(
   }
 
   for (name, src_dir) in dir_entries {
-    if !cfg.include.iter().any(|i| i == &name) {
-      continue;
-    }
     let dst_dir = dst_worktree.join(&name);
     copy_dir_tree(&src_dir, &dst_dir)?;
   }
