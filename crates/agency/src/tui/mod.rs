@@ -19,9 +19,8 @@ use crate::pty::protocol::{
   C2D, C2DControl, D2C, D2CControl, ProjectKey, SessionInfo, read_frame, write_frame,
 };
 use crate::utils::daemon::list_sessions_for_project as list_sessions;
-use crate::utils::editor::open_path;
 use crate::utils::git::{open_main_repo, repo_workdir_or};
-use crate::utils::task::{TaskRef, list_tasks, task_file};
+use crate::utils::task::{TaskRef, list_tasks};
 use crossbeam_channel::{Receiver, unbounded};
 use std::os::unix::net::UnixStream;
 mod colors;
@@ -216,7 +215,7 @@ fn ui_loop(
       for ev in &state.cmd_log {
         match ev {
           LogEvent::Command(s) => {
-            lines.push(Line::from(format!("> {}", s)).fg(Color::Gray));
+            lines.push(Line::from(format!("> {s}")).fg(Color::Gray));
           }
           LogEvent::Line { ansi, .. } => {
             let spans: Vec<Span> = colors::ansi_to_spans(ansi);
@@ -336,7 +335,7 @@ fn ui_loop(
             if let Some(cur) = state.rows.get(state.selected).cloned() {
               // Background start (no attach)
               let id_str = cur.id.to_string();
-              state.push_log(LogEvent::Command(format!("agency start {}", id_str)));
+              state.push_log(LogEvent::Command(format!("agency start {id_str}")));
               std::thread::spawn({
                 let ctx = ctx.clone();
                 move || {
@@ -369,7 +368,7 @@ fn ui_loop(
           KeyCode::Char('m') => {
             if let Some(cur) = state.rows.get(state.selected).cloned() {
               let id_str = cur.id.to_string();
-              state.push_log(LogEvent::Command(format!("agency merge {}", id_str)));
+              state.push_log(LogEvent::Command(format!("agency merge {id_str}")));
               std::thread::spawn({
                 let ctx = ctx.clone();
                 move || {
@@ -437,7 +436,7 @@ fn ui_loop(
             if start_and_attach {
               // Create and start on a background thread to avoid blocking the TUI
               // (editor for the new task runs within an interactive scope)
-              state.push_log(LogEvent::Command(format!("agency new {} + start", slug)));
+              state.push_log(LogEvent::Command(format!("agency new {slug} + start")));
               std::thread::spawn({
                 let ctx = ctx.clone();
                 let slug = slug.clone();

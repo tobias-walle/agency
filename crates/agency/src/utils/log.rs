@@ -151,7 +151,7 @@ mod tests {
         assert_eq!(*level, LogLevel::Info);
         assert!(ansi.contains("Hello world"));
       }
-      _ => panic!("unexpected event 0"),
+      LogEvent::Command(_) => panic!("unexpected event 0"),
     }
     // Success/warn/error should contain ANSI escapes ("\x1b[")
     let mut found_tinted = 0;

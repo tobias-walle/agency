@@ -18,43 +18,39 @@ pub fn run_child_process(
   env: &[(String, String)],
 ) -> Result<ExitStatus> {
   if crate::utils::log::is_sink_set() {
-    let mut cmd = Command::new(program);
-    cmd
+    let mut child_cmd = Command::new(program);
+    child_cmd
       .current_dir(cwd)
       .args(args)
       .stdin(Stdio::null())
       .stdout(Stdio::piped())
       .stderr(Stdio::piped());
     // Extend environment without clearing the existing one
-    for (key, value) in env.iter() {
-      cmd.env(key, value);
+    for (key, value) in env {
+      child_cmd.env(key, value);
     }
 
-    let mut child = cmd.spawn()?;
+    let mut child = child_cmd.spawn()?;
     let stdout = child.stdout.take();
     let stderr = child.stderr.take();
 
-    let stdout_handle = if let Some(out) = stdout {
-      Some(std::thread::spawn(move || {
+    let stdout_handle = stdout.map(|out| {
+      std::thread::spawn(move || {
         let reader = BufReader::new(out);
-        for line in reader.lines().flatten() {
+        for line in reader.lines().map_while(std::result::Result::ok) {
           log_info!("{}", line);
         }
-      }))
-    } else {
-      None
-    };
+      })
+    });
 
-    let stderr_handle = if let Some(err) = stderr {
-      Some(std::thread::spawn(move || {
+    let stderr_handle = stderr.map(|err| {
+      std::thread::spawn(move || {
         let reader = BufReader::new(err);
-        for line in reader.lines().flatten() {
+        for line in reader.lines().map_while(std::result::Result::ok) {
           log_warn!("{}", line);
         }
-      }))
-    } else {
-      None
-    };
+      })
+    });
 
     let status = child.wait()?;
     if let Some(h) = stdout_handle {
@@ -65,17 +61,17 @@ pub fn run_child_process(
     }
     Ok(status)
   } else {
-    let mut cmd = Command::new(program);
-    cmd
+    let mut child_cmd = Command::new(program);
+    child_cmd
       .current_dir(cwd)
       .args(args)
       .stdin(Stdio::inherit())
       .stdout(Stdio::inherit())
       .stderr(Stdio::inherit());
-    for (key, value) in env.iter() {
-      cmd.env(key, value);
+    for (key, value) in env {
+      child_cmd.env(key, value);
     }
-    Ok(cmd.status()?)
+    Ok(child_cmd.status()?)
   }
 }
 
@@ -123,8 +119,8 @@ mod tests {
         }
       }
     }
-    assert!(info_count >= 2, "info_count {}", info_count);
-    assert!(warn_count >= 2, "warn_count {}", warn_count);
+    assert!(info_count >= 2, "info_count {info_count}");
+    assert!(warn_count >= 2, "warn_count {warn_count}");
     clear_log_sink();
   }
 

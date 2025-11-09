@@ -106,7 +106,7 @@ pub fn run_bootstrap_cmd(repo_root: &Path, worktree_dir: &Path, cfg: &BootstrapC
   // Preface and run via unified child runner (routes I/O into TUI when active)
   log_info!("Run bootstrap {}", argv.join(" "));
   let env_overrides: Vec<(String, String)> = Vec::new();
-  match run_child_process(&argv[0], &argv[1..].to_vec(), worktree_dir, &env_overrides) {
+  match run_child_process(&argv[0], &argv[1..], worktree_dir, &env_overrides) {
     Ok(status) => {
       if !status.success() {
         log_warn!("Bootstrap exited with status {}", status);

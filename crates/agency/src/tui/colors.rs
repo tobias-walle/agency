@@ -3,6 +3,11 @@ use anstyle_parse::Parser;
 use ratatui::style::{Color as TuiColor, Modifier, Style as TuiStyle};
 use ratatui::text::Span;
 
+#[allow(
+  clippy::too_many_lines,
+  clippy::cast_possible_truncation,
+  clippy::match_same_arms
+)]
 pub fn ansi_to_spans(s: &str) -> Vec<Span<'static>> {
   struct Segments {
     cur_style: AnStyle,
@@ -34,8 +39,8 @@ pub fn ansi_to_spans(s: &str) -> Vec<Span<'static>> {
         return;
       }
       // Flush and update style per parameter
-      for p in params.iter() {
-        for sub in p.iter() {
+      for p in params {
+        for sub in p {
           match sub {
             0 => {
               self.0.flush();
@@ -143,14 +148,13 @@ fn to_tui_color(c: Color) -> TuiColor {
     Color::Ansi(AnsiColor::Magenta) => TuiColor::Magenta,
     Color::Ansi(AnsiColor::Cyan) => TuiColor::Cyan,
     Color::Ansi(AnsiColor::White) => TuiColor::White,
-    Color::Ansi(AnsiColor::BrightBlack) => TuiColor::Gray,
+    Color::Ansi(AnsiColor::BrightBlack | AnsiColor::BrightWhite) => TuiColor::Gray,
     Color::Ansi(AnsiColor::BrightRed) => TuiColor::LightRed,
     Color::Ansi(AnsiColor::BrightGreen) => TuiColor::LightGreen,
     Color::Ansi(AnsiColor::BrightYellow) => TuiColor::LightYellow,
     Color::Ansi(AnsiColor::BrightBlue) => TuiColor::LightBlue,
     Color::Ansi(AnsiColor::BrightMagenta) => TuiColor::LightMagenta,
     Color::Ansi(AnsiColor::BrightCyan) => TuiColor::LightCyan,
-    Color::Ansi(AnsiColor::BrightWhite) => TuiColor::Gray,
     Color::Rgb(RgbColor(r, g, b)) => TuiColor::Rgb(r, g, b),
     Color::Ansi256(Ansi256Color(idx)) => TuiColor::Indexed(idx),
   }

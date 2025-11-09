@@ -3,7 +3,158 @@ mod common;
 use anyhow::Result;
 use gix as git;
 use predicates::prelude::*;
+use std::path::Path;
 use temp_env::with_vars;
+
+fn write_executable_script(path: &Path, body: &str) -> Result<()> {
+  if let Some(parent) = path.parent() {
+    std::fs::create_dir_all(parent)?;
+  }
+  std::fs::write(path, body)?;
+  #[cfg(unix)]
+  {
+    use std::os::unix::fs::PermissionsExt as _;
+    let mut perms = std::fs::metadata(path)?.permissions();
+    perms.set_mode(0o755);
+    std::fs::set_permissions(path, perms)?;
+  }
+  Ok(())
+}
+
+#[test]
+fn setup_creates_global_config_via_wizard() -> Result<()> {
+  let env = common::TestEnv::new();
+  let xdg_temp = common::tempdir_in_sandbox();
+  let config_home = xdg_temp.path().to_path_buf();
+  let bin_dir = config_home.join("bin");
+  write_executable_script(&bin_dir.join("claude"), "#!/usr/bin/env bash\nexit 0\n")?;
+
+  with_vars(
+    [
+      ("XDG_CONFIG_HOME", Some(config_home.display().to_string())),
+      ("PATH", Some(bin_dir.display().to_string())),
+    ],
+    || {
+      let mut cmd = env.bin_cmd().unwrap();
+      cmd.arg("setup").write_stdin("claude\n\n");
+      cmd
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("agency defaults").from_utf8())
+        .stdout(predicates::str::contains("agency init").from_utf8());
+    },
+  );
+
+  let cfg_file = config_home.join("agency").join("agency.toml");
+  assert!(
+    cfg_file.is_file(),
+    "setup should write global config at {}",
+    cfg_file.display()
+  );
+  let data = std::fs::read_to_string(&cfg_file)?;
+  assert!(
+    data.contains("agent = \"claude\""),
+    "config should record selected agent: {data}"
+  );
+  assert!(
+    !data.contains("keybindings"),
+    "default detach should not produce keybinding overrides: {data}"
+  );
+  Ok(())
+}
+
+#[test]
+fn setup_updates_existing_config_and_warns() -> Result<()> {
+  let env = common::TestEnv::new();
+  let xdg_temp = common::tempdir_in_sandbox();
+  let config_home = xdg_temp.path().to_path_buf();
+  let agency_dir = config_home.join("agency");
+  std::fs::create_dir_all(&agency_dir)?;
+  let cfg = agency_dir.join("agency.toml");
+  std::fs::write(
+    &cfg,
+    r#"agent = "claude"
+[bootstrap]
+include = ["scripts"]
+"#,
+  )?;
+
+  with_vars(
+    [("XDG_CONFIG_HOME", Some(config_home.display().to_string()))],
+    || {
+      let mut cmd = env.bin_cmd().unwrap();
+      cmd.arg("setup").write_stdin("opencode\nctrl-d\n");
+      cmd
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("existing config").from_utf8());
+    },
+  );
+
+  let data = std::fs::read_to_string(&cfg)?;
+  assert!(
+    data.contains("agent = \"opencode\""),
+    "agent should be updated: {data}"
+  );
+  assert!(
+    data.contains("detach = \"ctrl-d\""),
+    "detach shortcut override should be persisted: {data}"
+  );
+  assert!(
+    data.contains("[bootstrap]"),
+    "unrelated keys must be preserved when rewriting config: {data}"
+  );
+  Ok(())
+}
+
+#[test]
+fn defaults_prints_embedded_config() -> Result<()> {
+  let env = common::TestEnv::new();
+  let mut cmd = env.bin_cmd()?;
+  cmd.arg("defaults");
+  cmd
+    .assert()
+    .success()
+    .stdout(predicates::str::contains("Embedded agency defaults").from_utf8())
+    .stdout(predicates::str::contains("[agents.claude]").from_utf8());
+  Ok(())
+}
+
+#[test]
+fn init_scaffolds_files_after_confirmation() -> Result<()> {
+  let env = common::TestEnv::new();
+  let root = env.path().to_path_buf();
+  let mut cmd = env.bin_cmd()?;
+  cmd.arg("init").write_stdin("y\n");
+  cmd
+    .assert()
+    .success()
+    .stdout(predicates::str::contains(".agency/agency.toml").from_utf8())
+    .stdout(predicates::str::contains(".agency/setup.sh").from_utf8());
+
+  let agency_dir = root.join(".agency");
+  assert!(agency_dir.is_dir(), ".agency directory should be created");
+  let cfg = agency_dir.join("agency.toml");
+  assert!(cfg.is_file(), "empty agency.toml should be created");
+  let script = agency_dir.join("setup.sh");
+  assert!(script.is_file(), "bootstrap script should be created");
+  #[cfg(unix)]
+  {
+    use std::os::unix::fs::PermissionsExt as _;
+    let perms = std::fs::metadata(&script)?.permissions();
+    assert!(
+      perms.mode() & 0o111 != 0,
+      "setup.sh should be executable: mode {:o}",
+      perms.mode()
+    );
+  }
+  let script_body = std::fs::read_to_string(&script)?;
+  assert!(
+    script_body.contains("#!/usr/bin/env bash"),
+    "script should include shebang for editing: {script_body}"
+  );
+  Ok(())
+}
 
 #[test]
 fn new_creates_markdown_branch_and_worktree() -> Result<()> {
