@@ -130,7 +130,8 @@ fn init_scaffolds_files_after_confirmation() -> Result<()> {
     .assert()
     .success()
     .stdout(predicates::str::contains(".agency/agency.toml").from_utf8())
-    .stdout(predicates::str::contains(".agency/setup.sh").from_utf8());
+    .stdout(predicates::str::contains(".agency/setup.sh").from_utf8())
+    .stdout(predicates::str::contains(".gitignore").from_utf8());
 
   let agency_dir = root.join(".agency");
   assert!(agency_dir.is_dir(), ".agency directory should be created");
@@ -152,6 +153,42 @@ fn init_scaffolds_files_after_confirmation() -> Result<()> {
   assert!(
     script_body.contains("#!/usr/bin/env bash"),
     "script should include shebang for editing: {script_body}"
+  );
+  Ok(())
+}
+
+#[test]
+fn init_appends_gitignore_when_missing() -> Result<()> {
+  let env = common::TestEnv::new();
+  let gi = env.path().join(".gitignore");
+  assert!(!gi.exists(), ".gitignore should not exist before init");
+
+  let mut cmd = env.bin_cmd()?;
+  cmd.arg("init").write_stdin("y\n");
+  cmd.assert().success();
+
+  let contents = std::fs::read_to_string(&gi)?;
+  assert_eq!(
+    contents, ".agency/*\n!.agency/setup.sh\n",
+    ".gitignore should contain agency entries"
+  );
+  Ok(())
+}
+
+#[test]
+fn init_skips_gitignore_when_agency_entry_exists() -> Result<()> {
+  let env = common::TestEnv::new();
+  let gi = env.path().join(".gitignore");
+  std::fs::write(&gi, "# existing\n.agency\n")?;
+
+  let mut cmd = env.bin_cmd()?;
+  cmd.arg("init").write_stdin("y\n");
+  cmd.assert().success();
+
+  let contents = std::fs::read_to_string(&gi)?;
+  assert_eq!(
+    contents, "# existing\n.agency\n",
+    ".gitignore should remain unchanged when .agency entry exists"
   );
   Ok(())
 }
@@ -292,8 +329,7 @@ fn new_writes_yaml_header_when_agent_specified() -> Result<()> {
     "front matter should contain base_branch: main"
   );
   assert_eq!(
-    data,
-    "---\nagent: fake\nbase_branch: main\n---\n",
+    data, "---\nagent: fake\nbase_branch: main\n---\n",
     "task should contain only front matter when no description"
   );
 
