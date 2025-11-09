@@ -6,22 +6,16 @@ use anyhow::{Context, Result};
 use crate::config::{AppContext, compute_socket_path};
 use crate::pty::client as pty_client;
 use crate::pty::protocol::{ProjectKey, SessionOpenMeta, TaskMeta, WireCommand};
-use crate::utils::bootstrap::{bootstrap_worktree, run_bootstrap_cmd};
+use crate::utils::bootstrap::prepare_worktree_for_task;
 use crate::utils::cmd::{CmdCtx, expand_argv};
 use crate::utils::command::Command as LocalCommand;
-use crate::utils::git::{
-  add_worktree_for_branch, ensure_branch_at, open_main_repo, repo_workdir_or,
-};
+use crate::utils::git::{ensure_branch_at, open_main_repo, repo_workdir_or};
 use crate::utils::task::{
   TaskFrontmatter, branch_name, parse_task_markdown, remove_title, resolve_id_or_slug, task_file,
   worktree_dir,
 };
 
 pub fn run_with_task(ctx: &AppContext, ident: &str) -> Result<()> {
-  run_with_task_opts(ctx, ident, false)
-}
-
-pub fn run_with_task_opts(ctx: &AppContext, ident: &str, prepare_only: bool) -> Result<()> {
   // Initialize env_logger similar to pty-demo main
   let _ = env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
     .format_timestamp_secs()
@@ -54,27 +48,7 @@ pub fn run_with_task_opts(ctx: &AppContext, ident: &str, prepare_only: bool) -> 
   let branch = branch_name(&task);
   let _ = ensure_branch_at(&repo, &branch, &base_branch)?;
 
-  // Worktree dir; create lazily if missing and bootstrap
-  let worktree_dir_path = worktree_dir(&ctx.paths, &task);
-  let worktree_dir = worktree_dir_path
-    .canonicalize()
-    .unwrap_or(worktree_dir_path.clone());
-  if !worktree_dir_path.exists() {
-    let wt_root = ctx.paths.worktrees_dir();
-    let () = std::fs::create_dir_all(&wt_root)
-      .with_context(|| format!("failed to create {}", wt_root.display()))?;
-    add_worktree_for_branch(
-      &repo,
-      &crate::utils::task::worktree_name(&task),
-      &worktree_dir_path,
-      &branch,
-    )?;
-    // Bootstrap ignored root files and run optional command
-    let root_workdir = repo_workdir_or(&repo, ctx.paths.cwd());
-    let bcfg = ctx.config.bootstrap_config();
-    bootstrap_worktree(&repo, &root_workdir, &worktree_dir_path, &bcfg)?;
-    run_bootstrap_cmd(&root_workdir, &worktree_dir_path, &bcfg);
-  }
+  let worktree_dir = prepare_worktree_for_task(ctx, &repo, &task, &branch)?;
 
   // Build env map and argv
   let mut env_map: HashMap<String, String> = std::env::vars().collect();
@@ -113,10 +87,6 @@ pub fn run_with_task_opts(ctx: &AppContext, ident: &str, prepare_only: bool) -> 
     cwd: worktree_dir.display().to_string(),
     env: env_map.into_iter().collect(),
   };
-
-  if prepare_only {
-    return Ok(());
-  }
 
   let open = SessionOpenMeta {
     project,

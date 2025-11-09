@@ -1,4 +1,5 @@
 pub mod attach;
+pub mod bootstrap;
 pub mod branch;
 pub mod daemon;
 pub mod merge;

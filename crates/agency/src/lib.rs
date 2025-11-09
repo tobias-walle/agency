@@ -61,10 +61,9 @@ enum Commands {
     task: Option<String>,
     #[arg(long)]
     session: Option<u64>,
-    /// Prepare branch/worktree and bootstrap only; skip PTY attach
-    #[arg(long)]
-    prepare_only: bool,
   },
+  /// Prepare branch/worktree and run bootstrap (no PTY)
+  Bootstrap { ident: String },
   /// Stop a task's sessions or a specific session
   Stop {
     task: Option<String>,
@@ -140,15 +139,14 @@ pub fn run() -> Result<()> {
       DaemonCmd::Restart {} => commands::daemon::restart()?,
       DaemonCmd::Run {} => commands::daemon::run_blocking()?,
     },
-    Some(Commands::Attach {
-      task,
-      session,
-      prepare_only,
-    }) => match (task, session) {
-      (Some(t), None) => commands::attach::run_with_task_opts(&ctx, &t, prepare_only)?,
+    Some(Commands::Attach { task, session }) => match (task, session) {
+      (Some(t), None) => commands::attach::run_with_task(&ctx, &t)?,
       (None, Some(sid)) => commands::attach::run_join_session(&ctx, sid)?,
       _ => anyhow::bail!("Attach requires either a task or --session <id>"),
     },
+    Some(Commands::Bootstrap { ident }) => {
+      commands::bootstrap::run(&ctx, &ident)?;
+    }
     Some(Commands::Stop { task, session }) => {
       commands::stop::run(&ctx, task.as_deref(), session)?;
     }
