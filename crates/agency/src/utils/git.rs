@@ -23,21 +23,43 @@ pub fn repo_workdir_or(repo: &git::Repository, fallback: &Path) -> PathBuf {
   )
 }
 
-pub fn ensure_branch(repo: &git::Repository, name: &str) -> Result<String> {
+// removed: ensure_branch (no longer used after lazy worktrees)
+
+/// Return the current HEAD branch name or "main" if unavailable.
+///
+/// Uses the main repository (not a linked worktree) and falls back to
+/// "main" when HEAD cannot be resolved to a named branch.
+pub fn head_branch(ctx: &crate::config::AppContext) -> String {
+  let Ok(repo) = open_main_repo(ctx.paths.cwd()) else {
+    return "main".to_string();
+  };
+  match current_branch_name(&repo) {
+    Ok(name) => name,
+    Err(_) => "main".to_string(),
+  }
+}
+
+/// Ensure a branch exists at the given starting point (rev or ref).
+///
+/// - If the branch already exists, returns its name without modifying it.
+/// - Otherwise resolves `start_point` (rev-parse) and creates the branch at that commit.
+pub fn ensure_branch_at(repo: &git::Repository, name: &str, start_point: &str) -> Result<String> {
   let full = format!("refs/heads/{name}");
   if repo.find_reference(&full).is_ok() {
     return Ok(name.to_string());
   }
-  // Create branch at current HEAD commit
-  let head = repo
-    .head_commit()
-    .context("failed to resolve HEAD commit")?;
-  let commit_id = head.id();
+  // Resolve start_point to a commit id via rev-parse in the main workdir
+  let workdir = repo
+    .workdir()
+    .ok_or_else(|| anyhow::anyhow!("no main worktree: cannot create branch"))?;
+  let commit = rev_parse(workdir, start_point)?;
+  let oid = gix::ObjectId::from_hex(commit.as_bytes())
+    .map_err(|_| anyhow::anyhow!("invalid commit id from rev-parse: {commit}"))?;
   let _ = repo.reference(
     full.as_str(),
-    commit_id,
+    oid,
     PreviousValue::MustNotExist,
-    "create branch",
+    "create branch at start point",
   )?;
   Ok(name.to_string())
 }

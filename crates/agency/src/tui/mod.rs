@@ -31,6 +31,8 @@ struct TaskRow {
   slug: String,
   status: String,
   session: Option<u64>,
+  base: String,
+  agent: String,
 }
 
 #[derive(Default)]
@@ -46,7 +48,7 @@ impl AppState {
     let mut tasks = list_tasks(&ctx.paths)?;
     tasks.sort_by_key(|t| t.id);
     let sessions = list_sessions(ctx);
-    let (rows, sel) = build_task_rows(&tasks, &sessions, self.selected);
+    let (rows, sel) = build_task_rows(ctx, &tasks, &sessions, self.selected);
     self.rows = rows;
     self.selected = sel;
     Ok(())
@@ -98,6 +100,8 @@ fn ui_loop(
         Cell::from("SLUG"),
         Cell::from("STATUS"),
         Cell::from("SESSION"),
+        Cell::from("BASE"),
+        Cell::from("AGENT"),
       ])
       .style(Style::default().fg(Color::Gray));
 
@@ -107,6 +111,8 @@ fn ui_loop(
           Cell::from(r.slug.clone()),
           Cell::from(r.status.clone()).style(status_style(&r.status)),
           Cell::from(r.session.map(|s| s.to_string()).unwrap_or_default()),
+          Cell::from(r.base.clone()),
+          Cell::from(r.agent.clone()),
         ])
       });
 
@@ -114,9 +120,11 @@ fn ui_loop(
         rows,
         [
           Constraint::Length(6),
-          Constraint::Percentage(50),
+          Constraint::Percentage(40),
           Constraint::Length(10),
           Constraint::Length(8),
+          Constraint::Length(12),
+          Constraint::Length(12),
         ],
       )
       .header(header)
@@ -129,7 +137,7 @@ fn ui_loop(
 
       // Help bar
       let help = Line::from(
-        "Select: ↑/↓ j/k | Edit/Attach: ⏎ | New: n/N | Start: S | Delete: X | Reset: R | Quit: q",
+        "Select: ↑/↓ j/k | Edit/Attach: ⏎ | New: n/N | Start: s | Stop: S | Delete: X | Reset: R | Quit: q",
       )
       .fg(Color::Blue);
       f.render_widget(
@@ -222,11 +230,23 @@ fn ui_loop(
             };
             state.slug_input.clear();
           }
-          KeyCode::Char('S') => {
+          KeyCode::Char('s') => {
             if let Some(cur) = state.rows.get(state.selected).cloned() {
               restore_terminal(terminal)?;
               let _ = crate::commands::daemon::start();
               let _ = crate::commands::attach::run_with_task(ctx, &cur.id.to_string());
+              reinit_terminal(terminal)?;
+              state.refresh(ctx)?;
+            }
+          }
+          KeyCode::Char('S') => {
+            if let Some(cur) = state.rows.get(state.selected).cloned() {
+              restore_terminal(terminal)?;
+              let tref = TaskRef {
+                id: cur.id,
+                slug: cur.slug.clone(),
+              };
+              let _ = crate::utils::daemon::stop_sessions_of_task(ctx, &tref);
               reinit_terminal(terminal)?;
               state.refresh(ctx)?;
             }
@@ -316,50 +336,46 @@ fn reinit_terminal(terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>) -
 fn status_style(status: &str) -> Style {
   match status {
     "Running" => Style::default().fg(Color::Green),
-    "Exited" => Style::default().fg(Color::Red),
+    "Exited" | "Stopped" => Style::default().fg(Color::Red),
     "Draft" => Style::default().fg(Color::Yellow),
     _ => Style::default(),
   }
 }
 
 fn build_task_rows(
+  ctx: &AppContext,
   tasks: &[TaskRef],
   sessions: &[SessionInfo],
   prev_selected: usize,
 ) -> (Vec<TaskRow>, usize) {
-  let mut latest: std::collections::HashMap<(u32, String), SessionInfo> =
-    std::collections::HashMap::new();
-  for s in sessions {
-    let key = (s.task.id, s.task.slug.clone());
-    match latest.get(&key) {
-      None => {
-        latest.insert(key, s.clone());
-      }
-      Some(prev) => {
-        if s.created_at_ms >= prev.created_at_ms {
-          latest.insert(key, s.clone());
-        }
-      }
-    }
-  }
+  let latest = crate::utils::sessions::latest_sessions_by_task(sessions);
+  let base = crate::utils::git::head_branch(ctx);
 
   let mut out = Vec::with_capacity(tasks.len());
   for t in tasks {
-    if let Some(info) = latest.get(&(t.id, t.slug.clone())) {
-      out.push(TaskRow {
-        id: t.id,
-        slug: t.slug.clone(),
-        status: info.status.clone(),
-        session: Some(info.session_id),
-      });
-    } else {
-      out.push(TaskRow {
-        id: t.id,
-        slug: t.slug.clone(),
-        status: "Draft".to_string(),
-        session: None,
-      });
-    }
+    let latest_sess = latest.get(&(t.id, t.slug.clone()));
+    let wt_exists = crate::utils::task::worktree_dir(&ctx.paths, t).exists();
+    let status = crate::utils::status::derive_status(latest_sess, wt_exists);
+    let status_str = match status {
+      crate::utils::status::TaskStatus::Draft => "Draft".to_string(),
+      crate::utils::status::TaskStatus::Stopped => "Stopped".to_string(),
+      crate::utils::status::TaskStatus::Running => "Running".to_string(),
+      crate::utils::status::TaskStatus::Exited => "Exited".to_string(),
+      crate::utils::status::TaskStatus::Other(s) => s,
+    };
+
+    let fm = crate::utils::task::read_task_frontmatter(&ctx.paths, t);
+    let agent = crate::utils::task::agent_for_task(&ctx.config, fm.as_ref())
+      .unwrap_or_else(|| "-".to_string());
+
+    out.push(TaskRow {
+      id: t.id,
+      slug: t.slug.clone(),
+      status: status_str,
+      session: latest_sess.map(|s| s.session_id),
+      base: base.clone(),
+      agent,
+    });
   }
 
   let selected = if out.is_empty() {
@@ -378,6 +394,7 @@ mod tests {
   fn status_style_mapping() {
     assert_eq!(status_style("Running").fg, Some(Color::Green));
     assert_eq!(status_style("Exited").fg, Some(Color::Red));
+    assert_eq!(status_style("Stopped").fg, Some(Color::Red));
     assert_eq!(status_style("Draft").fg, Some(Color::Yellow));
     assert_eq!(status_style("Other").fg, None);
   }
@@ -424,7 +441,12 @@ mod tests {
       make_session(10, 2, "beta", "Running", 1000),
       make_session(11, 2, "beta", "Exited", 1100),
     ];
-    let (rows, sel) = build_task_rows(&tasks, &sessions, 5);
+    let dir = tempfile::TempDir::new().expect("tmp");
+    let ctx = crate::config::AppContext {
+      paths: crate::config::AgencyPaths::new(dir.path()),
+      config: crate::config::AgencyConfig::default(),
+    };
+    let (rows, sel) = build_task_rows(&ctx, &tasks, &sessions, 5);
     assert_eq!(rows.len(), 2);
     assert_eq!(rows[0].slug, "alpha");
     assert_eq!(rows[0].status, "Draft");
@@ -439,7 +461,12 @@ mod tests {
   fn selection_zero_when_no_rows() {
     let tasks: Vec<TaskRef> = Vec::new();
     let sessions: Vec<SessionInfo> = Vec::new();
-    let (rows, sel) = build_task_rows(&tasks, &sessions, 3);
+    let dir = tempfile::TempDir::new().expect("tmp");
+    let ctx = crate::config::AppContext {
+      paths: crate::config::AgencyPaths::new(dir.path()),
+      config: crate::config::AgencyConfig::default(),
+    };
+    let (rows, sel) = build_task_rows(&ctx, &tasks, &sessions, 3);
     assert_eq!(rows.len(), 0);
     assert_eq!(sel, 0);
   }
