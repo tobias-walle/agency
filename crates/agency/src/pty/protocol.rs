@@ -76,6 +76,10 @@ pub enum C2DControl {
   },
   /// List sessions with optional project filter.
   ListSessions { project: Option<ProjectKey> },
+  /// Subscribe to daemon events for a project (long-lived connection).
+  SubscribeEvents { project: ProjectKey },
+  /// Notify daemon that tasks changed for a project.
+  NotifyTasksChanged { project: ProjectKey },
   /// Ping for liveness checks carrying a nonce echoed by the daemon.
   Ping { nonce: u64 },
   /// Request the daemon to shutdown gracefully.
@@ -148,6 +152,10 @@ pub enum D2CControl {
   },
   /// List of sessions returned for a query.
   Sessions { entries: Vec<SessionInfo> },
+  /// Event: Sessions changed (delta implicit by client refresh).
+  SessionsChanged { entries: Vec<SessionInfo> },
+  /// Event: Tasks changed for a project.
+  TasksChanged { project: ProjectKey },
   /// Generic acknowledgement with a count (e.g., number of sessions stopped).
   Ack { stopped: usize },
   /// Goodbye indicates the daemon acknowledges the detach and will close the connection.

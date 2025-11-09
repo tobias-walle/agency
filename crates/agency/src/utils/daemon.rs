@@ -45,6 +45,17 @@ pub fn stop_sessions_of_task(ctx: &AppContext, task: &TaskRef) -> anyhow::Result
   )
 }
 
+/// Best-effort helper to notify the daemon that tasks changed for this project.
+pub fn notify_tasks_changed(ctx: &AppContext) -> anyhow::Result<()> {
+  let socket = compute_socket_path(&ctx.config);
+  let repo = open_main_repo(ctx.paths.cwd())?;
+  let repo_root = repo_workdir_or(&repo, ctx.paths.cwd());
+  let project = ProjectKey {
+    repo_root: repo_root.display().to_string(),
+  };
+  send_message_to_daemon(&socket, C2DControl::NotifyTasksChanged { project })
+}
+
 /// Best-effort helper to list sessions for the current project.
 ///
 /// Returns an empty list if the daemon is unavailable or any error occurs.

@@ -3,7 +3,7 @@ use std::fs;
 use anyhow::{Context, Result};
 
 use crate::config::AppContext;
-use crate::utils::daemon::stop_sessions_of_task;
+use crate::utils::daemon::{notify_tasks_changed, stop_sessions_of_task};
 use crate::utils::git::{delete_branch_if_exists, open_main_repo, prune_worktree_if_exists};
 use crate::utils::task::{branch_name, resolve_id_or_slug, task_file, worktree_dir};
 use crate::utils::term::confirm;
@@ -28,8 +28,8 @@ pub fn run(ctx: &AppContext, ident: &str) -> Result<()> {
     }
     log_success!("Removed task, branch, and worktree");
 
-    // Best-effort notify daemon to stop sessions for this task
     let _ = stop_sessions_of_task(ctx, &tref);
+    let _ = notify_tasks_changed(ctx);
   } else {
     log_warn!("Cancelled");
   }

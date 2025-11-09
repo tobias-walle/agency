@@ -8,6 +8,7 @@ use crate::config::AppContext;
 // Using macros via module path
 use crate::log_info;
 use crate::utils::bootstrap::{bootstrap_worktree, run_bootstrap_cmd};
+use crate::utils::daemon::notify_tasks_changed;
 use crate::utils::editor::open_path as open_editor_path;
 use crate::utils::git::{
   add_worktree_for_branch, current_branch_name, ensure_branch, open_main_repo, repo_workdir_or,
@@ -81,6 +82,8 @@ pub fn run(ctx: &AppContext, slug: &str, no_edit: bool, agent: Option<&str>) -> 
   bootstrap_worktree(&repo, &root_workdir, &wt_dir, &bcfg)?;
   // Run optional bootstrap command within the new worktree
   run_bootstrap_cmd(&root_workdir, &wt_dir, &bcfg);
+
+  let _ = notify_tasks_changed(ctx);
 
   Ok(TaskRef { id, slug })
 }
