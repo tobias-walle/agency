@@ -5,25 +5,23 @@ use anyhow::{Context, Result};
 
 use crate::config::AppContext;
 use crate::log_info;
-use crate::log_success;
 use crate::utils::log::t;
 use crate::utils::wizard::Wizard;
 
 const SETUP_TEMPLATE: &str = r#"#!/usr/bin/env bash
 set -euo pipefail
 
-echo "Customize .agency/setup.sh to prepare new worktrees"
+echo "Setup"
 "#;
 
 pub fn run(ctx: &AppContext) -> Result<()> {
   let wizard = Wizard::new();
   let root = ctx.paths.cwd().clone();
   let prompt = format!(
-    "Generate .agency scaffolding in {}?",
+    "Generate project specific configuration files in {}?",
     t::path(root.display())
   );
   if !wizard.confirm(&prompt, false)? {
-    log_info!("Init aborted -> user declined");
     return Ok(());
   }
 
@@ -37,9 +35,11 @@ pub fn run(ctx: &AppContext) -> Result<()> {
   let script_path = agency_dir.join("setup.sh");
   ensure_script(&script_path)?;
 
-  log_success!("Init created scaffolding");
+  log_info!("");
+  log_info!("Created project config:");
   log_info!("  {}", t::path(".agency/agency.toml"));
   log_info!("  {}", t::path(".agency/setup.sh"));
+  log_info!("");
   Ok(())
 }
 

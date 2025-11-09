@@ -33,7 +33,7 @@ just start
 Basic CLI usage:
 
 ```bash
-# Initialize project scaffolding and config
+# Generate project specific configuration files
 agency init
 
 # Show help / version
