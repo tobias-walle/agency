@@ -128,6 +128,16 @@ Add the files and commit in a single command, e.g. `git add file1.ts file2.ts &&
 
 - You MUST NEVER use `Tokio`. We want to keep the code simple and prefer the use of threads.
 
+## Concurrency
+
+- Use `parking_lot::Mutex` for all new and refactored mutexes; prefer it over `std::sync::Mutex`.
+- Access mutex-protected data via centralized helpers to ensure short-lived lock scopes and avoid nested locking.
+- Helper naming must reflect intent:
+  - `read_*` for helpers that acquire a lock and read/derive data (return owned copies; do not send/IO while locked).
+  - `write_*` for helpers that acquire a lock and mutate state (perform I/O or sends only after the lock is released).
+- Never send frames or perform blocking I/O while holding a lock; copy out data first, then release the lock and send.
+- Keep public/high-level lifecycle methods at the top of files and place general lock helpers at the bottom for clarity.
+
 ## Modes
 
 ### Plan Mode
