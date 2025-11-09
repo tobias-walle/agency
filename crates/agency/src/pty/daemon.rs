@@ -160,7 +160,7 @@ impl Daemon {
     // Read first frame which can be OpenSession, JoinSession, ListSessions or Shutdown
     match read_frame::<_, C2D>(&mut stream) {
       Ok(C2D::Control(C2DControl::OpenSession { meta, rows, cols })) => {
-        self.open_and_attach(stream, meta, rows, cols)?;
+        self.open_and_attach(stream, &meta, rows, cols)?;
         Ok(())
       }
       Ok(C2D::Control(C2DControl::JoinSession {
@@ -213,7 +213,7 @@ impl Daemon {
             .sessions
             .iter()
             .filter(|(_id, e)| {
-              &e.meta.project == &project && e.meta.task.id == task_id && e.meta.task.slug == slug
+              e.meta.project == project && e.meta.task.id == task_id && e.meta.task.slug == slug
             })
             .map(|(id, _)| *id)
             .collect();
@@ -263,7 +263,7 @@ impl Daemon {
   fn open_and_attach(
     &self,
     stream: UnixStream,
-    meta: SessionOpenMeta,
+    meta: &SessionOpenMeta,
     rows: u16,
     cols: u16,
   ) -> anyhow::Result<()> {
@@ -472,7 +472,7 @@ impl Daemon {
                   let entries = registry_for_reader.lock().list_sessions(Some(&project));
                   let subs = subscribers_for_reader.lock();
                   for s in subs.iter() {
-                    if &s.project == &project {
+                    if s.project == project {
                       let _ = s.control.send(D2CControl::SessionsChanged {
                         entries: entries.clone(),
                       });
@@ -559,9 +559,9 @@ impl Daemon {
         let _ = writer_handle.join();
         // Remove subscriber entry
         let mut subs = subs_list.lock();
-        let idx = subs
-          .iter()
-          .position(|s| s.project == project && std::ptr::eq(&s.control, &control_tx));
+        let idx = subs.iter().position(|s| {
+          s.project == project && std::ptr::eq(&raw const s.control, &raw const control_tx)
+        });
         if let Some(i) = idx {
           subs.remove(i);
         }
@@ -600,12 +600,12 @@ impl Daemon {
   // ---- Helpers (locks at bottom for clarity) ----
   fn read_registry<T>(&self, f: impl FnOnce(&SessionRegistry) -> T) -> T {
     let reg = self.registry.lock();
-    f(&*reg)
+    f(&reg)
   }
 
   fn write_registry<T>(&self, f: impl FnOnce(&mut SessionRegistry) -> T) -> T {
     let mut reg = self.registry.lock();
-    f(&mut *reg)
+    f(&mut reg)
   }
 
   fn read_session_project(&self, session_id: u64) -> Option<ProjectKey> {

@@ -8,6 +8,7 @@ use anstream::eprintln;
 use anyhow::{Context, Result, anyhow};
 use crossbeam_channel::Receiver;
 use crossterm::terminal;
+use owo_colors::OwoColorize as _;
 use std::io::{Read, Write};
 use std::os::unix::net::UnixStream;
 use std::path::Path;
@@ -275,7 +276,6 @@ impl Client {
                     "\nAgent exited: in={} out={} elapsed={}ms",
                     stats.bytes_in, stats.bytes_out, stats.elapsed_ms
                   );
-                  use owo_colors::OwoColorize as _;
                   eprintln!("{}", "Press Enter to restart the session...".dimmed());
                 }
                 // Arm restart: input thread will swallow bytes until Enter and trigger restart

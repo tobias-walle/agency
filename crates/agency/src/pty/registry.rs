@@ -212,7 +212,7 @@ impl SessionRegistry {
           .as_millis(),
       )
       .unwrap_or(u64::MAX);
-      let status = match entry.status {
+      let status_text = match entry.status {
         SessionStatus::Running => "Running".to_string(),
         SessionStatus::Exited { .. } => "Exited".to_string(),
       };
@@ -221,7 +221,7 @@ impl SessionRegistry {
         project: entry.meta.project.clone(),
         task: entry.meta.task.clone(),
         cwd: entry.meta.cwd.clone(),
-        status,
+        status: status_text,
         clients: u32::try_from(entry.clients.len()).unwrap_or(u32::MAX),
         created_at_ms,
         stats,
@@ -231,16 +231,9 @@ impl SessionRegistry {
   }
 
   pub fn broadcast(&self, session_id: u64, ctrl: &D2CControl) {
-    // Deprecated: prefer collecting channels via `read_client_controls_for_session`
-    if let Some(entry) = self.sessions.get(&session_id) {
-      let chans: Vec<_> = entry
-        .clients
-        .values()
-        .map(|att| att.control.clone())
-        .collect();
-      for ch in chans {
-        let _ = ch.send(ctrl.clone());
-      }
+    let chans = self.read_client_controls_for_session(session_id);
+    for ch in chans {
+      let _ = ch.send(ctrl.clone());
     }
   }
 
@@ -316,6 +309,7 @@ impl SessionRegistry {
   }
 
   /// Clone client control channels for a session to allow sending outside of locks.
+  #[must_use]
   pub fn read_client_controls_for_session(&self, session_id: u64) -> Vec<D2CControlChannel> {
     if let Some(entry) = self.sessions.get(&session_id) {
       entry
