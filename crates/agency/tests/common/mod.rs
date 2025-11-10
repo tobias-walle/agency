@@ -4,10 +4,14 @@ use assert_cmd::Command;
 
 use gix as git;
 use tempfile::{Builder, TempDir};
+#[cfg(unix)]
+use std::os::unix::net::UnixListener;
+use std::path::PathBuf;
 
 #[derive(Debug)]
 pub struct TestEnv {
   temp: TempDir,
+  runtime_dir: PathBuf,
 }
 
 impl TestEnv {
@@ -20,29 +24,14 @@ impl TestEnv {
     // Ensure the fake agent script is available relative to the temp workdir
     // so the daemon (which uses relative ./scripts/fake_agent.py) can start.
     let workdir = temp.path();
-    let scripts_dir = workdir.join("scripts");
-    let _ = std::fs::create_dir_all(&scripts_dir);
-    let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../scripts/fake_agent.py");
-    let dst = scripts_dir.join("fake_agent.py");
-    if let Err(err) = fs_extra::file::copy(&src, &dst, &fs_extra::file::CopyOptions::new()) {
-      panic!(
-        "failed to copy fake agent from {} to {}: {}",
-        src.display(),
-        dst.display(),
-        err
-      );
-    }
-    #[cfg(unix)]
-    {
-      use std::os::unix::fs::PermissionsExt as _;
-      if let Ok(meta) = std::fs::metadata(&dst) {
-        let mut perms = meta.permissions();
-        perms.set_mode(0o755);
-        let _ = std::fs::set_permissions(&dst, perms);
-      }
+    if let Err(err) = ensure_fake_agent_at(workdir) {
+      panic!("prepare fake agent failed: {}", err);
     }
 
-    Self { temp }
+    // Create a unique, short runtime dir per test to isolate daemon sockets
+    let runtime_dir = runtime_dir_create();
+
+    Self { temp, runtime_dir }
   }
 
   /// Prepare a task's branch/worktree and run bootstrap (no PTY attach).
@@ -57,9 +46,41 @@ impl TestEnv {
     self.temp.path()
   }
 
+  pub fn runtime_dir(&self) -> &std::path::Path {
+    &self.runtime_dir
+  }
+
+  /// Best-effort check whether Unix sockets can be created in this environment.
+  /// Binds a temporary socket in the test runtime dir and removes it.
+  pub fn sockets_available(&self) -> bool {
+    #[cfg(unix)]
+    {
+      let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+      let probe = self.runtime_dir.join(format!("probe-{nanos}.sock"));
+      match UnixListener::bind(&probe) {
+        Ok(_l) => {
+          let _ = std::fs::remove_file(&probe);
+          true
+        }
+        Err(_) => false,
+      }
+    }
+    #[cfg(not(unix))]
+    {
+      false
+    }
+  }
+
+
   pub fn bin_cmd(&self) -> anyhow::Result<Command> {
     let mut cmd = Command::cargo_bin("agency")?;
+    // Ensure all test-launched binaries use a per-test XDG runtime dir
+    // so the daemon socket is created inside the sandbox workspace.
     cmd.current_dir(self.path());
+    cmd.env("XDG_RUNTIME_DIR", &self.runtime_dir);
     Ok(cmd)
   }
 
@@ -184,4 +205,43 @@ pub fn tempdir_in_sandbox() -> TempDir {
     .prefix("agency-test-")
     .tempdir_in(root)
     .expect("temp dir")
+}
+
+/// Create (or ensure) a short runtime dir path under `target/.r/r<nanos>` and return it.
+pub fn runtime_dir_create() -> std::path::PathBuf {
+  // Keep path short to satisfy Unix socket path limits on macOS/BSD
+  let nanos = std::time::SystemTime::now()
+    .duration_since(std::time::UNIX_EPOCH)
+    .map(|d| d.as_nanos())
+    .unwrap_or(0);
+  let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+  let workspace_root = manifest_dir
+    .parent()
+    .and_then(|p| p.parent())
+    .unwrap_or(&manifest_dir)
+    .to_path_buf();
+  let runtime_base = workspace_root.join("target").join(".r");
+  let _ = std::fs::create_dir_all(&runtime_base);
+  let dir = runtime_base.join(format!("r{nanos}"));
+  let _ = std::fs::create_dir_all(&dir);
+  dir
+}
+
+/// Ensure the fake agent script exists at `<workdir>/scripts/fake_agent.py` and is executable.
+pub fn ensure_fake_agent_at(workdir: &std::path::Path) -> anyhow::Result<()> {
+  use std::fs;
+  let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../scripts/fake_agent.py");
+  let scripts_dir = workdir.join("scripts");
+  let _ = fs::create_dir_all(&scripts_dir);
+  let dst = scripts_dir.join("fake_agent.py");
+  fs_extra::file::copy(&src, &dst, &fs_extra::file::CopyOptions::new())
+    .with_context(|| format!("copy {} -> {}", src.display(), dst.display()))?;
+  #[cfg(unix)]
+  {
+    use std::os::unix::fs::PermissionsExt as _;
+    let mut perms = fs::metadata(&dst)?.permissions();
+    perms.set_mode(0o755);
+    fs::set_permissions(&dst, perms)?;
+  }
+  Ok(())
 }

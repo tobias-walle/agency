@@ -484,6 +484,10 @@ fn new_increments_trailing_number_slug() -> Result<()> {
 fn ps_lists_id_and_slug_in_order() -> Result<()> {
   let env = common::TestEnv::new();
   env.init_repo()?;
+  if !env.sockets_available() {
+    eprintln!("Skipping ps_lists_id_and_slug_in_order: Unix sockets not available in sandbox");
+    return Ok(());
+  }
   let (id1, slug1) = env.new_task("alpha-task", &["--no-edit"])?;
   let (id2, slug2) = env.new_task("beta-task", &["--no-edit"])?;
 
@@ -526,6 +530,10 @@ fn ps_lists_id_and_slug_in_order() -> Result<()> {
 fn ps_handles_empty_state() -> Result<()> {
   let env = common::TestEnv::new();
   env.init_repo()?;
+  if !env.sockets_available() {
+    eprintln!("Skipping ps_handles_empty_state: Unix sockets not available in sandbox");
+    return Ok(());
+  }
 
   let mut daemon_start = env.bin_cmd()?;
   daemon_start.arg("daemon").arg("start");

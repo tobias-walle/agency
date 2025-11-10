@@ -21,25 +21,22 @@ fn daemon_start_stop_restart_creates_and_removes_socket() -> Result<()> {
   }
   let td = common::tempdir_in_sandbox();
   let workdir = td.path();
-  let sock = workdir.join("tmp").join("agency.sock");
+  let runtime = runtime_dir_for(workdir);
+  let sock = runtime.join("agency.sock");
 
   // Ensure fake agent is present for daemon
   ensure_fake_agent(workdir)?;
 
   // start
-  let mut cmd = std::process::Command::new(bin());
+  let mut cmd = new_cmd_in_runtime(workdir, &runtime);
   cmd.arg("daemon").arg("start");
-  cmd.current_dir(workdir);
-  cmd.env("XDG_RUNTIME_DIR", workdir.join("tmp"));
   cmd.assert().success();
 
   wait_for_socket(&sock, Duration::from_secs(5))?;
 
   // stop
-  let mut cmd = std::process::Command::new(bin());
+  let mut cmd = new_cmd_in_runtime(workdir, &runtime);
   cmd.arg("daemon").arg("stop");
-  cmd.current_dir(workdir);
-  cmd.env("XDG_RUNTIME_DIR", workdir.join("tmp"));
   cmd.assert().success();
 
   // poll disappearance
@@ -52,10 +49,8 @@ fn daemon_start_stop_restart_creates_and_removes_socket() -> Result<()> {
   }
 
   // restart
-  let mut cmd = std::process::Command::new(bin());
+  let mut cmd = new_cmd_in_runtime(workdir, &runtime);
   cmd.arg("daemon").arg("restart");
-  cmd.current_dir(workdir);
-  cmd.env("XDG_RUNTIME_DIR", workdir.join("tmp"));
   cmd.assert().success();
 
   wait_for_socket(&sock, Duration::from_secs(5))?;

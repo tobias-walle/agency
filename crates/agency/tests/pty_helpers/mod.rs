@@ -11,31 +11,14 @@ use anyhow::Context;
 use expectrl::Expect;
 use expectrl::session::OsSession as Session;
 use fs_extra::file::{self, CopyOptions};
+use super::common;
 
 #[must_use]
 pub fn bin() -> PathBuf {
   assert_cmd::cargo::cargo_bin!("agency").to_path_buf()
 }
 
-pub fn ensure_fake_agent(workdir: &Path) -> anyhow::Result<()> {
-  let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../scripts/fake_agent.py");
-
-  let dst_dir = workdir.join("scripts");
-  create_dir_all(&dst_dir)?;
-
-  let dst = dst_dir.join("fake_agent.py");
-  file::copy(&src, &dst, &CopyOptions::new())
-    .with_context(|| format!("copy {} -> {}", src.display(), dst.display()))?;
-
-  #[cfg(unix)]
-  {
-    use std::os::unix::fs::PermissionsExt as _;
-    let mut perms = std::fs::metadata(&dst)?.permissions();
-    perms.set_mode(0o755);
-    std::fs::set_permissions(&dst, perms)?;
-  }
-  Ok(())
-}
+pub fn ensure_fake_agent(workdir: &Path) -> anyhow::Result<()> { common::ensure_fake_agent_at(workdir) }
 
 pub fn spawn_daemon(bin: &Path, workdir: &Path) -> anyhow::Result<Child> {
   // Ensure the test workdir has the fake agent available at ./scripts/fake_agent.py
@@ -45,11 +28,23 @@ pub fn spawn_daemon(bin: &Path, workdir: &Path) -> anyhow::Result<Child> {
     .arg("daemon")
     .arg("run")
     .env("RUST_LOG", "debug")
-    .env("XDG_RUNTIME_DIR", workdir.join("tmp"))
+    .env("XDG_RUNTIME_DIR", runtime_dir_for(workdir))
     .current_dir(workdir);
   let child = cmd.spawn().context("failed to spawn daemon")?;
   Ok(child)
 }
+
+/// Create a Command for running the agency binary in `workdir` with XDG runtime
+/// pointing to `<workdir>/tmp`. Use this for CLI-driven daemon start/stop tests.
+pub fn new_cmd_in_runtime(workdir: &Path, runtime_dir: &Path) -> std::process::Command {
+  let mut cmd = std::process::Command::new(bin());
+  cmd.current_dir(workdir);
+  cmd.env("XDG_RUNTIME_DIR", runtime_dir);
+  cmd
+}
+
+/// Returns a unique runtime dir under `<workdir>/tmp/run-<nanos>` and ensures it exists.
+pub fn runtime_dir_for(_workdir: &Path) -> PathBuf { common::runtime_dir_create() }
 
 pub fn wait_for_socket(sock: &Path, timeout: Duration) -> anyhow::Result<()> {
   let start = Instant::now();
