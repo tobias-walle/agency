@@ -3,8 +3,6 @@
 # Agency
 Agency orchestrates command-line AI agents across isolated Git worktrees.
 
-## Highlights
-
 - Git like cli interface (see `agency --help`)
 - Terminal UI (`agency tui`) similar to lazygit
 - Automatic creation of worktrees and background process management
