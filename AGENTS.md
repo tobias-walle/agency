@@ -114,15 +114,19 @@ Add the files and commit in a single command, e.g. `git add file1.ts file2.ts &&
 ## Terminal IO
 
 - You MUST use `bail!` for errors, if they should crash the program. They are automatically printed to stderr in red.
-- You MUST use the our log macros `log_info!`, `log_success!`, `log_warn!`, `log_error!` (use `crate::log_info`, etc.)
-- Logging Style
-  - Info: neutral line; highlight tokens via `utils::log::t`.
-  - Success: entire line green; no token highlights.
-  - Warn: entire line yellow; no token highlights.
-  - Error: entire line red; no token highlights.
-  - Tokens (`use utils::log::t`): `t::id`, `t::count` (blue), `t::slug` (bold), `t::branch` (magenta), `t::path`/`t::sha` (cyan).
-- Wording: Uppercase start; verb-first; past tense for confirmations; ASCII; no trailing period; use `->`.
-- Examples: `log_info!("Create task {} (id {})", t::slug(slug), t::id(id));` · `log_success!("Fast-forward {} to {} at {}", base, branch, sha);` · `log_warn!("Clean up: worktree, branch, file");` · `log_error!("Daemon error: {}", msg);`
+- In the CLI/TUI
+  - You MUST use the our log macros `log_info!`, `log_success!`, `log_warn!`, `log_error!` (use `crate::log_info`, etc.)
+  - Logging Style
+    - Info: neutral line; highlight tokens via `utils::log::t`.
+    - Success: entire line green; no token highlights.
+    - Warn: entire line yellow; no token highlights.
+    - Error: entire line red; no token highlights.
+    - Tokens (`use utils::log::t`): `t::id`, `t::count` (blue), `t::slug` (bold), `t::branch` (magenta), `t::path`/`t::sha` (cyan).
+  - Wording: Uppercase start; verb-first; past tense for confirmations; ASCII; no trailing period; use `->`.
+  - Examples: `log_info!("Create task {} (id {})", t::slug(slug), t::id(id));` · `log_success!("Fast-forward {} to {} at {}", base, branch, sha);` · `log_warn!("Clean up: worktree, branch, file");` · `log_error!("Daemon error: {}", msg);`
+- In the Daemon
+  - You MUST use the log crate for logging (e.g. `log::info!(...)`)
+
 
 ## Async
 

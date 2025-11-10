@@ -11,10 +11,12 @@
 //! forwarded as `D2C::Output` frames. A snapshot (`vt100` screen contents) is
 //! sent separately during handshake.
 
+use crate::log_warn;
 use crate::pty::idle::{IdleState, IdleTracker};
 use crate::pty::protocol::D2COutputChannel;
 use crate::utils::command::Command;
 use anyhow::Context;
+use dsr::CursorRequestDetector;
 use parking_lot::Mutex;
 use portable_pty::{CommandBuilder, ExitStatus, MasterPty, PtySize, native_pty_system};
 use std::io::{Read, Write};
@@ -24,6 +26,8 @@ use std::sync::{
 };
 use std::thread;
 use std::time::Instant;
+
+mod dsr;
 
 pub struct Session {
   master: Arc<Mutex<Box<dyn MasterPty + Send>>>,
@@ -152,6 +156,7 @@ impl Session {
     let bytes_out = self.bytes_out.clone();
     let sinks = self.output_sinks.clone();
     let idle = self.idle.clone();
+    let writer = self.writer.clone();
 
     thread::spawn(move || {
       let mut reader = master_for_read
@@ -159,23 +164,35 @@ impl Session {
         .try_clone_reader()
         .expect("failed to clone PTY reader");
       let mut buf = [0u8; 8192];
+      let mut detector = CursorRequestDetector::new();
       loop {
         match reader.read(&mut buf) {
           Ok(0) | Err(_) => break, // PTY closed or error
           Ok(n) => {
-            {
+            let chunk = &buf[..n];
+            let request_count = detector.consume(chunk);
+            let cursor_position = {
               let mut p = parser.lock();
-              p.process(&buf[..n]);
-            }
+              p.process(chunk);
+              if request_count > 0 {
+                Some(p.screen().cursor_position())
+              } else {
+                None
+              }
+            };
             {
               let mut tracker = idle.lock();
-              tracker.record_output(Instant::now(), &buf[..n]);
+              let now = Instant::now();
+              tracker.record_output(now, chunk);
             }
             bytes_out.fetch_add(n as u64, Ordering::Relaxed);
             // Forward to all attached clients (non-blocking, lossy)
             let guard = sinks.lock();
             for out in guard.iter() {
-              let _ = out.try_send_bytes(&buf[..n]);
+              let _ = out.try_send_bytes(chunk);
+            }
+            if let Some((row, col)) = cursor_position {
+              respond_to_cursor_requests(&writer, row, col, request_count);
             }
           }
         }
@@ -283,5 +300,29 @@ impl Session {
   pub fn stop(&mut self) -> anyhow::Result<()> {
     let _ = self.child.kill();
     Ok(())
+  }
+}
+
+fn respond_to_cursor_requests(
+  writer: &Arc<Mutex<Box<dyn Write + Send>>>,
+  row: u16,
+  col: u16,
+  count: usize,
+) {
+  if count == 0 {
+    return;
+  }
+  // PTYs expect cursor reports back on the slave side, so we reply straight to
+  // the shell. Some agents, like codex, expect this to not crash.
+  let response = format!("\x1b[{};{}R", row as u32 + 1, col as u32 + 1);
+  let mut guard = writer.lock();
+  for _ in 0..count {
+    if let Err(err) = guard.write_all(response.as_bytes()) {
+      log_warn!("Write cursor report failed: {}", err);
+      return;
+    }
+  }
+  if let Err(err) = guard.flush() {
+    log_warn!("Flush cursor report failed: {}", err);
   }
 }
