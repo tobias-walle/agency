@@ -27,9 +27,9 @@ enum Commands {
     /// Select agent to attach to task (writes YAML front matter)
     #[arg(short = 'a', long = "agent")]
     agent: Option<String>,
-    /// Do not attach to the task after creation (attach is default)
-    #[arg(long = "no-attach")]
-    no_attach: bool,
+    /// Do not start/attach after creation (start+attach is default)
+    #[arg(long = "draft")]
+    draft: bool,
     /// Skip opening the editor after creating the task file
     #[arg(long)]
     no_edit: bool,
@@ -60,13 +60,13 @@ enum Commands {
     #[command(subcommand)]
     cmd: DaemonCmd,
   },
-  /// Attach to task via PTY daemon
+  /// Attach to an already running task session via PTY daemon
   Attach {
     task: Option<String>,
     #[arg(long)]
     session: Option<u64>,
   },
-  /// Start a task session in the background without attaching
+  /// Start a task session and attach; fails if already started
   Start { ident: String },
   /// Prepare branch/worktree and run bootstrap (no PTY)
   Bootstrap { ident: String },
@@ -117,14 +117,14 @@ pub fn run() -> Result<()> {
     Some(Commands::New {
       slug,
       agent,
-      no_attach,
+      draft,
       no_edit,
     }) => {
       let created = commands::new::run(&ctx, &slug, no_edit, agent.as_deref())?;
-      if !no_attach {
-        commands::daemon::start()?;
+      if !draft {
         let ident = created.id.to_string();
-        commands::attach::run_with_task(&ctx, &ident)?;
+        // Start the session and attach; fails if already started
+        commands::start::run(&ctx, &ident)?;
       }
     }
     Some(Commands::Merge { ident, base }) => {

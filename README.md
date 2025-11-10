@@ -42,13 +42,13 @@ agency new implement-cool-feature
 agency tui
 ```
 
-`agency new` creates `.agency/tasks/<id>-<slug>.md`, records the current branch as the base, and attaches to the configured agent through the daemon unless you pass `--no-attach`.
+`agency new` creates `.agency/tasks/<id>-<slug>.md`, records the current branch as the base, and starts+attaches to the configured agent through the daemon unless you pass `--draft`.
 
 ## Task Workflow
 
 - `agency ps` - list tasks, worktree status, latest session id, base branch, and effective agent.
-- `agency attach <id|slug>` - prepare the branch/worktree, run bootstrap, and attach to the task's agent session.
-- `agency start <id|slug>` - run the same preparation but keep the session in the background.
+- `agency attach <id|slug>` - attach to an already running task session.
+- `agency start <id|slug>` - prepare the branch/worktree, run bootstrap, start the session and attach; fails if already started.
 - `agency sessions` - show all live sessions for the current repo; reuse ids with `agency attach --session <id>` or `agency stop --session <id>`.
 - `agency stop [<id|slug>] [--session <id>]` - terminate sessions cleanly.
 - `agency merge <id|slug> [--branch main]` - fast-forward the worktree branch into the base and clean up branch plus worktree when complete.
