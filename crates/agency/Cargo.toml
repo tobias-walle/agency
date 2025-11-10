@@ -2,6 +2,9 @@
 name = "agency"
 version = "0.1.0"
 edition = "2024"
+repository = "https://github.com/tobias-walle/agency"
+homepage = "https://github.com/tobias-walle/agency"
+description = "AI Agent Orchestrator in the terminal"
 
 [dependencies]
 anstream = "0.6.21"
