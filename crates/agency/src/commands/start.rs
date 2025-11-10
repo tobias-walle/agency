@@ -1,7 +1,6 @@
 use std::collections::HashMap;
-use std::os::unix::net::UnixStream;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 
 use crate::config::{AppContext, compute_socket_path};
 use crate::log_success;
@@ -12,6 +11,7 @@ use crate::pty::protocol::{
 use crate::utils::bootstrap::prepare_worktree_for_task;
 use crate::utils::cmd::{CmdCtx, expand_argv};
 use crate::utils::command::Command as LocalCommand;
+use crate::utils::daemon::connect_daemon_socket;
 use crate::utils::git::{ensure_branch_at, open_main_repo, repo_workdir_or};
 use crate::utils::task::{agent_for_task, branch_name, read_task_content, resolve_id_or_slug};
 
@@ -94,8 +94,7 @@ pub fn run(ctx: &AppContext, ident: &str) -> Result<()> {
   };
 
   // Open short-lived connection, send OpenSession, read Welcome, then Detach
-  let mut stream = UnixStream::connect(&socket)
-    .with_context(|| format!("failed to connect to {}", socket.display()))?;
+  let mut stream = connect_daemon_socket(&socket)?;
   // Use default size for headless start
   write_frame(
     &mut stream,

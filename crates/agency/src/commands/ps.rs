@@ -14,8 +14,9 @@ pub fn run(ctx: &AppContext) -> Result<()> {
   let mut tasks = list_tasks(&ctx.paths)?;
   tasks.sort_by_key(|t| t.id);
 
-  // Best-effort: query sessions for current project and build latest-session map
-  let latest = latest_sessions_by_task(&list_sessions_for_project(ctx));
+  // Query sessions for current project and build latest-session map
+  let sessions = list_sessions_for_project(ctx)?;
+  let latest = latest_sessions_by_task(&sessions);
   let base = head_branch(ctx);
   let rows: Vec<Vec<String>> = tasks
     .iter()

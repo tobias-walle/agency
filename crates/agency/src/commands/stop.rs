@@ -1,8 +1,8 @@
-use anyhow::{Context, Result};
-use std::os::unix::net::UnixStream;
+use anyhow::Result;
 
 use crate::config::{AppContext, compute_socket_path};
 use crate::pty::protocol::{C2D, C2DControl, D2C, D2CControl, ProjectKey, read_frame, write_frame};
+use crate::utils::daemon::connect_daemon_socket;
 use crate::utils::git::{open_main_repo, repo_workdir_or};
 use crate::utils::task::resolve_id_or_slug;
 use crate::{log_info, log_success};
@@ -10,8 +10,7 @@ use crate::{log_info, log_success};
 
 pub fn run(ctx: &AppContext, ident: Option<&str>, session_id: Option<u64>) -> Result<()> {
   let socket = compute_socket_path(&ctx.config);
-  let mut stream = UnixStream::connect(&socket)
-    .with_context(|| format!("failed to connect to {}", socket.display()))?;
+  let mut stream = connect_daemon_socket(&socket)?;
 
   if let Some(sid) = session_id {
     write_frame(

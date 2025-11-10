@@ -3,9 +3,10 @@ use crate::pty::protocol::{
   C2D, C2DControl, C2DControlChannel, C2DInputChannel, D2C, D2CControl, SessionOpenMeta,
   make_c2d_control_channel, make_c2d_input_channel, read_frame, write_frame,
 };
+use crate::utils::daemon::connect_daemon_socket;
 use crate::utils::keybindings::{Keybinding, parse_detach_key};
 use anstream::eprintln;
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Result, anyhow};
 use crossbeam_channel::Receiver;
 use crossterm::terminal;
 use owo_colors::OwoColorize as _;
@@ -35,7 +36,7 @@ pub fn run_attach(
 ) -> Result<()> {
   let _raw = RawModeGuard::enable()?;
 
-  let stream = UnixStream::connect(socket_path).context("failed to connect to daemon socket")?;
+  let stream = connect_daemon_socket(socket_path)?;
 
   let mut client = Client::new(open, join_session_id, config);
   client.run(stream)

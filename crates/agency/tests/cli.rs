@@ -487,6 +487,10 @@ fn ps_lists_id_and_slug_in_order() -> Result<()> {
   let (id1, slug1) = env.new_task("alpha-task", &["--no-edit"])?;
   let (id2, slug2) = env.new_task("beta-task", &["--no-edit"])?;
 
+  let mut daemon_start = env.bin_cmd()?;
+  daemon_start.arg("daemon").arg("start");
+  daemon_start.assert().success();
+
   // Run ps
   let mut cmd = env.bin_cmd()?;
   cmd.arg("ps");
@@ -511,6 +515,10 @@ fn ps_lists_id_and_slug_in_order() -> Result<()> {
     )
     .stdout(predicates::str::contains("Draft").from_utf8());
 
+  let mut daemon_stop = env.bin_cmd()?;
+  daemon_stop.arg("daemon").arg("stop");
+  daemon_stop.assert().success();
+
   Ok(())
 }
 
@@ -518,6 +526,10 @@ fn ps_lists_id_and_slug_in_order() -> Result<()> {
 fn ps_handles_empty_state() -> Result<()> {
   let env = common::TestEnv::new();
   env.init_repo()?;
+
+  let mut daemon_start = env.bin_cmd()?;
+  daemon_start.arg("daemon").arg("start");
+  daemon_start.assert().success();
 
   // Run ps with no tasks
   let mut cmd = env.bin_cmd()?;
@@ -531,6 +543,40 @@ fn ps_handles_empty_state() -> Result<()> {
         .unwrap()
         .from_utf8(),
     );
+
+  let mut daemon_stop = env.bin_cmd()?;
+  daemon_stop.arg("daemon").arg("stop");
+  daemon_stop.assert().success();
+
+  Ok(())
+}
+
+#[test]
+fn ps_bails_when_daemon_not_running() -> Result<()> {
+  let env = common::TestEnv::new();
+  env.init_repo()?;
+
+  let mut cmd = env.bin_cmd()?;
+  cmd.arg("ps");
+  cmd.assert().failure().stderr(
+    predicates::str::contains("Daemon not running. Please start it with `agency daemon start`")
+      .from_utf8(),
+  );
+
+  Ok(())
+}
+
+#[test]
+fn sessions_bails_when_daemon_not_running() -> Result<()> {
+  let env = common::TestEnv::new();
+  env.init_repo()?;
+
+  let mut cmd = env.bin_cmd()?;
+  cmd.arg("sessions");
+  cmd.assert().failure().stderr(
+    predicates::str::contains("Daemon not running. Please start it with `agency daemon start`")
+      .from_utf8(),
+  );
 
   Ok(())
 }

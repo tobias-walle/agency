@@ -109,8 +109,6 @@ Add the files and commit in a single command, e.g. `git add file1.ts file2.ts &&
 
   ```
 
-- After the code works and the tests are green, you MUST double check if you could simplify the code or remove unnecessary comments.
-
 ## Terminal IO
 
 - You MUST use `bail!` for errors, if they should crash the program. They are automatically printed to stderr in red.

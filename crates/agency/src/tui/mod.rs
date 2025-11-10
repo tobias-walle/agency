@@ -1,6 +1,7 @@
 use std::io::{self, IsTerminal as _};
 use std::time::Duration;
 
+use anyhow::Error;
 use anyhow::{Context, Result};
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
@@ -13,16 +14,14 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Cell, Paragraph, Row, Table};
 
 use crate::config::AppContext;
-use crate::config::compute_socket_path;
-use crate::log_info;
 use crate::pty::protocol::{
   C2D, C2DControl, D2C, D2CControl, ProjectKey, SessionInfo, read_frame, write_frame,
 };
-use crate::utils::daemon::list_sessions_for_project as list_sessions;
+use crate::utils::daemon::{connect_daemon, list_sessions_for_project};
 use crate::utils::git::{open_main_repo, repo_workdir_or};
 use crate::utils::task::{TaskRef, list_tasks};
+use crate::{log_error, log_info};
 use crossbeam_channel::{Receiver, unbounded};
-use std::os::unix::net::UnixStream;
 mod colors;
 
 use crate::utils::interactive::{InteractiveReq, register_sender as register_interactive_sender};
@@ -52,7 +51,7 @@ impl AppState {
   fn refresh(&mut self, ctx: &AppContext) -> Result<()> {
     let mut tasks = list_tasks(&ctx.paths)?;
     tasks.sort_by_key(|t| t.id);
-    let sessions = list_sessions(ctx);
+    let sessions = list_sessions_for_project(ctx)?;
     let (rows, sel) = build_task_rows(ctx, &tasks, &sessions, self.selected);
     self.rows = rows;
     self.selected = sel;
@@ -74,6 +73,8 @@ pub fn run(ctx: &AppContext) -> Result<()> {
     log_info!("TUI requires a TTY; try 'agency ps' or a real terminal");
     return Ok(());
   }
+
+  connect_daemon(ctx)?;
 
   // Terminal init
   enable_raw_mode().context("enable raw mode")?;
@@ -100,10 +101,16 @@ fn ui_loop(
   ctx: &AppContext,
 ) -> Result<()> {
   let mut state = AppState::default();
-  state.refresh(ctx)?;
+  state.refresh(ctx).map_err(|err| {
+    log_error!("{}", err);
+    err
+  })?;
 
   // Subscribe to daemon events
-  let events_rx = subscribe_events(ctx)?;
+  let events_rx = subscribe_events(ctx).map_err(|err| {
+    log_error!("{}", err);
+    err
+  })?;
 
   // Wire log sink for routed CLI log lines
   let (log_tx, log_rx) = unbounded::<LogEvent>();
@@ -131,7 +138,10 @@ fn ui_loop(
           reinit_terminal(terminal)?;
           state.paused = false;
           let _ = ack.send(());
-          state.refresh(ctx)?;
+          state.refresh(ctx).map_err(|err| {
+            log_error!("{}", err);
+            err
+          })?;
         }
       }
     }
@@ -274,7 +284,14 @@ fn ui_loop(
     while let Ok(ev) = events_rx.try_recv() {
       match ev {
         UiEvent::TasksChanged | UiEvent::SessionsChanged => {
-          state.refresh(ctx)?;
+          state.refresh(ctx).map_err(|err| {
+            log_error!("{}", err);
+            err
+          })?;
+        }
+        UiEvent::Disconnected(err) => {
+          log_error!("{}", err);
+          return Err(err);
         }
       }
     }
@@ -703,37 +720,43 @@ mod tests {
 enum UiEvent {
   TasksChanged,
   SessionsChanged,
+  Disconnected(Error),
 }
 
 fn subscribe_events(ctx: &AppContext) -> Result<Receiver<UiEvent>> {
   let (tx, rx) = unbounded::<UiEvent>();
-  let socket = compute_socket_path(&ctx.config);
   let repo = open_main_repo(ctx.paths.cwd())?;
   let repo_root = repo_workdir_or(&repo, ctx.paths.cwd());
   let project = ProjectKey {
     repo_root: repo_root.display().to_string(),
   };
+  let stream = connect_daemon(ctx)?;
   std::thread::Builder::new()
     .name("tui-subscribe".to_string())
     .spawn(move || {
-      let Ok(mut stream) = UnixStream::connect(&socket) else {
-        return;
-      };
-      let _ = write_frame(
+      let tx_events = tx;
+      let mut stream = stream;
+      if let Err(err) = write_frame(
         &mut stream,
         &C2D::Control(C2DControl::SubscribeEvents { project }),
-      );
+      ) {
+        let _ = tx_events.send(UiEvent::Disconnected(err));
+        return;
+      }
       loop {
         let msg: Result<D2C> = read_frame(&mut stream);
         match msg {
           Ok(D2C::Control(D2CControl::TasksChanged { .. })) => {
-            let _ = tx.send(UiEvent::TasksChanged);
+            let _ = tx_events.send(UiEvent::TasksChanged);
           }
           Ok(D2C::Control(D2CControl::SessionsChanged { .. })) => {
-            let _ = tx.send(UiEvent::SessionsChanged);
+            let _ = tx_events.send(UiEvent::SessionsChanged);
           }
           Ok(_) => {}
-          Err(_) => break,
+          Err(err) => {
+            let _ = tx_events.send(UiEvent::Disconnected(err));
+            break;
+          }
         }
       }
     })?;

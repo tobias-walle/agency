@@ -21,6 +21,7 @@ pub struct IdleThresholds {
 }
 
 impl IdleThresholds {
+  #[must_use]
   pub const fn new(visible_quiet: Duration, enter_idle_after: Duration) -> Self {
     Self {
       visible_quiet,
@@ -48,10 +49,12 @@ pub struct IdleTracker {
 }
 
 impl IdleTracker {
+  #[must_use]
   pub fn new(now: Instant) -> Self {
     Self::with_thresholds(now, IdleThresholds::default())
   }
 
+  #[must_use]
   pub fn with_thresholds(now: Instant, thresholds: IdleThresholds) -> Self {
     Self {
       thresholds,
@@ -110,6 +113,7 @@ impl IdleTracker {
     }
   }
 
+  #[must_use]
   pub fn state(&self) -> IdleState {
     self.state
   }

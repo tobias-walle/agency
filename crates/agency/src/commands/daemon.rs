@@ -9,6 +9,7 @@ use log::{info, warn};
 use crate::config::{compute_socket_path, load_config};
 use crate::pty::daemon as pty_daemon;
 use crate::pty::protocol::{C2D, C2DControl, write_frame};
+use crate::utils::daemon::connect_daemon_socket;
 
 pub fn run_blocking() -> Result<()> {
   // Initialize env_logger similar to pty-demo main
@@ -63,8 +64,7 @@ pub fn stop() -> Result<()> {
   let cfg = load_config(&cwd)?;
   let socket = compute_socket_path(&cfg);
 
-  let mut stream = UnixStream::connect(&socket)
-    .with_context(|| format!("failed to connect to {}", socket.display()))?;
+  let mut stream = connect_daemon_socket(&socket)?;
   write_frame(&mut stream, &C2D::Control(C2DControl::Shutdown))
     .context("failed to send Shutdown frame")?;
   let _ = stream.shutdown(std::net::Shutdown::Both);
