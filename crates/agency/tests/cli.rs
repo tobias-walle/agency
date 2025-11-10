@@ -223,13 +223,13 @@ fn new_creates_markdown_branch_and_worktree() -> Result<()> {
 }
 
 #[test]
-fn new_accepts_no_attach_flag() -> Result<()> {
+fn new_accepts_draft_flag() -> Result<()> {
   let env = common::TestEnv::new();
   env.init_repo()?;
 
   // Run without helper to ensure the flag is accepted
   let mut cmd = env.bin_cmd()?;
-  cmd.arg("new").arg("--no-attach").arg("epsilon-task");
+  cmd.arg("new").arg("--draft").arg("epsilon-task");
   cmd.assert().success();
 
   Ok(())
@@ -256,7 +256,7 @@ fn new_runs_default_bootstrap_cmd_when_present() -> Result<()> {
     std::fs::set_permissions(&script, perms)?;
   }
 
-  let (id, slug) = env.new_task("boot-cmd", &["--no-edit", "--no-attach"])?;
+  let (id, slug) = env.new_task("boot-cmd", &["--no-edit", "--draft"])?;
   // Prepare and run bootstrap without PTY
   env.bootstrap_task(id)?;
   let wt = env.worktree_dir_path(id, &slug);
@@ -700,7 +700,7 @@ fn new_bootstrap_respects_config_includes_and_excludes() -> Result<()> {
 fn open_opens_worktree_via_editor() -> Result<()> {
   let env = common::TestEnv::new();
   env.init_repo()?;
-  let (id, _slug) = env.new_task("open-task", &["--no-edit", "--no-attach"])?;
+  let (id, _slug) = env.new_task("open-task", &["--no-edit", "--draft"])?;
 
   with_vars([("EDITOR", Some("true".to_string()))], || {
     let mut cmd = env.bin_cmd().unwrap();
@@ -715,7 +715,7 @@ fn open_opens_worktree_via_editor() -> Result<()> {
 fn merge_fast_forwards_and_cleans_up() -> Result<()> {
   let env = common::TestEnv::new();
   env.init_repo()?;
-  let (id, slug) = env.new_task("merge-task", &["--no-edit", "--no-attach"])?;
+  let (id, slug) = env.new_task("merge-task", &["--no-edit", "--draft"])?;
   // Prepare branch/worktree for merge
   env.bootstrap_task(id)?;
 
@@ -752,7 +752,7 @@ fn merge_fast_forwards_and_cleans_up() -> Result<()> {
 fn merge_stashes_and_restores_dirty_base() -> Result<()> {
   let env = common::TestEnv::new();
   env.init_repo()?;
-  let (id, slug) = env.new_task("merge-dirty", &["--no-edit", "--no-attach"])?;
+  let (id, slug) = env.new_task("merge-dirty", &["--no-edit", "--draft"])?;
   // Prepare branch/worktree
   env.bootstrap_task(id)?;
 
@@ -812,7 +812,7 @@ fn merge_stashes_and_restores_dirty_base() -> Result<()> {
 fn merge_refreshes_checked_out_base_worktree() -> Result<()> {
   let env = common::TestEnv::new();
   env.init_repo()?;
-  let (id, slug) = env.new_task("merge-refresh", &["--no-edit", "--no-attach"])?;
+  let (id, slug) = env.new_task("merge-refresh", &["--no-edit", "--draft"])?;
   // Prepare branch/worktree
   env.bootstrap_task(id)?;
 
@@ -852,7 +852,7 @@ fn merge_refreshes_checked_out_base_worktree() -> Result<()> {
 fn edit_opens_markdown_via_editor() -> Result<()> {
   let env = common::TestEnv::new();
   env.init_repo()?;
-  let (id, _slug) = env.new_task("edit-task", &["--no-edit", "--no-attach"])?;
+  let (id, _slug) = env.new_task("edit-task", &["--no-edit", "--draft"])?;
 
   // Use a no-op editor that exits successfully
   with_vars([("EDITOR", Some("bash -lc true".to_string()))], || {
@@ -868,7 +868,7 @@ fn edit_opens_markdown_via_editor() -> Result<()> {
 fn reset_prunes_worktree_and_branch_keeps_markdown() -> Result<()> {
   let env = common::TestEnv::new();
   env.init_repo()?;
-  let (id, slug) = env.new_task("reset-task", &["--no-edit", "--no-attach"])?;
+  let (id, slug) = env.new_task("reset-task", &["--no-edit", "--draft"])?;
 
   // Ensure branch/worktree exist before reset
   env.bootstrap_task(id)?;

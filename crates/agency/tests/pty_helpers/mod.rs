@@ -7,18 +7,20 @@ use std::process::{Child, Command};
 use std::time::{Duration, Instant};
 use std::{fs, thread};
 
+use super::common;
 use anyhow::Context;
 use expectrl::Expect;
 use expectrl::session::OsSession as Session;
 use fs_extra::file::{self, CopyOptions};
-use super::common;
 
 #[must_use]
 pub fn bin() -> PathBuf {
   assert_cmd::cargo::cargo_bin!("agency").to_path_buf()
 }
 
-pub fn ensure_fake_agent(workdir: &Path) -> anyhow::Result<()> { common::ensure_fake_agent_at(workdir) }
+pub fn ensure_fake_agent(workdir: &Path) -> anyhow::Result<()> {
+  common::ensure_fake_agent_at(workdir)
+}
 
 pub fn spawn_daemon(bin: &Path, workdir: &Path) -> anyhow::Result<Child> {
   // Ensure the test workdir has the fake agent available at ./scripts/fake_agent.py
@@ -44,7 +46,9 @@ pub fn new_cmd_in_runtime(workdir: &Path, runtime_dir: &Path) -> std::process::C
 }
 
 /// Returns a unique runtime dir under `<workdir>/tmp/run-<nanos>` and ensures it exists.
-pub fn runtime_dir_for(_workdir: &Path) -> PathBuf { common::runtime_dir_create() }
+pub fn runtime_dir_for(_workdir: &Path) -> PathBuf {
+  common::runtime_dir_create()
+}
 
 pub fn wait_for_socket(sock: &Path, timeout: Duration) -> anyhow::Result<()> {
   let start = Instant::now();

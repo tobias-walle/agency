@@ -3,10 +3,10 @@ use anyhow::{Context, Result};
 use assert_cmd::Command;
 
 use gix as git;
-use tempfile::{Builder, TempDir};
 #[cfg(unix)]
 use std::os::unix::net::UnixListener;
 use std::path::PathBuf;
+use tempfile::{Builder, TempDir};
 
 #[derive(Debug)]
 pub struct TestEnv {
@@ -74,7 +74,6 @@ impl TestEnv {
     }
   }
 
-
   pub fn bin_cmd(&self) -> anyhow::Result<Command> {
     let mut cmd = Command::cargo_bin("agency")?;
     // Ensure all test-launched binaries use a per-test XDG runtime dir
@@ -117,16 +116,16 @@ impl TestEnv {
   pub fn new_task(&self, slug: &str, extra_args: &[&str]) -> Result<(u32, String)> {
     let mut cmd = self.bin_cmd()?;
     cmd.arg("new");
-    // Default to not attaching in tests unless explicitly overridden
-    let mut has_no_attach = false;
+    // Default to draft mode in tests unless explicitly overridden
+    let mut has_draft = false;
     for arg_value in extra_args {
-      if *arg_value == "--no-attach" {
-        has_no_attach = true;
+      if *arg_value == "--draft" {
+        has_draft = true;
       }
       cmd.arg(arg_value);
     }
-    if !has_no_attach {
-      cmd.arg("--no-attach");
+    if !has_draft {
+      cmd.arg("--draft");
     }
     cmd.arg(slug);
     let out = cmd.output().context("run agency new")?;

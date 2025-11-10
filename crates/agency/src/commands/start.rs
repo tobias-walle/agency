@@ -1,25 +1,21 @@
+use anyhow::Result;
 use std::collections::HashMap;
 
-use anyhow::Result;
-
 use crate::config::{AppContext, compute_socket_path};
-use crate::log_success;
-use crate::pty::protocol::{
-  C2D, C2DControl, D2C, D2CControl, ProjectKey, SessionOpenMeta, TaskMeta, WireCommand, read_frame,
-  write_frame,
-};
+use crate::pty::client as pty_client;
+use crate::pty::protocol::{ProjectKey, SessionOpenMeta, TaskMeta, WireCommand};
 use crate::utils::bootstrap::prepare_worktree_for_task;
 use crate::utils::cmd::{CmdCtx, expand_argv};
 use crate::utils::command::Command as LocalCommand;
-use crate::utils::daemon::connect_daemon_socket;
+use crate::utils::daemon::list_sessions_for_project;
 use crate::utils::git::{ensure_branch_at, open_main_repo, repo_workdir_or};
+use crate::utils::interactive;
 use crate::utils::task::{agent_for_task, branch_name, read_task_content, resolve_id_or_slug};
 
-/// Start a task's session in the background (no attach).
+/// Start a task's session and attach. Fails if already started.
 ///
 /// Performs the same preparation as `attach` (ensure branch/worktree, compute agent cmd),
-/// then establishes a short-lived connection to the daemon, sends `OpenSession`,
-/// reads a single `Welcome`, and immediately sends `Detach` and closes.
+/// then attaches to the daemon sending `OpenSession` with the real terminal size.
 pub fn run(ctx: &AppContext, ident: &str) -> Result<()> {
   // Resolve task and load its content
   let task = resolve_id_or_slug(&ctx.paths, ident)?;
@@ -87,33 +83,20 @@ pub fn run(ctx: &AppContext, ident: &str) -> Result<()> {
     project,
     task: TaskMeta {
       id: task.id,
-      slug: task.slug,
+      slug: task.slug.clone(),
     },
     worktree_dir: worktree_dir.display().to_string(),
     cmd: cmd_wire,
   };
 
-  // Open short-lived connection, send OpenSession, read Welcome, then Detach
-  let mut stream = connect_daemon_socket(&socket)?;
-  // Use default size for headless start
-  write_frame(
-    &mut stream,
-    &C2D::Control(C2DControl::OpenSession {
-      meta: open,
-      rows: 24,
-      cols: 80,
-    }),
-  )?;
-  // Expect Welcome or Error
-  match read_frame::<_, D2C>(&mut stream) {
-    Ok(D2C::Control(D2CControl::Welcome { session_id, .. })) => {
-      // Immediately detach this client
-      let _ = write_frame(&mut stream, &C2D::Control(C2DControl::Detach));
-      log_success!("Started session {} in background", session_id);
-      Ok(())
-    }
-    Ok(D2C::Control(D2CControl::Error { message })) => anyhow::bail!(message),
-    Ok(_) => anyhow::bail!("Protocol: Expected Welcome"),
-    Err(err) => Err(err),
+  // Fail when a session is already running for this task
+  let existing = list_sessions_for_project(ctx)?
+    .into_iter()
+    .any(|e| e.task.id == task.id && e.task.slug == task.slug);
+  if existing {
+    anyhow::bail!("Already started. Use attach");
   }
+
+  // Attach and open a new session using real terminal size
+  interactive::scope(|| pty_client::run_attach(&socket, open, None, &ctx.config))
 }
