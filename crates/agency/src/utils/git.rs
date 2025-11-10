@@ -196,6 +196,41 @@ pub fn update_branch_ref(repo: &git::Repository, branch: &str, new_commit: &str)
   run_git(&["update-ref", &full, new_commit], workdir)
 }
 
+pub fn stash_push(workdir: &Path, message: &str) -> Result<Option<String>> {
+  let output = std::process::Command::new("git")
+    .current_dir(workdir)
+    .args(["stash", "push", "--include-untracked", "--message", message])
+    .stdout(std::process::Stdio::piped())
+    .stderr(std::process::Stdio::piped())
+    .output()
+    .with_context(|| "failed to run git stash push")?;
+  if !output.status.success() {
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    bail!("git stash push failed: {}", stderr.trim());
+  }
+  let stdout = String::from_utf8_lossy(&output.stdout);
+  let stderr = String::from_utf8_lossy(&output.stderr);
+  if stdout.contains("No local changes to save") || stderr.contains("No local changes to save") {
+    return Ok(None);
+  }
+  Ok(Some("stash@{0}".to_string()))
+}
+
+pub fn stash_pop(workdir: &Path, stash_ref: &str) -> Result<()> {
+  let output = std::process::Command::new("git")
+    .current_dir(workdir)
+    .args(["stash", "pop", stash_ref])
+    .stdout(std::process::Stdio::piped())
+    .stderr(std::process::Stdio::piped())
+    .output()
+    .with_context(|| format!("failed to run git stash pop {stash_ref}"))?;
+  if !output.status.success() {
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    bail!("git stash pop {stash_ref} failed: {}", stderr.trim());
+  }
+  Ok(())
+}
+
 /// Returns true if the main worktree has no changes (including untracked files).
 pub fn worktree_is_clean(repo: &git::Repository) -> Result<bool> {
   let workdir = repo

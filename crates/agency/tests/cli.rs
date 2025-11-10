@@ -741,7 +741,7 @@ fn merge_fast_forwards_and_cleans_up() -> Result<()> {
 }
 
 #[test]
-fn merge_blocks_when_base_dirty() -> Result<()> {
+fn merge_stashes_and_restores_dirty_base() -> Result<()> {
   let env = common::TestEnv::new();
   env.init_repo()?;
   let (id, slug) = env.new_task("merge-dirty", &["--no-edit", "--no-attach"])?;
@@ -761,7 +761,7 @@ fn merge_blocks_when_base_dirty() -> Result<()> {
   std::fs::write(&tracked, b"v1")?;
   let _ = std::process::Command::new("git")
     .current_dir(env.path())
-    .args(["add", "."])
+    .args(["add", "tracked.txt"])
     .status()?;
   let _ = std::process::Command::new("git")
     .current_dir(env.path())
@@ -770,17 +770,32 @@ fn merge_blocks_when_base_dirty() -> Result<()> {
   // Modify the tracked file without committing to make base dirty
   std::fs::write(&tracked, b"v2")?;
 
-  // Attempt merge should fail with actionable error
+  // Merge should proceed even though base is dirty
   let mut cmd = env.bin_cmd()?;
-  let assert = cmd.arg("merge").arg(id.to_string()).assert();
-  assert
-    .failure()
-    .stderr(predicates::str::contains("has uncommitted changes"));
+  cmd.arg("merge").arg(id.to_string()).assert().success();
 
-  // Verify nothing was cleaned up
-  assert!(env.branch_exists(id, &slug)?);
-  assert!(env.task_file_path(id, &slug).exists());
-  assert!(env.worktree_dir_path(id, &slug).exists());
+  // Working tree should still contain the uncommitted change
+  let contents = std::fs::read_to_string(&tracked)?;
+  assert_eq!(contents, "v2");
+
+  // No stash entries should remain queued
+  let stash_list = std::process::Command::new("git")
+    .current_dir(env.path())
+    .arg("stash")
+    .arg("list")
+    .output()?;
+  assert!(stash_list.status.success());
+  assert!(
+    String::from_utf8_lossy(&stash_list.stdout)
+      .trim()
+      .is_empty(),
+    "expected no lingering stash entries"
+  );
+
+  // Verify cleanup happened after successful merge
+  assert!(!env.branch_exists(id, &slug)?);
+  assert!(!env.task_file_path(id, &slug).exists());
+  assert!(!env.worktree_dir_path(id, &slug).exists());
 
   Ok(())
 }

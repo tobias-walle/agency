@@ -1,12 +1,13 @@
 use std::fs;
+use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result, anyhow, bail};
 
 use crate::config::AppContext;
 use crate::utils::daemon::{notify_after_task_change, stop_sessions_of_task};
 use crate::utils::git::{
   current_branch_name, hard_reset_to_head, is_fast_forward, open_main_repo, rebase_onto, rev_parse,
-  update_branch_ref, worktree_is_clean,
+  stash_pop, stash_push, update_branch_ref, worktree_is_clean,
 };
 use crate::utils::task::{
   branch_name, parse_task_markdown, resolve_id_or_slug, task_file, worktree_dir,
@@ -36,22 +37,27 @@ pub fn run(ctx: &AppContext, ident: &str, base_override: Option<&str>) -> Result
     let repo = open_main_repo(ctx.paths.cwd())?;
 
     // If the base branch is currently checked out in the main worktree,
-    // ensure it is clean to avoid leaving the working tree in a dirty state.
+    // ensure we refresh it after the merge and auto-stash if required.
     let mut refresh_checked_out_base = false;
+    let mut needs_auto_stash = false;
     if let Ok(cur) = current_branch_name(&repo)
       && cur == base_branch
     {
+      refresh_checked_out_base = true;
       if !worktree_is_clean(&repo)? {
-        bail!(
-          "Base branch {base_branch} is checked out and has uncommitted changes; commit or stash before merging"
+        needs_auto_stash = true;
+        log_warn!(
+          "Base is checked out with changes; will auto-stash before merge: {}",
+          base_branch
+        );
+      } else {
+        log_warn!(
+          "Base is checked out and clean; will refresh after merge: {}",
+          base_branch
         );
       }
-      refresh_checked_out_base = true;
-      log_warn!(
-        "Base is checked out and clean; will refresh after merge: {}",
-        base_branch
-      );
     }
+    let mut pending_stash: Option<AutoStash> = None;
 
     log_warn!("Rebase {} onto {}", branch, base_branch);
 
@@ -69,11 +75,42 @@ pub fn run(ctx: &AppContext, ident: &str, base_override: Option<&str>) -> Result
       bail!("Fast-forward not possible: Base advanced; rerun after rebase");
     }
     let new_head = rev_parse(&wt_dir, "HEAD")?;
+    if needs_auto_stash {
+      let workdir = repo
+        .workdir()
+        .ok_or_else(|| anyhow!("no main worktree: cannot auto-stash before merge"))?;
+      let message = format!("agency auto-stash before merge {}", base_branch);
+      match stash_push(workdir, &message)? {
+        Some(stash_ref) => {
+          log_warn!(
+            "Auto-stashed checked-out base before fast-forward: {}",
+            base_branch
+          );
+          pending_stash = Some(AutoStash::new(workdir, stash_ref));
+        }
+        None => {
+          log_warn!(
+            "Base reported dirty but nothing to stash; continuing merge: {}",
+            base_branch
+          );
+        }
+      }
+    }
     log_success!("Fast-forward {} to {} at {}", base_branch, branch, new_head);
     update_branch_ref(&repo, &base_branch, &new_head)?;
     if refresh_checked_out_base {
       hard_reset_to_head(&repo)?;
       log_success!("Refreshed checked-out working tree for {}", base_branch);
+      if let Some(mut stash) = pending_stash {
+        let stash_ref = stash.stash_ref.clone();
+        if let Err(err) = stash.pop() {
+          stash.abandon();
+          bail!(
+            "Auto-stash {stash_ref} failed to reapply: {err}. Resolve manually with `git stash pop {stash_ref}` then rerun merge"
+          );
+        }
+        log_success!("Restored auto-stashed changes for {}", base_branch);
+      }
     }
 
     // Stop any running sessions for this task (best-effort)
@@ -94,4 +131,38 @@ pub fn run(ctx: &AppContext, ident: &str, base_override: Option<&str>) -> Result
 
     Ok(())
   })
+}
+
+struct AutoStash {
+  workdir: PathBuf,
+  stash_ref: String,
+  active: bool,
+}
+
+impl AutoStash {
+  fn new(workdir: &Path, stash_ref: String) -> Self {
+    Self {
+      workdir: workdir.to_path_buf(),
+      stash_ref,
+      active: true,
+    }
+  }
+
+  fn pop(&mut self) -> Result<()> {
+    stash_pop(&self.workdir, &self.stash_ref)?;
+    self.active = false;
+    Ok(())
+  }
+
+  fn abandon(&mut self) {
+    self.active = false;
+  }
+}
+
+impl Drop for AutoStash {
+  fn drop(&mut self) {
+    if self.active {
+      let _ = stash_pop(&self.workdir, &self.stash_ref);
+    }
+  }
 }
