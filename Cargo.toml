@@ -11,5 +11,10 @@ incremental = true
 opt-level = 2
 debug = false
 
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"
+
 [workspace.lints.rust]
 unused_extern_crates = "warn"
