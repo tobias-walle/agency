@@ -3,7 +3,7 @@ use anyhow::Result;
 use crate::config::AppContext;
 use crate::log_info;
 use crate::log_success;
-use crate::utils::daemon::{notify_tasks_changed, stop_sessions_of_task};
+use crate::utils::daemon::{notify_after_task_change, stop_sessions_of_task};
 use crate::utils::git::{delete_branch_if_exists, open_main_repo, prune_worktree_if_exists};
 use crate::utils::log::t;
 use crate::utils::task::{branch_name, resolve_id_or_slug, worktree_dir};
@@ -21,17 +21,18 @@ pub fn run(ctx: &AppContext, ident: &str) -> Result<()> {
     t::slug(&tref.slug)
   );
 
-  let repo = open_main_repo(ctx.paths.cwd())?;
-  let branch = branch_name(&tref);
-  let wt_dir = worktree_dir(&ctx.paths, &tref);
+  notify_after_task_change(ctx, || {
+    let repo = open_main_repo(ctx.paths.cwd())?;
+    let branch = branch_name(&tref);
+    let wt_dir = worktree_dir(&ctx.paths, &tref);
 
-  if prune_worktree_if_exists(&repo, &wt_dir).is_ok() {
-    log_success!("Pruned worktree {}", t::path(wt_dir.display()));
-  }
-  if delete_branch_if_exists(&repo, &branch).is_ok() {
-    log_success!("Deleted branch {}", branch);
-  }
+    if prune_worktree_if_exists(&repo, &wt_dir).is_ok() {
+      log_success!("Pruned worktree {}", t::path(wt_dir.display()));
+    }
+    if delete_branch_if_exists(&repo, &branch).is_ok() {
+      log_success!("Deleted branch {}", branch);
+    }
 
-  let _ = notify_tasks_changed(ctx);
-  Ok(())
+    Ok(())
+  })
 }

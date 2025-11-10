@@ -1,4 +1,5 @@
 use crate::config::{AppContext, compute_socket_path};
+use crate::log_warn;
 use crate::pty::protocol::{
   C2D, C2DControl, D2C, D2CControl, ProjectKey, SessionInfo, read_frame, write_frame,
 };
@@ -7,6 +8,22 @@ use crate::utils::task::TaskRef;
 use anyhow::{Context, Result};
 use std::os::unix::net::UnixStream;
 use std::path::Path;
+
+#[cfg(test)]
+use std::sync::atomic::{AtomicU64, Ordering};
+
+#[cfg(test)]
+static TASK_NOTIFY_COUNT: AtomicU64 = AtomicU64::new(0);
+
+#[cfg(test)]
+pub fn reset_task_notify_metrics() {
+  TASK_NOTIFY_COUNT.store(0, Ordering::SeqCst);
+}
+
+#[cfg(test)]
+pub fn task_notify_count() -> u64 {
+  TASK_NOTIFY_COUNT.load(Ordering::SeqCst)
+}
 
 /// Sends exactly one control message to the daemon over a short-lived connection.
 ///
@@ -45,15 +62,38 @@ pub fn stop_sessions_of_task(ctx: &AppContext, task: &TaskRef) -> anyhow::Result
   )
 }
 
+/// Runs a task mutation and emits a single notification when it succeeds.
+pub fn notify_after_task_change<F, T>(ctx: &AppContext, operation: F) -> anyhow::Result<T>
+where
+  F: FnOnce() -> anyhow::Result<T>,
+{
+  match operation() {
+    Ok(value) => {
+      if let Err(err) = notify_tasks_changed(ctx) {
+        log_warn!("Notify tasks changed failed: {}", err);
+      }
+      Ok(value)
+    }
+    Err(err) => Err(err),
+  }
+}
+
 /// Best-effort helper to notify the daemon that tasks changed for this project.
-pub fn notify_tasks_changed(ctx: &AppContext) -> anyhow::Result<()> {
+fn notify_tasks_changed(ctx: &AppContext) -> anyhow::Result<()> {
   let socket = compute_socket_path(&ctx.config);
   let repo = open_main_repo(ctx.paths.cwd())?;
   let repo_root = repo_workdir_or(&repo, ctx.paths.cwd());
   let project = ProjectKey {
     repo_root: repo_root.display().to_string(),
   };
-  send_message_to_daemon(&socket, C2DControl::NotifyTasksChanged { project })
+  let result = send_message_to_daemon(&socket, C2DControl::NotifyTasksChanged { project });
+  if result.is_ok() {
+    #[cfg(test)]
+    {
+      TASK_NOTIFY_COUNT.fetch_add(1, Ordering::SeqCst);
+    }
+  }
+  result
 }
 
 /// Best-effort helper to list sessions for the current project.

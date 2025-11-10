@@ -446,7 +446,6 @@ fn ui_loop(
                     if let Err(err) = crate::commands::start::run(&ctx, &id_str) {
                       crate::log_error!("Start failed: {}", err);
                     }
-                    let _ = crate::utils::daemon::notify_tasks_changed(&ctx);
                   }
                   Err(err) => {
                     crate::log_error!("New failed: {}", err);
@@ -459,7 +458,6 @@ fn ui_loop(
                 let ctx = ctx.clone();
                 move || {
                   let _ = crate::commands::new::run(&ctx, &slug, false, None);
-                  let _ = crate::utils::daemon::notify_tasks_changed(&ctx);
                 }
               });
             }
