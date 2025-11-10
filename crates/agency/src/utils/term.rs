@@ -4,6 +4,20 @@ use regex::Regex;
 use std::io::{self, Read, Write};
 use std::sync::OnceLock;
 
+fn ansi_regex() -> &'static Regex {
+  static ANSI_RE: OnceLock<Regex> = OnceLock::new();
+  ANSI_RE.get_or_init(|| {
+    Regex::new(
+      r"(?x)
+      \x1B\[[0-?]*[ -/]*[@-~]    # CSI sequence
+      |                            # or
+      \x1B\][^\x07\x1B]*(?:\x07|\x1B\\)  # OSC sequence terminated by BEL or ST
+    ",
+    )
+    .expect("valid ANSI regex")
+  })
+}
+
 /// Soft-clear viewport and disable extended keyboard modes.
 pub fn restore_terminal_state() {
   let mut stdout = io::stdout().lock();
@@ -85,21 +99,12 @@ pub fn confirm(prompt: &str) -> Result<bool> {
   Ok(matches!(ans.chars().next(), Some('y' | 'Y')))
 }
 
+pub fn strip_ansi_control_codes(input: &str) -> String {
+  ansi_regex().replace_all(input, "").into_owned()
+}
+
 fn visible_len(s: &str) -> usize {
   // Strip ANSI CSI and OSC sequences, then count remaining characters.
-  // CSI: ESC [ ... final in @-~
-  // OSC: ESC ] ... BEL or ST (ESC \)
-  static ANSI_RE: OnceLock<Regex> = OnceLock::new();
-  let re = ANSI_RE.get_or_init(|| {
-    Regex::new(
-      r"(?x)
-      \x1B\[[0-?]*[ -/]*[@-~]    # CSI sequence
-      |                            # or
-      \x1B\][^\x07\x1B]*(?:\x07|\x1B\\)  # OSC sequence terminated by BEL or ST
-    ",
-    )
-    .expect("valid ANSI regex")
-  });
-  let plain = re.replace_all(s, "");
+  let plain = strip_ansi_control_codes(s);
   plain.chars().count()
 }

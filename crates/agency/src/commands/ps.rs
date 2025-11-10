@@ -52,6 +52,7 @@ fn get_status_text(status: Option<&str>) -> String {
     Some("Stopped") => "Stopped".red().to_string(),
     Some("Exited") => "Exited".red().to_string(),
     Some("Running") => "Running".green().to_string(),
+    Some("Idle") => "Idle".blue().to_string(),
     Some(other) => other.to_string(),
   }
 }
@@ -60,12 +61,7 @@ fn get_status_text(status: Option<&str>) -> String {
 mod tests {
   use super::*;
   use crate::pty::protocol::SessionInfo;
-  use regex::Regex;
-
-  fn strip_ansi(input: &str) -> String {
-    let re = Regex::new(r"\x1B\[[0-9;]*m").expect("ansi regex");
-    re.replace_all(input, "").to_string()
-  }
+  use crate::utils::term::strip_ansi_control_codes;
 
   #[test]
   fn latest_session_selection_by_created_at() {
@@ -109,14 +105,17 @@ mod tests {
     let r = get_status_text(Some("Running"));
     let e = get_status_text(Some("Exited"));
     let s = get_status_text(Some("Stopped"));
-    assert_eq!(strip_ansi(&d), "Draft");
-    assert_eq!(strip_ansi(&r), "Running");
-    assert_eq!(strip_ansi(&e), "Exited");
-    assert_eq!(strip_ansi(&s), "Stopped");
+    let i = get_status_text(Some("Idle"));
+    assert_eq!(strip_ansi_control_codes(&d), "Draft");
+    assert_eq!(strip_ansi_control_codes(&r), "Running");
+    assert_eq!(strip_ansi_control_codes(&e), "Exited");
+    assert_eq!(strip_ansi_control_codes(&s), "Stopped");
+    assert_eq!(strip_ansi_control_codes(&i), "Idle");
     // Ensure ANSI color codes are present in colored output
     assert!(d.contains("\x1B["));
     assert!(r.contains("\x1B["));
     assert!(e.contains("\x1B["));
     assert!(s.contains("\x1B["));
+    assert!(i.contains("\x1B["));
   }
 }

@@ -1,6 +1,7 @@
 use std::collections::HashMap;
-use std::time::{Duration, SystemTime};
+use std::time::{Duration, Instant, SystemTime};
 
+use crate::pty::idle::IdleState;
 use crate::pty::protocol::{
   D2CControl, D2CControlChannel, D2COutputChannel, ProjectKey, SessionInfo, SessionOpenMeta,
   SessionStatsLite, TaskMeta, WireCommand,
@@ -43,6 +44,7 @@ impl SessionEntry {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SessionStatus {
   Running,
+  Idle,
   Exited {
     code: Option<i32>,
     signal: Option<i32>,
@@ -214,6 +216,7 @@ impl SessionRegistry {
       .unwrap_or(u64::MAX);
       let status_text = match entry.status {
         SessionStatus::Running => "Running".to_string(),
+        SessionStatus::Idle => "Idle".to_string(),
         SessionStatus::Exited { .. } => "Exited".to_string(),
       };
       out.push(SessionInfo {
@@ -287,6 +290,33 @@ impl SessionRegistry {
   #[must_use]
   pub fn snapshot(&self, session_id: u64) -> Option<(Vec<u8>, (u16, u16))> {
     self.sessions.get(&session_id).map(|e| e.session.snapshot())
+  }
+
+  pub fn poll_idle_sessions(&mut self, now: Instant) -> Vec<ProjectKey> {
+    let mut dirty_projects: Vec<ProjectKey> = Vec::new();
+    for entry in self.sessions.values_mut() {
+      if matches!(entry.status, SessionStatus::Exited { .. }) {
+        continue;
+      }
+      let (state, changed) = entry.session.poll_idle(now);
+      let target_status = match state {
+        IdleState::Active => SessionStatus::Running,
+        IdleState::Idle => SessionStatus::Idle,
+      };
+      if entry.status != target_status {
+        entry.status = target_status;
+        let project = entry.meta.project.clone();
+        if dirty_projects.iter().all(|p| p != &project) {
+          dirty_projects.push(project);
+        }
+      } else if changed {
+        let project = entry.meta.project.clone();
+        if dirty_projects.iter().all(|p| p != &project) {
+          dirty_projects.push(project);
+        }
+      }
+    }
+    dirty_projects
   }
 
   /// Scan sessions for exited children and return list to notify.

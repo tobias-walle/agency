@@ -7,6 +7,7 @@ pub enum TaskStatus {
   Draft,
   Stopped,
   Running,
+  Idle,
   Exited,
   Other(String),
 }
@@ -15,6 +16,7 @@ pub fn derive_status(latest: Option<&SessionInfo>, worktree_exists: bool) -> Tas
   if let Some(s) = latest {
     return match s.status.as_str() {
       "Running" => TaskStatus::Running,
+      "Idle" => TaskStatus::Idle,
       "Exited" => TaskStatus::Exited,
       other => TaskStatus::Other(other.to_string()),
     };
@@ -31,6 +33,7 @@ pub fn status_label(status: &TaskStatus) -> String {
     TaskStatus::Draft => "Draft".yellow().to_string(),
     TaskStatus::Stopped => "Stopped".red().to_string(),
     TaskStatus::Running => "Running".green().to_string(),
+    TaskStatus::Idle => "Idle".blue().to_string(),
     TaskStatus::Exited => "Exited".red().to_string(),
     TaskStatus::Other(s) => s.clone(),
   }
