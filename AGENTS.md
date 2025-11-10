@@ -125,7 +125,6 @@ Add the files and commit in a single command, e.g. `git add file1.ts file2.ts &&
 - In the Daemon
   - You MUST use the log crate for logging (e.g. `log::info!(...)`)
 
-
 ## Async
 
 - You MUST NEVER use `Tokio`. We want to keep the code simple and prefer the use of threads.
@@ -148,12 +147,13 @@ Every time a prompt starts with `PLAN:` you must enter the plan mode. In the pla
 
 General Workflow in Plan Mode:
 
-1. If there is ambiguity, ask clarifying questions. Give each question a number (for easy reference) and a recommended/default answer.
-2. After all questions were answered or the user asks you to, start with the research for the plan.
+1. Gather relevant information.
+2. Ask clarifying questions to check all your assumptions. Give each question a number (for easy reference) and a recommended/default answer.
+3. After that, start with the full research for the plan.
    The goal of the research is to read all necessary files to get a full picture how the change can be implemented.
    You MUST make sure you got all the relevant facts before generating the final plan.
    The plan should not contain sections like "Read file x to confirm strategy" as you should already know the content of all relevant files before creating the plan.
-3. After you have all the required information, finalize everything and present the very concrete, but high level plan to the user
+4. After you have all the required information, finalize everything and present the very concrete, but high level plan to the user
 
 Goal of the process is to discuss about the implementation on a high level, before you already update a lot of files which are hard to revert.
 
@@ -177,17 +177,10 @@ Structure your final plan into the following sections (replace placeholders in `
 - `## Questions`
 - `[Numbered questions and the assumed answers that went into this plan. The user might want to modify the assumptions.]`
 
-Strictly follow the format for plans. Don't read old plans to get the format, as the format changes over time.
+Strictly follow the format for plans.
 
-The plan mode ends once the user explicitly tells you to implement the plan.
+The plan mode ends once the user explicitly tells you to implement/execute the plan.
 Then, when implementing a plan, use your TODO list tool to track the progress.
-
-### Build Mode
-
-Everytime a prompt starts with `BUILD` you must enter the build mode.
-In the build mode, you fully focus on execution. This might be a plan or a direct task.
-
-Start execution by managing your TODO list and then continue working on them until you are finished with all tasks.
 
 ## Conditional Rules
 
