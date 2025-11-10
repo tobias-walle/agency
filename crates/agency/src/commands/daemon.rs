@@ -3,8 +3,8 @@ use std::process::Command as ProcCommand;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use crate::{log_success, log_warn};
 use anyhow::{Context, Result};
+use log::{info, warn};
 
 use crate::config::{compute_socket_path, load_config};
 use crate::pty::daemon as pty_daemon;
@@ -30,7 +30,7 @@ pub fn start() -> Result<()> {
   let socket = compute_socket_path(&cfg);
 
   if UnixStream::connect(&socket).is_ok() {
-    log_warn!("Daemon already running");
+    warn!("Daemon already running");
     return Ok(());
   }
 
@@ -47,7 +47,7 @@ pub fn start() -> Result<()> {
   let start = Instant::now();
   while start.elapsed() < Duration::from_secs(5) {
     if std::fs::metadata(&socket).is_ok() {
-      log_success!("Started daemon at {}", socket.display());
+      info!("Started daemon at {}", socket.display());
       return Ok(());
     }
     thread::sleep(Duration::from_millis(50));
@@ -73,7 +73,7 @@ pub fn stop() -> Result<()> {
   let start = Instant::now();
   while start.elapsed() < Duration::from_secs(5) {
     if std::fs::metadata(&socket).is_err() {
-      log_success!("Stopped daemon");
+      info!("Stopped daemon");
       return Ok(());
     }
     thread::sleep(Duration::from_millis(50));
