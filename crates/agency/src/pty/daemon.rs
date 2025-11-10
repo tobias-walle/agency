@@ -281,6 +281,10 @@ impl Daemon {
       if let Some(existing) =
         reg.find_latest_session_for_task(&meta.project, meta.task.id, &meta.task.slug)
       {
+        info!(
+          "Reused session {} for project {} task {}",
+          existing, &meta.project.repo_root, &meta.task.slug
+        );
         let _ = reg.ensure_running_for_attach(existing, rows, cols);
         existing
       } else {

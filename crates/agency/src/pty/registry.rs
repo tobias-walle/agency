@@ -8,6 +8,7 @@ use crate::pty::protocol::{
 };
 use crate::pty::session::Session;
 use crate::utils::command::Command;
+use log::info;
 
 /// Server-side metadata attached to a session.
 pub struct SessionMeta {
@@ -38,6 +39,11 @@ impl SessionEntry {
   #[must_use]
   pub fn stats_lite(&self) -> SessionStatsLite {
     self.session.stats_lite()
+  }
+
+  pub fn set_status(&mut self, new_status: SessionStatus) {
+    info!("Change status {:?}", &new_status);
+    self.status = new_status;
   }
 }
 
@@ -127,7 +133,7 @@ impl SessionRegistry {
       && entry.clients.is_empty()
     {
       entry.session.restart_shell(rows, cols)?;
-      entry.status = SessionStatus::Running;
+      entry.set_status(SessionStatus::Running);
     }
     Ok(())
   }
@@ -255,7 +261,7 @@ impl SessionRegistry {
   pub fn restart_session(&mut self, session_id: u64, rows: u16, cols: u16) -> anyhow::Result<()> {
     if let Some(entry) = self.sessions.get_mut(&session_id) {
       entry.session.restart_shell(rows, cols)?;
-      entry.status = SessionStatus::Running;
+      entry.set_status(SessionStatus::Running);
     }
     Ok(())
   }
@@ -304,7 +310,7 @@ impl SessionRegistry {
         IdleState::Idle => SessionStatus::Idle,
       };
       if entry.status != target_status {
-        entry.status = target_status;
+        entry.set_status(target_status);
         let project = entry.meta.project.clone();
         if dirty_projects.iter().all(|p| p != &project) {
           dirty_projects.push(project);
@@ -328,10 +334,10 @@ impl SessionRegistry {
       }
       if let Some(_status) = entry.session.try_wait_child() {
         let stats = entry.session.stats_lite();
-        entry.status = SessionStatus::Exited {
+        entry.set_status(SessionStatus::Exited {
           code: None,
           signal: None,
-        };
+        });
         out.push((*sid, stats));
       }
     }

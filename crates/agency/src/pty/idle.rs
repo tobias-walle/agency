@@ -16,19 +16,13 @@ impl Default for IdleState {
 
 #[derive(Debug, Clone, Copy)]
 pub struct IdleThresholds {
-  pub raw_quiet: Duration,
   pub visible_quiet: Duration,
   pub enter_idle_after: Duration,
 }
 
 impl IdleThresholds {
-  pub const fn new(
-    raw_quiet: Duration,
-    visible_quiet: Duration,
-    enter_idle_after: Duration,
-  ) -> Self {
+  pub const fn new(visible_quiet: Duration, enter_idle_after: Duration) -> Self {
     Self {
-      raw_quiet,
       visible_quiet,
       enter_idle_after,
     }
@@ -38,9 +32,8 @@ impl IdleThresholds {
 impl Default for IdleThresholds {
   fn default() -> Self {
     Self {
-      raw_quiet: Duration::from_secs(1),
-      visible_quiet: Duration::from_millis(2500),
-      enter_idle_after: Duration::from_millis(250),
+      visible_quiet: Duration::from_secs(3),
+      enter_idle_after: Duration::from_millis(500),
     }
   }
 }
@@ -122,8 +115,7 @@ impl IdleTracker {
   }
 
   fn should_enter_idle(&self, now: Instant) -> bool {
-    now.duration_since(self.last_raw_activity) >= self.thresholds.raw_quiet
-      && now.duration_since(self.last_visible_activity) >= self.thresholds.visible_quiet
+    now.duration_since(self.last_visible_activity) >= self.thresholds.visible_quiet
   }
 }
 
@@ -143,11 +135,7 @@ mod tests {
   fn tracker(now: Instant) -> IdleTracker {
     IdleTracker::with_thresholds(
       now,
-      IdleThresholds::new(
-        Duration::from_millis(200),
-        Duration::from_millis(500),
-        Duration::from_millis(100),
-      ),
+      IdleThresholds::new(Duration::from_millis(500), Duration::from_millis(100)),
     )
   }
 
