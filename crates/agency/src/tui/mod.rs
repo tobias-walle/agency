@@ -503,6 +503,7 @@ fn reinit_terminal(terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>) -
 fn status_style(status: &str) -> Style {
   match status {
     "Running" => Style::default().fg(Color::Green),
+    "Idle" => Style::default().fg(Color::Blue),
     "Exited" | "Stopped" => Style::default().fg(Color::Red),
     "Draft" => Style::default().fg(Color::Yellow),
     _ => Style::default(),
@@ -527,6 +528,7 @@ fn build_task_rows(
       crate::utils::status::TaskStatus::Draft => "Draft".to_string(),
       crate::utils::status::TaskStatus::Stopped => "Stopped".to_string(),
       crate::utils::status::TaskStatus::Running => "Running".to_string(),
+      crate::utils::status::TaskStatus::Idle => "Idle".to_string(),
       crate::utils::status::TaskStatus::Exited => "Exited".to_string(),
       crate::utils::status::TaskStatus::Other(s) => s,
     };
@@ -588,6 +590,7 @@ mod tests {
   #[test]
   fn status_style_mapping() {
     assert_eq!(status_style("Running").fg, Some(Color::Green));
+    assert_eq!(status_style("Idle").fg, Some(Color::Blue));
     assert_eq!(status_style("Exited").fg, Some(Color::Red));
     assert_eq!(status_style("Stopped").fg, Some(Color::Red));
     assert_eq!(status_style("Draft").fg, Some(Color::Yellow));
@@ -633,6 +636,7 @@ mod tests {
   fn build_rows_session_mapping_and_selection() {
     let tasks = vec![make_task(1, "alpha"), make_task(2, "beta")];
     let sessions = vec![
+      make_session(9, 1, "alpha", "Running", 900),
       make_session(10, 2, "beta", "Running", 1000),
       make_session(11, 2, "beta", "Exited", 1100),
     ];
@@ -644,12 +648,42 @@ mod tests {
     let (rows, sel) = build_task_rows(&ctx, &tasks, &sessions, 5);
     assert_eq!(rows.len(), 2);
     assert_eq!(rows[0].slug, "alpha");
-    assert_eq!(rows[0].status, "Draft");
-    assert_eq!(rows[0].session, None);
+    assert_eq!(rows[0].status, "Running");
+    assert_eq!(rows[0].session, Some(9));
     assert_eq!(rows[1].slug, "beta");
     assert_eq!(rows[1].status, "Exited");
     assert_eq!(rows[1].session, Some(11));
     assert_eq!(sel, 1);
+  }
+
+  #[test]
+  fn build_rows_show_idle_status() {
+    let tasks = vec![make_task(1, "alpha")];
+    let sessions = vec![make_session(10, 1, "alpha", "Idle", 1000)];
+    let dir = tempfile::TempDir::new().expect("tmp");
+    let ctx = crate::config::AppContext {
+      paths: crate::config::AgencyPaths::new(dir.path()),
+      config: crate::config::AgencyConfig::default(),
+    };
+    let (rows, _) = build_task_rows(&ctx, &tasks, &sessions, 0);
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].status, "Idle");
+    assert_eq!(rows[0].session, Some(10));
+  }
+
+  #[test]
+  fn build_rows_without_session_are_draft() {
+    let tasks = vec![make_task(1, "alpha")];
+    let sessions: Vec<SessionInfo> = Vec::new();
+    let dir = tempfile::TempDir::new().expect("tmp");
+    let ctx = crate::config::AppContext {
+      paths: crate::config::AgencyPaths::new(dir.path()),
+      config: crate::config::AgencyConfig::default(),
+    };
+    let (rows, _) = build_task_rows(&ctx, &tasks, &sessions, 0);
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].status, "Draft");
+    assert_eq!(rows[0].session, None);
   }
 
   #[test]

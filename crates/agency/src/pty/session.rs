@@ -11,6 +11,7 @@
 //! forwarded as `D2C::Output` frames. A snapshot (`vt100` screen contents) is
 //! sent separately during handshake.
 
+use crate::pty::idle::{IdleState, IdleTracker};
 use crate::pty::protocol::D2COutputChannel;
 use crate::utils::command::Command;
 use anyhow::Context;
@@ -32,6 +33,7 @@ pub struct Session {
   bytes_in: Arc<AtomicU64>,
   pub bytes_out: Arc<AtomicU64>,
   pub start: Instant,
+  idle: Arc<Mutex<IdleTracker>>,
   output_sinks: Arc<Mutex<Vec<D2COutputChannel>>>,
   cmd: Command,
 }
@@ -56,6 +58,7 @@ impl Session {
     let bytes_in = Arc::new(AtomicU64::new(0));
     let bytes_out = Arc::new(AtomicU64::new(0));
     let start = Instant::now();
+    let idle = Arc::new(Mutex::new(IdleTracker::new(start)));
 
     let master: Box<dyn MasterPty + Send> = pair.master;
     let writer = master.take_writer().context("failed to take PTY writer")?;
@@ -72,6 +75,7 @@ impl Session {
       bytes_in,
       bytes_out,
       start,
+      idle,
       output_sinks,
       cmd,
     };
@@ -111,6 +115,12 @@ impl Session {
       let mut p = self.parser.lock();
       *p = vt100::Parser::new(rows, cols, 10_000);
     }
+    {
+      let now = Instant::now();
+      let mut idle = self.idle.lock();
+      *idle = IdleTracker::new(now);
+      self.start = now;
+    }
 
     // Start a fresh PTY read pump bound to the new master
     self.start_read_pump();
@@ -141,6 +151,7 @@ impl Session {
     let parser = self.parser.clone();
     let bytes_out = self.bytes_out.clone();
     let sinks = self.output_sinks.clone();
+    let idle = self.idle.clone();
 
     thread::spawn(move || {
       let mut reader = master_for_read
@@ -155,6 +166,10 @@ impl Session {
             {
               let mut p = parser.lock();
               p.process(&buf[..n]);
+            }
+            {
+              let mut tracker = idle.lock();
+              tracker.record_output(Instant::now(), &buf[..n]);
             }
             bytes_out.fetch_add(n as u64, Ordering::Relaxed);
             // Forward to all attached clients (non-blocking, lossy)
@@ -188,6 +203,10 @@ impl Session {
     self
       .bytes_in
       .fetch_add(bytes.len() as u64, Ordering::Relaxed);
+    {
+      let mut tracker = self.idle.lock();
+      tracker.record_input(Instant::now());
+    }
     let mut w = self.writer.lock();
     w.write_all(bytes)?;
     let _ = w.flush();
@@ -222,6 +241,11 @@ impl Session {
       bytes_out: self.bytes_out.load(std::sync::atomic::Ordering::Relaxed),
       elapsed_ms: u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX),
     }
+  }
+
+  pub fn poll_idle(&self, now: Instant) -> (IdleState, bool) {
+    let mut tracker = self.idle.lock();
+    tracker.poll(now)
   }
 
   #[allow(dead_code)]

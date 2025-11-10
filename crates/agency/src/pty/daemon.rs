@@ -25,7 +25,7 @@ use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 pub fn run_daemon(socket_path: &Path) -> anyhow::Result<()> {
   info!("Starting daemon. Socket path: {}", socket_path.display());
@@ -102,6 +102,7 @@ impl Daemon {
     while !self.shutdown.load(std::sync::atomic::Ordering::Relaxed) {
       // Handle session exits and broadcast notifications.
       self.poll_session_exits();
+      self.poll_session_idle();
 
       // Try accept one client connection.
       if let Some(stream) = self.try_accept()? {
@@ -136,6 +137,13 @@ impl Daemon {
           self.broadcast_sessions_changed(&pk);
         }
       }
+    }
+  }
+
+  fn poll_session_idle(&self) {
+    let dirty_projects = { self.registry.lock().poll_idle_sessions(Instant::now()) };
+    for project in dirty_projects {
+      self.broadcast_sessions_changed(&project);
     }
   }
 
