@@ -5,7 +5,7 @@ use crate::pty::protocol::{
 };
 use crate::utils::git::{open_main_repo, repo_workdir_or};
 use crate::utils::task::TaskRef;
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, anyhow, bail};
 use std::os::unix::net::UnixStream;
 use std::path::Path;
 
@@ -25,6 +25,20 @@ pub fn task_notify_count() -> u64 {
   TASK_NOTIFY_COUNT.load(Ordering::SeqCst)
 }
 
+const DAEMON_NOT_RUNNING_MSG: &str =
+  "Daemon not running. Please start it with `agency daemon start`";
+
+/// Connect to the daemon socket for the current context and bail with guidance on failure.
+pub fn connect_daemon(ctx: &AppContext) -> anyhow::Result<UnixStream> {
+  let socket = compute_socket_path(&ctx.config);
+  connect_daemon_socket(&socket)
+}
+
+/// Connect to a daemon socket path and bail with guidance on failure.
+pub fn connect_daemon_socket(socket: &Path) -> anyhow::Result<UnixStream> {
+  UnixStream::connect(socket).map_err(|_| anyhow!(DAEMON_NOT_RUNNING_MSG))
+}
+
 /// Sends exactly one control message to the daemon over a short-lived connection.
 ///
 /// Protocol: the daemon reads one control frame, replies, then closes the socket.
@@ -32,8 +46,7 @@ pub fn task_notify_count() -> u64 {
 /// opening a new connection per message avoids ambiguity with attach (multi-frame)
 /// flows and prevents protocol state mismatches.
 pub fn send_message_to_daemon(socket: &Path, msg: C2DControl) -> Result<()> {
-  let mut stream = UnixStream::connect(socket)
-    .with_context(|| format!("failed to connect to {}", socket.display()))?;
+  let mut stream = connect_daemon_socket(socket)?;
   write_frame(&mut stream, &C2D::Control(msg)).context("failed to write control frame")?;
   let _ = stream.shutdown(std::net::Shutdown::Both);
   Ok(())
@@ -98,37 +111,29 @@ fn notify_tasks_changed(ctx: &AppContext) -> anyhow::Result<()> {
 
 /// Best-effort helper to list sessions for the current project.
 ///
-/// Returns an empty list if the daemon is unavailable or any error occurs.
-#[must_use]
-pub fn list_sessions_for_project(ctx: &AppContext) -> Vec<SessionInfo> {
+/// Returns an error with guidance if the daemon is unavailable.
+pub fn list_sessions_for_project(ctx: &AppContext) -> anyhow::Result<Vec<SessionInfo>> {
   let socket = compute_socket_path(&ctx.config);
-  // Compute project key from the main repo workdir
-  let Ok(repo) = open_main_repo(ctx.paths.cwd()) else {
-    return Vec::new();
-  };
+  let repo = open_main_repo(ctx.paths.cwd())?;
   let repo_root = repo_workdir_or(&repo, ctx.paths.cwd());
   let project = ProjectKey {
     repo_root: repo_root.display().to_string(),
   };
 
-  // Connect and request sessions; swallow errors
-  let Ok(mut stream) = UnixStream::connect(&socket) else {
-    return Vec::new();
-  };
-  if write_frame(
+  let mut stream = connect_daemon_socket(&socket)?;
+  write_frame(
     &mut stream,
     &C2D::Control(C2DControl::ListSessions {
       project: Some(project),
     }),
   )
-  .is_err()
-  {
-    return Vec::new();
-  }
+  .context("failed to write ListSessions frame")?;
 
   let reply: Result<D2C> = read_frame(&mut stream);
   match reply {
-    Ok(D2C::Control(D2CControl::Sessions { entries })) => entries,
-    _ => Vec::new(),
+    Ok(D2C::Control(D2CControl::Sessions { entries })) => Ok(entries),
+    Ok(D2C::Control(D2CControl::Error { message })) => bail!("{message}"),
+    Ok(_) => bail!("Protocol error: Expected Sessions reply"),
+    Err(err) => Err(err),
   }
 }

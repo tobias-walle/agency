@@ -61,13 +61,13 @@ pub fn run(ctx: &AppContext, slug: &str, no_edit: bool, agent: Option<&str>) -> 
     log_info!("Create task {} (id {})", t::slug(&slug), t::id(id));
 
     // Optionally open the task file in the user's editor
-    if std::io::stdout().is_terminal() && !no_edit {
-      if let Some(updated_body) =
+    if std::io::stdout().is_terminal()
+      && !no_edit
+      && let Some(updated_body) =
         edit_task_description(&ctx.paths, &task, ctx.paths.cwd(), &content.body)?
-      {
-        content.body = updated_body;
-        write_task_content(&ctx.paths, &task, &content)?;
-      }
+    {
+      content.body = updated_body;
+      write_task_content(&ctx.paths, &task, &content)?;
     }
 
     // Worktree and bootstrap are now created lazily at attach time

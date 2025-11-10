@@ -455,8 +455,7 @@ mod tests {
     let stored = std::fs::read_to_string(stored_path).expect("read stored file");
     assert!(
       stored.ends_with('\n'),
-      "stored body should end with newline, got: {:?}",
-      stored
+      "stored body should end with newline, got: {stored:?}"
     );
   }
 }

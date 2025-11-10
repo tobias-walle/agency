@@ -21,13 +21,13 @@ pub fn run(ctx: &AppContext) -> Result<()> {
   let existing_agent = table
     .get("agent")
     .and_then(|value| value.as_str())
-    .map(|value| value.to_string());
+    .map(std::string::ToString::to_string);
   let existing_detach = table
     .get("keybindings")
     .and_then(|value| value.as_table())
     .and_then(|tbl| tbl.get("detach"))
     .and_then(|value| value.as_str())
-    .map(|value| value.to_string());
+    .map(std::string::ToString::to_string);
 
   let wizard = Wizard::new();
   anstream::println!();

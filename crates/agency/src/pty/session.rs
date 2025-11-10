@@ -260,6 +260,7 @@ impl Session {
     }
   }
 
+  #[must_use]
   pub fn poll_idle(&self, now: Instant) -> (IdleState, bool) {
     let mut tracker = self.idle.lock();
     tracker.poll(now)
@@ -314,7 +315,7 @@ fn respond_to_cursor_requests(
   }
   // PTYs expect cursor reports back on the slave side, so we reply straight to
   // the shell. Some agents, like codex, expect this to not crash.
-  let response = format!("\x1b[{};{}R", row as u32 + 1, col as u32 + 1);
+  let response = format!("\x1b[{};{}R", u32::from(row) + 1, u32::from(col) + 1);
   let mut guard = writer.lock();
   for _ in 0..count {
     if let Err(err) = guard.write_all(response.as_bytes()) {

@@ -183,13 +183,13 @@ pub const FRAME_HEADER_LEN: usize = 4;
 /// Writes one framed payload to the given writer.
 pub fn write_frame<W: Write, T: SerdeSerialize>(mut writer: W, payload: &T) -> Result<()> {
   let data = bincode::serde::encode_to_vec(payload, bincode::config::standard())
-    .context("encode payload with bincode")?;
+    .context("Failed to encode payload with bincode")?;
   let len = u32::try_from(data.len()).context("payload too large for frame header (u32)")?;
   let hdr = len.to_le_bytes();
   writer.write_all(&hdr).context("write frame header (len)")?;
   writer
     .write_all(&data)
-    .context("write frame payload bytes")?;
+    .context("Failed to write frame payload bytes")?;
   Ok(())
 }
 
@@ -198,15 +198,15 @@ pub fn read_frame<R: Read, T: DeserializeOwned>(mut reader: R) -> Result<T> {
   let mut hdr = [0u8; FRAME_HEADER_LEN];
   reader
     .read_exact(&mut hdr)
-    .context("read frame header (len)")?;
+    .context("Failed to read frame header")?;
   let len = u32::from_le_bytes(hdr) as usize;
   let mut buf = vec![0u8; len];
   reader
     .read_exact(&mut buf)
-    .context("read frame payload bytes")?;
+    .context("Failed to read frame payload bytes")?;
   let (msg, _): (T, usize) =
     bincode::serde::decode_from_slice::<T, _>(&buf, bincode::config::standard())
-      .context("decode payload with bincode")?;
+      .context("Failed to decode payload with bincode")?;
   Ok(msg)
 }
 
