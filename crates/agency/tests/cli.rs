@@ -624,12 +624,10 @@ fn new_bootstraps_git_ignored_root_files_with_defaults() -> Result<()> {
   assert!(wt.join(".env").is_file());
   assert!(wt.join(".env.local").is_file());
   assert!(wt.join("secrets.txt").is_file());
-  // Excluded by size; dirs are included by default now
+  // Excluded by size; dirs are not copied unless included
   assert!(!wt.join("big.bin").exists());
-  assert!(wt.join(".venv").is_dir());
-  assert!(wt.join(".venv").join("pkg.txt").is_file());
-  assert!(wt.join(".direnv").is_dir());
-  assert!(wt.join(".direnv").join("env.txt").is_file());
+  assert!(!wt.join(".venv").exists());
+  assert!(!wt.join(".direnv").exists());
   // Always excluded from copying
   assert!(!wt.join(".agency").exists());
 
