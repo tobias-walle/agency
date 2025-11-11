@@ -26,7 +26,7 @@ cmd = ["claude", "$AGENCY_TASK"]
 cmd = ["opencode", "--prompt", "$AGENCY_TASK"]
 
 [agents.codex]
-cmd = ["codex", "--full-auto", "$AGENCY_TASK"]
+cmd = ["codex", "--full-auto", "--add-dir", "$AGENCY_ROOT", "$AGENCY_TASK"]
 
 # Used for testing
 [agents.fake]
