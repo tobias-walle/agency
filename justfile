@@ -6,7 +6,7 @@ _list:
 # Start the app
 [no-exit-message]
 @agency *ARGS:
-  cargo run -p agency -- {{ARGS}}
+  AGENCY_SOCKET_PATH="$(pwd)/target/agency.sock" cargo run -p agency -- {{ARGS}}
 
 # Run the tests with nextest
 test *ARGS:
