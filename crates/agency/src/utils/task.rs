@@ -114,16 +114,23 @@ pub fn normalize_and_validate_slug(input: &str) -> Result<String> {
   for ch in lowered.chars() {
     if ch.is_alphanumeric() {
       out.push(ch);
-    } else {
-      if !out.ends_with('-') {
-        out.push('-');
-      }
+    } else if !out.ends_with('-') {
+      out.push('-');
     }
   }
   // Trim leading/trailing '-'
   let trimmed = out.trim_matches('-').to_string();
   if trimmed.is_empty() {
     bail!("invalid slug: empty after slugify");
+  }
+  // Enforce starting with a letter to keep branch/task names readable
+  if !trimmed
+    .chars()
+    .next()
+    .map(|c| c.is_ascii_alphabetic())
+    .unwrap_or(false)
+  {
+    bail!("invalid slug: must start with a letter");
   }
   Ok(trimmed)
 }
@@ -350,7 +357,8 @@ mod tests {
       normalize_and_validate_slug("alpha---world").unwrap(),
       "alpha-world"
     );
-    assert_eq!(normalize_and_validate_slug("1invalid").unwrap(), "1invalid");
+    // Starting with a digit should be rejected
+    assert!(normalize_and_validate_slug("1invalid").is_err());
 
     // Error cases: empty or becomes empty after slugify
     assert!(normalize_and_validate_slug("").is_err());

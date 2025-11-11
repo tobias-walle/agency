@@ -9,15 +9,15 @@ use crate::utils::log::t;
 use crate::utils::task::{resolve_id_or_slug, worktree_dir};
 
 fn resolve_shell_argv(cfg: &AgencyConfig) -> Vec<String> {
-  if let Some(v) = &cfg.shell {
-    if !v.is_empty() {
-      return v.clone();
-    }
+  if let Some(v) = &cfg.shell
+    && !v.is_empty()
+  {
+    return v.clone();
   }
-  if let Ok(sh) = std::env::var("SHELL") {
-    if !sh.trim().is_empty() {
-      return vec![sh];
-    }
+  if let Ok(sh) = std::env::var("SHELL")
+    && !sh.trim().is_empty()
+  {
+    return vec![sh];
   }
   vec!["/bin/sh".to_string()]
 }
@@ -35,7 +35,7 @@ pub fn run(ctx: &AppContext, ident: &str) -> Result<()> {
   }
 
   let argv = resolve_shell_argv(&ctx.config);
-  let program = argv.get(0).map(|s| s.trim()).unwrap_or("");
+  let program = argv.first().map(|s| s.trim()).unwrap_or("");
   if program.is_empty() {
     bail!("shell program is empty");
   }
@@ -65,8 +65,10 @@ mod tests {
   #[test]
   fn prefers_config_over_env() {
     with_vars([("SHELL", Some("/bin/bash"))], || {
-      let mut cfg = AgencyConfig::default();
-      cfg.shell = Some(vec!["zsh".to_string(), "-l".to_string()]);
+      let cfg = AgencyConfig {
+        shell: Some(vec!["zsh".to_string(), "-l".to_string()]),
+        ..Default::default()
+      };
       let argv = resolve_shell_argv(&cfg);
       assert_eq!(argv, vec!["zsh", "-l"]);
     });

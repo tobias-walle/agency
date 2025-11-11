@@ -5,6 +5,7 @@ use std::path::Path;
 use anyhow::{Context, Result, bail};
 
 use crate::config::AppContext;
+use crate::log_info;
 use crate::utils::daemon::notify_after_task_change;
 use crate::utils::git::{current_branch_name, open_main_repo};
 use crate::utils::log::t;
@@ -12,7 +13,6 @@ use crate::utils::task::{
   TaskContent, TaskFrontmatter, TaskRef, compute_unique_slug, edit_task_description, next_id,
   normalize_and_validate_slug, write_task_content,
 };
-use crate::{log_error, log_info};
 
 pub fn run(ctx: &AppContext, slug: &str, no_edit: bool, agent: Option<&str>) -> Result<TaskRef> {
   notify_after_task_change(ctx, || {

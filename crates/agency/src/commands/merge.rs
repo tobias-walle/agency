@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result, anyhow, bail};
+use anyhow::{Context, Result, bail};
 
 use crate::config::AppContext;
 use crate::utils::daemon::{notify_after_task_change, stop_sessions_of_task};
