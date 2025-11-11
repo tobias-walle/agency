@@ -16,11 +16,13 @@ use std::sync::atomic::{AtomicU64, Ordering};
 static TASK_NOTIFY_COUNT: AtomicU64 = AtomicU64::new(0);
 
 #[cfg(test)]
+#[allow(dead_code)]
 pub fn reset_task_notify_metrics() {
   TASK_NOTIFY_COUNT.store(0, Ordering::SeqCst);
 }
 
 #[cfg(test)]
+#[allow(dead_code)]
 pub fn task_notify_count() -> u64 {
   TASK_NOTIFY_COUNT.load(Ordering::SeqCst)
 }

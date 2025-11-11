@@ -1,7 +1,6 @@
 #![cfg(unix)]
 #![allow(dead_code)]
 
-use std::fs::create_dir_all;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command};
 use std::time::{Duration, Instant};
@@ -11,7 +10,6 @@ use super::common;
 use anyhow::Context;
 use expectrl::Expect;
 use expectrl::session::OsSession as Session;
-use fs_extra::file::{self, CopyOptions};
 
 #[must_use]
 pub fn bin() -> PathBuf {

@@ -278,7 +278,6 @@ pub fn compute_socket_path(cfg: &AgencyConfig) -> std::path::PathBuf {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use std::path::PathBuf;
   use temp_env::with_vars;
 
   #[test]
@@ -292,7 +291,10 @@ mod tests {
     with_vars(
       [
         ("AGENCY_SOCKET_PATH", Some(env_sock.display().to_string())),
-        ("XDG_RUNTIME_DIR", Some(xdg_dir.path().display().to_string())),
+        (
+          "XDG_RUNTIME_DIR",
+          Some(xdg_dir.path().display().to_string()),
+        ),
       ],
       || {
         let cfg = AgencyConfig {
@@ -302,7 +304,7 @@ mod tests {
           ..Default::default()
         };
         let path = compute_socket_path(&cfg);
-        assert_eq!(path, PathBuf::from(env_sock));
+        assert_eq!(path, env_sock);
         assert!(path.parent().unwrap().is_dir());
       },
     );
@@ -314,28 +316,40 @@ mod tests {
     let cfg_dir = tempfile::tempdir().expect("temp dir cfg");
     let cfg_sock = cfg_dir.path().join("cfg.sock");
 
-    with_vars([("XDG_RUNTIME_DIR", Some(xdg_dir.path().display().to_string()))], || {
-      let cfg = AgencyConfig {
-        daemon: Some(DaemonConfig {
-          socket_path: Some(cfg_sock.display().to_string()),
-        }),
-        ..Default::default()
-      };
-      let path = compute_socket_path(&cfg);
-      assert_eq!(path, PathBuf::from(cfg_sock));
-      assert!(path.parent().unwrap().is_dir());
-    });
+    with_vars(
+      [(
+        "XDG_RUNTIME_DIR",
+        Some(xdg_dir.path().display().to_string()),
+      )],
+      || {
+        let cfg = AgencyConfig {
+          daemon: Some(DaemonConfig {
+            socket_path: Some(cfg_sock.display().to_string()),
+          }),
+          ..Default::default()
+        };
+        let path = compute_socket_path(&cfg);
+        assert_eq!(path, cfg_sock);
+        assert!(path.parent().unwrap().is_dir());
+      },
+    );
   }
 
   #[test]
   fn compute_uses_xdg_when_no_env_or_config() {
     let xdg_dir = tempfile::tempdir().expect("temp dir xdg");
-    with_vars([("XDG_RUNTIME_DIR", Some(xdg_dir.path().display().to_string()))], || {
-      let cfg = AgencyConfig::default();
-      let path = compute_socket_path(&cfg);
-      assert_eq!(path, xdg_dir.path().join("agency.sock"));
-      assert!(path.parent().unwrap().is_dir());
-    });
+    with_vars(
+      [(
+        "XDG_RUNTIME_DIR",
+        Some(xdg_dir.path().display().to_string()),
+      )],
+      || {
+        let cfg = AgencyConfig::default();
+        let path = compute_socket_path(&cfg);
+        assert_eq!(path, xdg_dir.path().join("agency.sock"));
+        assert!(path.parent().unwrap().is_dir());
+      },
+    );
   }
 
   #[test]
@@ -350,7 +364,14 @@ mod tests {
       || {
         let cfg = AgencyConfig::default();
         let path = compute_socket_path(&cfg);
-        assert_eq!(path, home_dir.path().join(".local").join("run").join("agency.sock"));
+        assert_eq!(
+          path,
+          home_dir
+            .path()
+            .join(".local")
+            .join("run")
+            .join("agency.sock")
+        );
         assert!(path.parent().unwrap().is_dir());
       },
     );

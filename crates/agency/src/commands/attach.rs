@@ -1,5 +1,4 @@
 use anyhow::Result;
-use std::collections::HashMap;
 
 use crate::config::{AppContext, compute_socket_path};
 use crate::pty::client as pty_client;
