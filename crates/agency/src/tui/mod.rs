@@ -26,6 +26,8 @@ mod colors;
 
 use crate::utils::interactive::{InteractiveReq, register_sender as register_interactive_sender};
 use crate::utils::log::{LogEvent, clear_log_sink, set_log_sink};
+mod select_menu;
+use select_menu::{MenuOutcome, SelectMenuState};
 
 #[derive(Clone, Debug)]
 struct TaskRow {
@@ -45,6 +47,10 @@ struct AppState {
   slug_input: String,
   cmd_log: Vec<LogEvent>,
   paused: bool,
+  // Agent selected for the New Task overlay
+  selected_agent: Option<String>,
+  // Mode to return to after closing a select menu
+  return_after_menu: Option<Mode>,
 }
 
 impl AppState {
@@ -256,15 +262,25 @@ fn ui_loop(
       // Input overlay
       if let Mode::InputSlug { start_and_attach } = state.mode {
         let area = centered_rect(rects[0], 50, 3);
-        let title = if start_and_attach {
+        let left_title = if start_and_attach {
           "New Task + Start"
         } else {
           "New Task"
         };
+        let agent_name = state
+          .selected_agent
+          .clone()
+          .unwrap_or_else(|| "-".to_string());
+        let right_title = Line::from(vec![
+          Span::raw("Agent: "),
+          Span::raw(agent_name).fg(Color::Cyan),
+          Span::raw(" (^A to switch)"),
+        ])
+        .right_aligned();
         let block = Block::default()
           .borders(Borders::ALL)
-          .title(title)
-          .title_alignment(Alignment::Center);
+          .title(Line::from(left_title))
+          .title(right_title);
         let input_area = inner(area);
         let prompt = ratatui::widgets::Paragraph::new(Line::from(state.slug_input.clone()));
         f.render_widget(block, area);
@@ -276,6 +292,13 @@ fn ui_loop(
           cx = max_x;
         }
         f.set_cursor_position((cx, input_area.y));
+      }
+
+      // Select menu overlay (draw on top)
+      if let Mode::SelectMenu(ref menu) = state.mode {
+        // Draw within the main table area
+        let area = rects[0];
+        menu.draw(f, area);
       }
     })?;
 
@@ -341,12 +364,16 @@ fn ui_loop(
               start_and_attach: false,
             };
             state.slug_input.clear();
+            // Initialize agent selection
+            state.selected_agent = default_agent(ctx);
           }
           KeyCode::Char('N') => {
             state.mode = Mode::InputSlug {
               start_and_attach: true,
             };
             state.slug_input.clear();
+            // Initialize agent selection
+            state.selected_agent = default_agent(ctx);
           }
           KeyCode::Char('s') => {
             if let Some(cur) = state.rows.get(state.selected).cloned() {
@@ -444,6 +471,19 @@ fn ui_loop(
           KeyCode::Esc => {
             state.mode = Mode::List;
           }
+          KeyCode::Char('a') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+            // Open the agent selection menu
+            let mut items: Vec<String> = ctx.config.agents.keys().cloned().collect();
+            items.sort();
+            let pre = state
+              .selected_agent
+              .as_ref()
+              .and_then(|cur| items.iter().position(|s| s == cur))
+              .unwrap_or(0);
+            let menu = SelectMenuState::new("Select agent", items, pre);
+            state.return_after_menu = Some(Mode::InputSlug { start_and_attach });
+            state.mode = Mode::SelectMenu(menu);
+          }
           KeyCode::Enter => {
             let Ok(slug) = crate::utils::task::normalize_and_validate_slug(&state.slug_input)
             else {
@@ -457,7 +497,8 @@ fn ui_loop(
               std::thread::spawn({
                 let ctx = ctx.clone();
                 let slug = slug.clone();
-                move || match crate::commands::new::run(&ctx, &slug, false, None) {
+                let agent = state.selected_agent.clone();
+                move || match crate::commands::new::run(&ctx, &slug, false, agent.as_deref()) {
                   Ok(created) => {
                     let id_str = created.id.to_string();
                     if let Err(err) = crate::commands::start::run(&ctx, &id_str) {
@@ -473,8 +514,9 @@ fn ui_loop(
               // Interactive editor open without attach; run on background thread
               std::thread::spawn({
                 let ctx = ctx.clone();
+                let agent = state.selected_agent.clone();
                 move || {
-                  let _ = crate::commands::new::run(&ctx, &slug, false, None);
+                  let _ = crate::commands::new::run(&ctx, &slug, false, agent.as_deref());
                 }
               });
             }
@@ -490,6 +532,23 @@ fn ui_loop(
           }
           _ => {}
         },
+        Mode::SelectMenu(mut menu) => {
+          match menu.handle_key(key) {
+            MenuOutcome::Continue => {
+              state.mode = Mode::SelectMenu(menu);
+            }
+            MenuOutcome::Canceled => {
+              state.mode = state.return_after_menu.take().unwrap_or(Mode::List);
+            }
+            MenuOutcome::Selected(idx) => {
+              // Update selected agent unless user chose Cancel
+              if idx < menu.items.len() {
+                state.selected_agent = Some(menu.items[idx].clone());
+              }
+              state.mode = state.return_after_menu.take().unwrap_or(Mode::List);
+            }
+          }
+        }
       }
     }
   }
@@ -789,6 +848,15 @@ fn inner(area: ratatui::layout::Rect) -> ratatui::layout::Rect {
   }
 }
 
+/// Pick the default agent: config default if set, otherwise the first defined.
+fn default_agent(ctx: &AppContext) -> Option<String> {
+  ctx
+    .config
+    .agent
+    .clone()
+    .or_else(|| ctx.config.agents.keys().next().cloned())
+}
+
 /// Build help lines from discrete items without breaking an item across lines.
 fn layout_help_lines<'a>(items: &'a [&'a str], width: u16) -> Vec<Line<'a>> {
   let w = usize::from(width.max(1));
@@ -822,11 +890,12 @@ fn layout_help_lines<'a>(items: &'a [&'a str], width: u16) -> Vec<Line<'a>> {
   }
   lines
 }
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
 enum Mode {
   #[default]
   List,
   InputSlug {
     start_and_attach: bool,
   },
+  SelectMenu(SelectMenuState),
 }
