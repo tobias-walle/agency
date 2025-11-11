@@ -7,6 +7,29 @@ use gix::refs::transaction::PreviousValue;
 
 use crate::utils::child::run_child_process;
 
+/// Resolve the main repository workdir for any given `cwd`.
+///
+/// - When `cwd` is inside a linked worktree, returns the main repo's workdir.
+/// - When `cwd` is inside a regular repo, returns that repo's workdir.
+/// - When not inside any git repo, falls back to `cwd`.
+#[must_use]
+pub fn resolve_main_workdir(cwd: &Path) -> PathBuf {
+  match git::discover(cwd) {
+    Ok(repo) => match repo.kind() {
+      git::repository::Kind::WorkTree { is_linked } if is_linked => {
+        // Only redirect to the main repo when inside a linked worktree.
+        repo
+          .main_repo()
+          .ok()
+          .and_then(|r| r.workdir().map(|p| p.to_path_buf()))
+          .unwrap_or_else(|| cwd.to_path_buf())
+      }
+      _ => cwd.to_path_buf(),
+    },
+    Err(_) => cwd.to_path_buf(),
+  }
+}
+
 pub fn open_main_repo(cwd: &Path) -> Result<git::Repository> {
   let repo = git::discover(cwd)?;
   match repo.kind() {
@@ -389,6 +412,64 @@ pub fn delete_branch_if_exists_at(cwd: &Path, name: &str) -> Result<bool> {
   }
   git(&["branch", "-D", name], cwd)?;
   Ok(true)
+}
+
+#[cfg(test)]
+mod tests {
+  use super::resolve_main_workdir;
+  use std::fs;
+  use std::path::PathBuf;
+
+  fn run_git(cwd: &std::path::Path, args: &[&str]) {
+    let status = std::process::Command::new("git")
+      .current_dir(cwd)
+      .args(args)
+      .status()
+      .expect("spawn git");
+    assert!(status.success(), "git {:?} failed: {:?}", args, status);
+  }
+
+  #[test]
+  fn resolves_fallback_when_not_a_repo() {
+    let dir = tempfile::tempdir().expect("tmp");
+    let got = resolve_main_workdir(dir.path());
+    let got = got.canonicalize().unwrap_or(got);
+    let want = dir
+      .path()
+      .canonicalize()
+      .unwrap_or_else(|_| PathBuf::from(dir.path()));
+    assert_eq!(got, want);
+  }
+
+  #[test]
+  fn resolves_main_root_from_linked_worktree() {
+    let root = tempfile::tempdir().expect("root");
+    let root_path = root.path();
+
+    // init repo and initial commit
+    run_git(root_path, &["init"]);
+    run_git(root_path, &["config", "user.email", "test@example.com"]);
+    run_git(root_path, &["config", "user.name", "Tester"]);
+    fs::write(root_path.join("README.md"), "ok\n").expect("write");
+    run_git(root_path, &["add", "."]);
+    run_git(root_path, &["commit", "-m", "init"]);
+
+    // create linked worktree
+    let wt_dir = root_path.join("wt");
+    run_git(
+      root_path,
+      &["worktree", "add", wt_dir.to_str().unwrap(), "-b", "feature"],
+    );
+
+    let got = resolve_main_workdir(&wt_dir);
+    let want = root_path
+      .canonicalize()
+      .unwrap_or_else(|_| PathBuf::from(root_path));
+    assert_eq!(got, want);
+
+    // cleanup best-effort
+    let _ = fs::remove_dir_all(&wt_dir);
+  }
 }
 
 /// Remove a linked worktree directory if it exists; returns whether it existed beforehand.

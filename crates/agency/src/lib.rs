@@ -10,6 +10,7 @@ pub mod tui;
 mod utils;
 
 use crate::config::{AgencyPaths, AppContext, global_config_exists, load_config};
+use crate::utils::git::resolve_main_workdir;
 
 /// Agency - An AI agent manager and orchestrator in your command line.
 #[derive(Debug, Parser)]
@@ -115,8 +116,9 @@ pub fn parse() -> Cli {
 pub fn run() -> Result<()> {
   let cli = parse();
   let cwd = std::env::current_dir()?;
-  let paths = AgencyPaths::new(cwd.clone());
-  let config = load_config(&cwd)?;
+  let project_root = resolve_main_workdir(&cwd);
+  let paths = AgencyPaths::new(project_root.clone());
+  let config = load_config(&project_root)?;
   let ctx = AppContext { paths, config };
 
   match cli.command {

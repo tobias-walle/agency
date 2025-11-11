@@ -821,7 +821,11 @@ fn complete_marks_status_completed_and_uses_env() -> Result<()> {
       .join("state")
       .join("completed")
       .join(format!("{}-{}", id, _slug));
-    assert!(flag.is_file(), "completed flag should exist at {}", flag.display());
+    assert!(
+      flag.is_file(),
+      "completed flag should exist at {}",
+      flag.display()
+    );
   }
 
   // Create another task and mark complete via env var
@@ -840,7 +844,11 @@ fn complete_marks_status_completed_and_uses_env() -> Result<()> {
       .join("state")
       .join("completed")
       .join(format!("{}-{}", id2, _slug2));
-    assert!(flag2.is_file(), "completed flag should exist at {}", flag2.display());
+    assert!(
+      flag2.is_file(),
+      "completed flag should exist at {}",
+      flag2.display()
+    );
   }
 
   Ok(())
