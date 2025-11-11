@@ -35,3 +35,8 @@ fmt:
 fix:
   cargo clippy -q --allow-dirty --allow-staged --all-targets --fix -- -W clippy::pedantic -A clippy::missing-errors-doc
   just fmt
+
+# Commit based on COMMIT.txt
+commit:
+  git add --all
+  git commit -F COMMIT.txt
