@@ -1,5 +1,6 @@
+use std::collections::HashMap;
 use std::io::{self, IsTerminal as _};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use anyhow::Error;
 use anyhow::{Context, Result};
@@ -51,6 +52,8 @@ struct AppState {
   selected_agent: Option<String>,
   // Mode to return to after closing a select menu
   return_after_menu: Option<Mode>,
+  // Track tasks being deleted to show immediate feedback in STATUS
+  pending_delete: HashMap<u32, Instant>,
 }
 
 impl AppState {
@@ -148,6 +151,9 @@ fn ui_loop(
             log_error!("{}", err);
             err
           })?;
+          // Align pending deletes with the current task list
+          let visible: std::collections::HashSet<u32> = state.rows.iter().map(|r| r.id).collect();
+          state.pending_delete.retain(|id, _| visible.contains(id));
         }
       }
     }
@@ -158,6 +164,12 @@ fn ui_loop(
     if state.paused {
       std::thread::sleep(Duration::from_millis(50));
       continue;
+    }
+
+    // Prune expired pending-deletes to avoid stale Loading states
+    {
+      let now = Instant::now();
+      state.pending_delete.retain(|_, deadline| *deadline > now);
     }
 
     // Draw
@@ -197,10 +209,15 @@ fn ui_loop(
       .style(Style::default().fg(Color::Gray));
 
       let rows = state.rows.iter().map(|r| {
+        let status_cell = if state.pending_delete.contains_key(&r.id) {
+          Cell::from("Loading").style(Style::default().fg(Color::Gray))
+        } else {
+          Cell::from(r.status.clone()).style(status_style(&r.status))
+        };
         Row::new([
           Cell::from(r.id.to_string()),
           Cell::from(r.slug.clone()),
-          Cell::from(r.status.clone()).style(status_style(&r.status)),
+          status_cell,
           Cell::from(r.session.map(|s| s.to_string()).unwrap_or_default()),
           Cell::from(r.base.clone()),
           Cell::from(r.agent.clone()),
@@ -311,6 +328,9 @@ fn ui_loop(
             log_error!("{}", err);
             err
           })?;
+          // Remove pending-delete markers for tasks that are no longer visible
+          let visible: std::collections::HashSet<u32> = state.rows.iter().map(|r| r.id).collect();
+          state.pending_delete.retain(|id, _| visible.contains(id));
         }
         UiEvent::Disconnected(err) => {
           log_error!("{}", err);
@@ -439,6 +459,10 @@ fn ui_loop(
           KeyCode::Char('X') => {
             if let Some(cur) = state.rows.get(state.selected).cloned() {
               state.push_log(LogEvent::Command(format!("agency rm {}", cur.id)));
+              // Show immediate feedback in the table while deletion proceeds
+              state
+                .pending_delete
+                .insert(cur.id, Instant::now() + Duration::from_secs(10));
               let ident = cur.id.to_string();
               std::thread::spawn({
                 let ctx = ctx.clone();
