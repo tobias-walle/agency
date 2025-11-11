@@ -17,3 +17,8 @@ jobs:
           release-type: rust
           package-name: agency
           path: crates/agency
+          # Ensure plain tags (vX.Y.Z) and avoid creating a GitHub Release page
+          include-component-in-tag: false
+          skip-github-release: true
+          # Use PAT to ensure tag push emits standard events
+          token: ${{ secrets.RELEASE_PLEASE_PAT }}
