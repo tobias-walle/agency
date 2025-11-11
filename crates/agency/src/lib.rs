@@ -86,6 +86,8 @@ enum Commands {
   Init {},
   /// Interactive terminal UI
   Tui {},
+  /// Garbage-collect orphaned branches/worktrees (no task)
+  Gc {},
 }
 
 #[derive(Debug, Subcommand)]
@@ -185,6 +187,9 @@ pub fn run() -> Result<()> {
     }
     Some(Commands::Tui {}) => {
       crate::tui::run(&ctx)?;
+    }
+    Some(Commands::Gc {}) => {
+      commands::gc::run(&ctx)?;
     }
     None => {
       let stdout_tty = std::io::stdout().is_terminal();

@@ -22,6 +22,95 @@ fn write_executable_script(path: &Path, body: &str) -> Result<()> {
 }
 
 #[test]
+fn gc_removes_orphans_safely() -> Result<()> {
+  let env = common::TestEnv::new();
+  env.init_repo()?;
+
+  // Create a valid task and prepare its branch/worktree
+  let (id, slug) = env.new_task("alpha", &["--draft", "--no-edit"])?;
+  env.bootstrap_task(id)?;
+
+  // Resolve HEAD commit via git process for simplicity
+  let out = std::process::Command::new("git")
+    .current_dir(env.path())
+    .args(["rev-parse", "HEAD"])
+    .stdout(std::process::Stdio::piped())
+    .stderr(std::process::Stdio::null())
+    .output()?;
+  assert!(out.status.success(), "git rev-parse HEAD should succeed");
+  let head_hex = String::from_utf8_lossy(&out.stdout).trim().to_string();
+  let head = gix::ObjectId::from_hex(head_hex.as_bytes()).expect("valid hex id");
+
+  // Orphan branch WITHOUT worktree: agency/98-orphan at current HEAD
+  let repo = git::discover(env.path())?;
+  let _r = repo.reference(
+    "refs/heads/agency/98-orphan",
+    head,
+    gix::refs::transaction::PreviousValue::MustNotExist,
+    "create orphan branch",
+  )?;
+
+  // Orphan worktree linked to a different orphan branch
+  let orphan_wt = env.worktree_dir_path(99, "ghost");
+  {
+    // Create the branch to link the worktree against
+    let _r2 = repo.reference(
+      "refs/heads/agency/99-ghost",
+      head,
+      gix::refs::transaction::PreviousValue::MustNotExist,
+      "create orphan branch for worktree",
+    )?;
+    let status = std::process::Command::new("git")
+      .current_dir(env.path())
+      .args([
+        "worktree",
+        "add",
+        "--quiet",
+        orphan_wt.display().to_string().as_str(),
+        "agency/99-ghost",
+      ])
+      .status()?;
+    assert!(status.success(), "git worktree add should succeed");
+  }
+
+  // Sanity: orphan branch and orphan worktree exist; valid ones exist too
+  {
+    let full_orphan = format!("refs/heads/{}", env.branch_name(98, "orphan"));
+    assert!(repo.find_reference(&full_orphan).is_ok());
+    assert!(orphan_wt.is_dir());
+
+    let full_valid = format!("refs/heads/{}", env.branch_name(id, &slug));
+    assert!(repo.find_reference(&full_valid).is_ok());
+    let valid_wt = env.worktree_dir_path(id, &slug);
+    assert!(valid_wt.is_dir());
+  }
+
+  // Run gc
+  {
+    let mut cmd = env.bin_cmd()?;
+    cmd.arg("gc");
+    cmd
+      .assert()
+      .success()
+      .stdout(predicates::str::contains("Garbage collected").from_utf8());
+  }
+
+  // Orphans should be removed safely: orphan worktree pruned, orphan branch without worktree deleted
+  {
+    let full_orphan = format!("refs/heads/{}", env.branch_name(98, "orphan"));
+    assert!(repo.find_reference(&full_orphan).is_err());
+    assert!(!orphan_wt.exists());
+
+    let full_valid = format!("refs/heads/{}", env.branch_name(id, &slug));
+    assert!(repo.find_reference(&full_valid).is_ok());
+    let valid_wt = env.worktree_dir_path(id, &slug);
+    assert!(valid_wt.is_dir());
+  }
+
+  Ok(())
+}
+
+#[test]
 fn setup_creates_global_config_via_wizard() -> Result<()> {
   let env = common::TestEnv::new();
   let xdg_temp = common::tempdir_in_sandbox();

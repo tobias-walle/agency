@@ -4,6 +4,7 @@ pub mod branch;
 pub mod daemon;
 pub mod defaults;
 pub mod edit;
+pub mod gc;
 pub mod init;
 pub mod merge;
 pub mod new;
