@@ -2,10 +2,9 @@ use std::fs;
 use std::io::IsTerminal as _;
 use std::path::Path;
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 
 use crate::config::AppContext;
-use crate::log_info;
 use crate::utils::daemon::notify_after_task_change;
 use crate::utils::git::{current_branch_name, open_main_repo};
 use crate::utils::log::t;
@@ -13,6 +12,7 @@ use crate::utils::task::{
   TaskContent, TaskFrontmatter, TaskRef, compute_unique_slug, edit_task_description, next_id,
   normalize_and_validate_slug, write_task_content,
 };
+use crate::{log_error, log_info};
 
 pub fn run(ctx: &AppContext, slug: &str, no_edit: bool, agent: Option<&str>) -> Result<TaskRef> {
   notify_after_task_change(ctx, || {
@@ -55,23 +55,28 @@ pub fn run(ctx: &AppContext, slug: &str, no_edit: bool, agent: Option<&str>) -> 
       frontmatter: Some(fm),
       body: String::new(),
     };
-    write_task_content(&ctx.paths, &task, &content)?;
 
-    // Info messages with token highlights
-    log_info!("Create task {} (id {})", t::slug(&slug), t::id(id));
-
-    // Optionally open the task file in the user's editor
-    if std::io::stdout().is_terminal()
-      && !no_edit
-      && let Some(updated_body) =
-        edit_task_description(&ctx.paths, &task, ctx.paths.cwd(), &content.body)?
-    {
-      content.body = updated_body;
+    let interactive = std::io::stdout().is_terminal() && !no_edit;
+    if interactive {
+      // Open editor first; only write if content is non-empty
+      match edit_task_description(&ctx.paths, &task, ctx.paths.cwd(), &content.body)? {
+        Some(updated_body) => {
+          content.body = updated_body;
+          write_task_content(&ctx.paths, &task, &content)?;
+          log_info!("Create task {} (id {})", t::slug(&slug), t::id(id));
+        }
+        None => {
+          // Do not create the task file; cancel
+          bail!("Empty description");
+        }
+      }
+    } else {
+      // Non-interactive or --no-edit: create file immediately
       write_task_content(&ctx.paths, &task, &content)?;
+      log_info!("Create task {} (id {})", t::slug(&slug), t::id(id));
     }
 
     // Worktree and bootstrap are now created lazily at attach time
-
     Ok(task)
   })
 }
