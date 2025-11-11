@@ -11,7 +11,6 @@
 //! forwarded as `D2C::Output` frames. A snapshot (`vt100` screen contents) is
 //! sent separately during handshake.
 
-use crate::log_warn;
 use crate::pty::idle::{IdleState, IdleTracker};
 use crate::pty::protocol::D2COutputChannel;
 use crate::utils::command::Command;
@@ -153,7 +152,6 @@ impl Session {
     let bytes_out = self.bytes_out.clone();
     let sinks = self.output_sinks.clone();
     let idle = self.idle.clone();
-    let writer = self.writer.clone();
 
     thread::spawn(move || {
       let mut reader = master_for_read

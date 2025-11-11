@@ -1,6 +1,5 @@
 #![cfg(unix)]
 
-use std::path::PathBuf;
 use std::time::Duration;
 
 use anyhow::Result;
@@ -56,10 +55,6 @@ fn daemon_start_stop_restart_creates_and_removes_socket() -> Result<()> {
   wait_for_socket(&sock, Duration::from_secs(5))?;
 
   Ok(())
-}
-
-fn bin() -> PathBuf {
-  assert_cmd::cargo::cargo_bin!("agency").to_path_buf()
 }
 
 fn pty_available() -> bool {
