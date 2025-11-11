@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.1](https://github.com/tobias-walle/agency/compare/v0.1.0...v0.1.1) (2025-11-10)
+
+
+### Bug Fixes
+
+* always attach to prevent missing cursor issues ([44d8217](https://github.com/tobias-walle/agency/commit/44d8217df9f55f715f20bc0eb112645f9989cee8))
+* don't copy folders if not included ([f6fc4d4](https://github.com/tobias-walle/agency/commit/f6fc4d4c172439e66f3a61a5c2392a430b9faa3d))
+
 ## 0.1.0 (2025-11-10)
 
 
