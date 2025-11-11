@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.2.0](https://github.com/tobias-walle/agency/compare/v0.1.1...v0.2.0) (2025-11-11)
+
+
+### Features
+
+* add option to select agent in TUI ([bde32b7](https://github.com/tobias-walle/agency/commit/bde32b74c4f8ed49eb81fea6eab9e22d1bc4fe1d))
+* add override config for socket path ([9f35a10](https://github.com/tobias-walle/agency/commit/9f35a10e8085637995b70ee0c5153c38a661f1b1))
+
+
+### Bug Fixes
+
+* avoid flickering in TUI then opening interactive program ([cc0b13d](https://github.com/tobias-walle/agency/commit/cc0b13d2921868b03006e707d68ae49217ad7e55))
+
 ## [0.1.1](https://github.com/tobias-walle/agency/compare/v0.1.0...v0.1.1) (2025-11-10)
 
 
