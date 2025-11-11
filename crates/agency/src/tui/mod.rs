@@ -655,6 +655,7 @@ fn status_style(status: &str) -> Style {
     "Running" => Style::default().fg(Color::Green),
     "Idle" => Style::default().fg(Color::Blue),
     "Exited" | "Stopped" => Style::default().fg(Color::Red),
+    "Completed" => Style::default().fg(Color::Green),
     "Draft" => Style::default().fg(Color::Yellow),
     _ => Style::default(),
   }
@@ -673,13 +674,18 @@ fn build_task_rows(
   for t in tasks {
     let latest_sess = latest.get(&(t.id, t.slug.clone()));
     let wt_exists = crate::utils::task::worktree_dir(&ctx.paths, t).exists();
-    let status = crate::utils::status::derive_status(latest_sess, wt_exists);
-    let status_str = match status {
+    let base_status = crate::utils::status::derive_status(latest_sess, wt_exists);
+    let status_str = match if crate::utils::status::is_task_completed(&ctx.paths, t) {
+      crate::utils::status::TaskStatus::Completed
+    } else {
+      base_status
+    } {
       crate::utils::status::TaskStatus::Draft => "Draft".to_string(),
       crate::utils::status::TaskStatus::Stopped => "Stopped".to_string(),
       crate::utils::status::TaskStatus::Running => "Running".to_string(),
       crate::utils::status::TaskStatus::Idle => "Idle".to_string(),
       crate::utils::status::TaskStatus::Exited => "Exited".to_string(),
+      crate::utils::status::TaskStatus::Completed => "Completed".to_string(),
       crate::utils::status::TaskStatus::Other(s) => s,
     };
 

@@ -4,7 +4,7 @@ use crate::config::AppContext;
 use crate::utils::daemon::list_sessions_for_project;
 use crate::utils::git::head_branch;
 use crate::utils::sessions::latest_sessions_by_task;
-use crate::utils::status::{derive_status, status_label};
+use crate::utils::status::{TaskStatus, derive_status, is_task_completed, status_label};
 use crate::utils::task::{agent_for_task, list_tasks, read_task_frontmatter, worktree_dir};
 use crate::utils::term::print_table;
 #[cfg(test)]
@@ -24,8 +24,13 @@ pub fn run(ctx: &AppContext) -> Result<()> {
       let key = (t.id, t.slug.clone());
       let latest_sess = latest.get(&key);
       let wt_exists = worktree_dir(&ctx.paths, t).exists();
-      let status = derive_status(latest_sess, wt_exists);
-      let status_text = status_label(&status);
+      let base_status = derive_status(latest_sess, wt_exists);
+      let effective_status = if is_task_completed(&ctx.paths, t) {
+        TaskStatus::Completed
+      } else {
+        base_status
+      };
+      let status_text = status_label(&effective_status);
       let fm = read_task_frontmatter(&ctx.paths, t);
       let agent = agent_for_task(&ctx.config, fm.as_ref());
       vec![

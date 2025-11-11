@@ -799,6 +799,92 @@ fn open_opens_worktree_via_editor() -> Result<()> {
 }
 
 #[test]
+fn complete_marks_status_completed_and_uses_env() -> Result<()> {
+  let env = common::TestEnv::new();
+  env.init_repo()?;
+
+  // Create a task
+  let (id, _slug) = env.new_task("complete-a", &["--no-edit", "--draft"])?;
+
+  // Mark complete by explicit id
+  {
+    let mut cmd = env.bin_cmd()?;
+    cmd.arg("complete").arg(id.to_string());
+    cmd.assert().success();
+  }
+
+  // Verify completed flag file exists
+  {
+    let flag = env
+      .path()
+      .join(".agency")
+      .join("state")
+      .join("completed")
+      .join(format!("{}-{}", id, _slug));
+    assert!(flag.is_file(), "completed flag should exist at {}", flag.display());
+  }
+
+  // Create another task and mark complete via env var
+  let (id2, _slug2) = env.new_task("complete-b", &["--no-edit", "--draft"])?;
+  {
+    let mut cmd = env.bin_cmd()?;
+    cmd.arg("complete");
+    cmd.env("AGENCY_TASK_ID", id2.to_string());
+    cmd.assert().success();
+  }
+  // Verify completed flag exists for second task
+  {
+    let flag2 = env
+      .path()
+      .join(".agency")
+      .join("state")
+      .join("completed")
+      .join(format!("{}-{}", id2, _slug2));
+    assert!(flag2.is_file(), "completed flag should exist at {}", flag2.display());
+  }
+
+  Ok(())
+}
+
+#[test]
+fn reset_clears_completed_status() -> Result<()> {
+  let env = common::TestEnv::new();
+  env.init_repo()?;
+  let (id, slug) = env.new_task("complete-reset", &["--no-edit", "--draft"])?;
+
+  // Mark complete
+  {
+    let mut cmd = env.bin_cmd()?;
+    cmd.arg("complete").arg(id.to_string());
+    cmd.assert().success();
+  }
+
+  // Reset should clear the flag
+  {
+    let mut cmd = env.bin_cmd()?;
+    cmd.arg("reset").arg(id.to_string());
+    cmd.assert().success();
+  }
+
+  // Verify completed flag cleared
+  {
+    let flag = env
+      .path()
+      .join(".agency")
+      .join("state")
+      .join("completed")
+      .join(format!("{}-{}", id, slug));
+    assert!(
+      !flag.exists(),
+      "completed flag should be removed after reset: {}",
+      flag.display()
+    );
+  }
+
+  Ok(())
+}
+
+#[test]
 fn merge_fast_forwards_and_cleans_up() -> Result<()> {
   let env = common::TestEnv::new();
   env.init_repo()?;

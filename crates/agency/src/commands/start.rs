@@ -47,7 +47,9 @@ pub fn run(ctx: &AppContext, ident: &str) -> Result<()> {
 
   // Build env map and argv
   let description = content.body.trim().to_string();
-  let env_map: HashMap<String, String> = build_session_env(&repo_root, &description);
+  let mut env_map: HashMap<String, String> = build_session_env(&repo_root, &description);
+  // Also provide the task id for downstream tools
+  env_map.insert("AGENCY_TASK_ID".to_string(), task.id.to_string());
 
   // Select effective agent
   let agent_name = agent_for_task(&ctx.config, frontmatter.as_ref());

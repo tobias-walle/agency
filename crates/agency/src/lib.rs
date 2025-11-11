@@ -80,6 +80,8 @@ enum Commands {
   },
   /// List running sessions in this project
   Sessions {},
+  /// Mark a task as Completed (uses $AGENCY_TASK_ID when omitted)
+  Complete { ident: Option<String> },
   /// Run the setup wizard to configure Agency
   Setup {},
   /// Print embedded defaults for inspection
@@ -180,6 +182,9 @@ pub fn run() -> Result<()> {
     }
     Some(Commands::Sessions {}) => {
       commands::sessions::run(&ctx)?;
+    }
+    Some(Commands::Complete { ident }) => {
+      commands::complete::run(&ctx, ident.as_deref())?;
     }
     Some(Commands::Setup {}) => {
       commands::setup::run(&ctx)?;
