@@ -582,15 +582,19 @@ fn ui_loop(
 }
 
 fn restore_terminal(terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>) -> Result<()> {
-  // Keep alternate screen active to avoid visible flash; only disable raw mode
-  let _ = terminal; // terminal remains valid; we just toggle raw mode
+  // Exit alternate screen to restore normal scrollback and hand off cleanly
+  let out = terminal.backend_mut();
+  crossterm::execute!(out, crossterm::terminal::LeaveAlternateScreen)
+    .context("leave alternate screen")?;
   disable_raw_mode().context("disable raw mode")?;
   Ok(())
 }
 
 fn reinit_terminal(terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>) -> Result<()> {
-  // Resume raw mode without re-entering alternate screen or recreating the terminal.
-  // Clear the viewport so the next draw paints a clean UI over any editor output.
+  // Re-enter alternate screen and raw mode to resume the TUI cleanly
+  let out = terminal.backend_mut();
+  crossterm::execute!(out, crossterm::terminal::EnterAlternateScreen)
+    .context("re-enter alternate screen")?;
   enable_raw_mode().context("re-enable raw mode")?;
   terminal
     .clear()
