@@ -5,6 +5,8 @@ use anyhow::{Context, Result, bail};
 use gix as git;
 use gix::refs::transaction::PreviousValue;
 
+use crate::utils::child::run_child_process;
+
 pub fn open_main_repo(cwd: &Path) -> Result<git::Repository> {
   let repo = git::discover(cwd)?;
   match repo.kind() {
@@ -147,8 +149,20 @@ fn run_git(args: &[&str], cwd: &Path) -> Result<()> {
   Ok(())
 }
 
+/// Run a `git` command while streaming stdout/stderr to the TUI sink when set, or
+/// inheriting stdio in regular CLI mode. Fails if git exits with a non-zero status.
+pub fn git(args: &[&str], cwd: &Path) -> Result<()> {
+  let argv: Vec<String> = args.iter().map(|s| s.to_string()).collect();
+  let status = run_child_process("git", &argv, cwd, &[])?;
+  if !status.success() {
+    bail!("git {} exited with status {}", args.join(" "), status);
+  }
+  Ok(())
+}
+
 pub fn rebase_onto(worktree_dir: &Path, base: &str) -> Result<()> {
-  run_git(&["rebase", base], worktree_dir)
+  // Stream rebase output to aid in debugging via TUI sink
+  git(&["rebase", base], worktree_dir)
 }
 
 pub fn is_fast_forward(repo: &git::Repository, base: &str, task_branch: &str) -> Result<bool> {
@@ -157,6 +171,24 @@ pub fn is_fast_forward(repo: &git::Repository, base: &str, task_branch: &str) ->
     .ok_or_else(|| anyhow::anyhow!("no main worktree: cannot check fast-forward"))?;
   let status = std::process::Command::new("git")
     .current_dir(workdir)
+    .args(["merge-base", "--is-ancestor", base, task_branch])
+    .stdout(std::process::Stdio::null())
+    .stderr(std::process::Stdio::null())
+    .status()
+    .with_context(|| "failed to run git merge-base --is-ancestor")?;
+  if status.success() {
+    return Ok(true);
+  }
+  if status.code() == Some(1) {
+    return Ok(false);
+  }
+  anyhow::bail!("git merge-base --is-ancestor failed: status={status}");
+}
+
+/// Like `is_fast_forward` but operates directly on a working directory path.
+pub fn is_fast_forward_at(cwd: &Path, base: &str, task_branch: &str) -> Result<bool> {
+  let status = std::process::Command::new("git")
+    .current_dir(cwd)
     .args(["merge-base", "--is-ancestor", base, task_branch])
     .stdout(std::process::Stdio::null())
     .stderr(std::process::Stdio::null())
@@ -188,12 +220,66 @@ pub fn rev_parse(cwd: &Path, rev: &str) -> Result<String> {
   Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
 }
 
+/// Resolve the top-level working directory for the repository that contains `cwd`.
+pub fn git_workdir(cwd: &Path) -> Result<PathBuf> {
+  let out = std::process::Command::new("git")
+    .current_dir(cwd)
+    .args(["rev-parse", "--show-toplevel"])
+    .stdout(std::process::Stdio::piped())
+    .stderr(std::process::Stdio::null())
+    .spawn()
+    .with_context(|| "failed to spawn git rev-parse --show-toplevel")?
+    .wait_with_output()
+    .with_context(|| "failed to wait for git rev-parse --show-toplevel")?;
+  if !out.status.success() {
+    anyhow::bail!(
+      "git rev-parse --show-toplevel failed: status={}",
+      out.status
+    );
+  }
+  Ok(PathBuf::from(
+    String::from_utf8_lossy(&out.stdout).trim().to_string(),
+  ))
+}
+
+/// Return the current branch name if HEAD points to a branch; otherwise Ok(None) (e.g. detached).
+pub fn current_branch_name_at(cwd: &Path) -> Result<Option<String>> {
+  let out = std::process::Command::new("git")
+    .current_dir(cwd)
+    .args(["symbolic-ref", "--quiet", "--short", "HEAD"])
+    .stdout(std::process::Stdio::piped())
+    .stderr(std::process::Stdio::null())
+    .spawn()
+    .with_context(|| "failed to spawn git symbolic-ref --short HEAD")?
+    .wait_with_output()
+    .with_context(|| "failed to wait for git symbolic-ref --short HEAD")?;
+  if out.status.success() {
+    return Ok(Some(
+      String::from_utf8_lossy(&out.stdout).trim().to_string(),
+    ));
+  }
+  // Exit code 1 often indicates detached HEAD; treat as None
+  if out.status.code() == Some(1) {
+    return Ok(None);
+  }
+  anyhow::bail!(
+    "git symbolic-ref --short HEAD failed: status={}",
+    out.status
+  );
+}
+
 pub fn update_branch_ref(repo: &git::Repository, branch: &str, new_commit: &str) -> Result<()> {
   let workdir = repo
     .workdir()
     .ok_or_else(|| anyhow::anyhow!("no main worktree: cannot update ref"))?;
   let full = format!("refs/heads/{branch}");
   run_git(&["update-ref", &full, new_commit], workdir)
+}
+
+/// Update a local branch ref to point at `new_commit` within `cwd`.
+pub fn update_branch_ref_at(cwd: &Path, branch: &str, new_commit: &str) -> Result<()> {
+  let full = format!("refs/heads/{branch}");
+  git(&["update-ref", &full, new_commit], cwd)
 }
 
 pub fn stash_push(workdir: &Path, message: &str) -> Result<Option<String>> {
@@ -253,10 +339,74 @@ pub fn worktree_is_clean(repo: &git::Repository) -> Result<bool> {
   Ok(String::from_utf8_lossy(&out.stdout).trim().is_empty())
 }
 
+/// Returns true if the working tree at `cwd` has no changes (including untracked files).
+pub fn worktree_is_clean_at(cwd: &Path) -> Result<bool> {
+  let out = std::process::Command::new("git")
+    .current_dir(cwd)
+    .arg("status")
+    .arg("--porcelain")
+    .arg("--untracked-files=no")
+    .stdout(std::process::Stdio::piped())
+    .stderr(std::process::Stdio::null())
+    .spawn()
+    .with_context(|| "failed to spawn git status --porcelain")?
+    .wait_with_output()
+    .with_context(|| "failed to wait for git status --porcelain")?;
+  if !out.status.success() {
+    anyhow::bail!("git status --porcelain failed: status={}", out.status);
+  }
+  Ok(String::from_utf8_lossy(&out.stdout).trim().is_empty())
+}
+
 /// Hard resets the checked-out main worktree to its HEAD.
 pub fn hard_reset_to_head(repo: &git::Repository) -> Result<()> {
   let workdir = repo
     .workdir()
     .ok_or_else(|| anyhow::anyhow!("no main worktree: cannot reset"))?;
   run_git(&["reset", "--hard"], workdir)
+}
+
+/// Hard resets the checked-out main worktree to its HEAD within `cwd`.
+pub fn hard_reset_to_head_at(cwd: &Path) -> Result<()> {
+  git(&["reset", "--hard"], cwd)
+}
+
+/// Delete a branch if it exists; returns Ok(true) if deleted, Ok(false) if it didn't exist.
+pub fn delete_branch_if_exists_at(cwd: &Path, name: &str) -> Result<bool> {
+  let full = format!("refs/heads/{name}");
+  let status = std::process::Command::new("git")
+    .current_dir(cwd)
+    .args(["show-ref", "--quiet", "--verify", &full])
+    .stdout(std::process::Stdio::null())
+    .stderr(std::process::Stdio::null())
+    .status()
+    .with_context(|| "failed to run git show-ref --verify")?;
+  if status.code() == Some(1) {
+    return Ok(false);
+  }
+  if !status.success() {
+    anyhow::bail!("git show-ref --verify failed: status={}", status);
+  }
+  git(&["branch", "-D", name], cwd)?;
+  Ok(true)
+}
+
+/// Remove a linked worktree directory if it exists; returns whether it existed beforehand.
+pub fn prune_worktree_if_exists_at(cwd: &Path, wt_path: &Path) -> Result<bool> {
+  if !wt_path.exists() {
+    return Ok(false);
+  }
+  if let Err(_e) = git(
+    &[
+      "worktree",
+      "remove",
+      "--force",
+      wt_path.to_string_lossy().as_ref(),
+    ],
+    cwd,
+  ) {
+    let _ = git(&["worktree", "prune"], cwd);
+    return Ok(wt_path.exists());
+  }
+  Ok(true)
 }
