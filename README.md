@@ -1,6 +1,7 @@
 ![Agency Logo](./media/logo.svg)
 
 # Agency
+
 Agency orchestrates command-line AI agents across isolated Git worktrees.
 
 - Git like cli interface (see `agency --help`)
@@ -14,16 +15,10 @@ Agency orchestrates command-line AI agents across isolated Git worktrees.
 
 ## Install
 
-Install the CLI locally (development builds can use a path install):
+Install the CLI from source:
 
 ```bash
-cargo install --path crates/agency
-```
-
-During development you can also run the binary via `cargo run` or the provided Just recipe:
-
-```bash
-just agency -- --help
+just install-globally
 ```
 
 ## First Run
@@ -92,6 +87,7 @@ Tasks can declare their own agent or base branch in YAML front matter:
 agent: claude
 base_branch: main
 ---
+
 # Implement cool feature
 ```
 

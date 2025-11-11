@@ -11,6 +11,10 @@ agency *ARGS:
   socket_path="$repo_root/target/agency.sock"
   AGENCY_SOCKET_PATH="$socket_path" cargo run -p agency -- {{ARGS}}
 
+# Install agency from source globally
+install-globally:
+  cargo install --path crates/agency
+
 # Run the tests with nextest
 test *ARGS:
   RUSTFLAGS="${RUSTFLAGS:-} -Awarnings" cargo nextest run --cargo-quiet --status-level leak {{ARGS}}
