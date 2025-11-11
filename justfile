@@ -5,8 +5,11 @@ _list:
 
 # Start the app
 [no-exit-message]
-@agency *ARGS:
-  AGENCY_SOCKET_PATH="$(pwd)/target/agency.sock" cargo run -p agency -- {{ARGS}}
+agency *ARGS:
+  #!/usr/bin/env sh
+  repo_root="$(dirname $(git rev-parse --path-format=absolute --git-common-dir))"
+  socket_path="$repo_root/target/agency.sock"
+  AGENCY_SOCKET_PATH="$socket_path" cargo run -p agency -- {{ARGS}}
 
 # Run the tests with nextest
 test *ARGS:
