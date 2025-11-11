@@ -219,15 +219,26 @@ pub fn load_config(cwd: &Path) -> Result<AgencyConfig> {
 /// Compute the daemon socket path based on config and environment.
 ///
 /// Precedence:
-/// 1) `config.daemon.socket_path` if set
-/// 2) `$XDG_RUNTIME_DIR/agency.sock` if the env var is set
-/// 3) Fallback to `~/.local/run/agency.sock`
+/// 1) `AGENCY_SOCKET_PATH` environment variable (local development override)
+/// 2) `config.daemon.socket_path` if set
+/// 3) `$XDG_RUNTIME_DIR/agency.sock` if the env var is set
+/// 4) Fallback to `~/.local/run/agency.sock`
 ///
 /// Ensures the parent directory exists with 0700 permissions.
 #[must_use]
 pub fn compute_socket_path(cfg: &AgencyConfig) -> std::path::PathBuf {
   use std::os::unix::fs::PermissionsExt;
   use std::path::PathBuf;
+
+  // Highest precedence: explicit local override via env var
+  if let Ok(env_path) = std::env::var("AGENCY_SOCKET_PATH") {
+    let path = PathBuf::from(env_path);
+    if let Some(dir) = path.parent() {
+      let _ = std::fs::create_dir_all(dir);
+      let _ = std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700));
+    }
+    return path;
+  }
 
   if let Some(ref daemon) = cfg.daemon
     && let Some(ref p) = daemon.socket_path
@@ -262,4 +273,86 @@ pub fn compute_socket_path(cfg: &AgencyConfig) -> std::path::PathBuf {
   let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o700));
   path.push("agency.sock");
   path
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use std::path::PathBuf;
+  use temp_env::with_vars;
+
+  #[test]
+  fn compute_prefers_env_over_config_and_xdg() {
+    let env_dir = tempfile::tempdir().expect("temp dir env");
+    let xdg_dir = tempfile::tempdir().expect("temp dir xdg");
+    let cfg_dir = tempfile::tempdir().expect("temp dir cfg");
+    let env_sock = env_dir.path().join("dev.sock");
+    let cfg_sock = cfg_dir.path().join("cfg.sock");
+
+    with_vars(
+      [
+        ("AGENCY_SOCKET_PATH", Some(env_sock.display().to_string())),
+        ("XDG_RUNTIME_DIR", Some(xdg_dir.path().display().to_string())),
+      ],
+      || {
+        let cfg = AgencyConfig {
+          daemon: Some(DaemonConfig {
+            socket_path: Some(cfg_sock.display().to_string()),
+          }),
+          ..Default::default()
+        };
+        let path = compute_socket_path(&cfg);
+        assert_eq!(path, PathBuf::from(env_sock));
+        assert!(path.parent().unwrap().is_dir());
+      },
+    );
+  }
+
+  #[test]
+  fn compute_prefers_config_over_xdg() {
+    let xdg_dir = tempfile::tempdir().expect("temp dir xdg");
+    let cfg_dir = tempfile::tempdir().expect("temp dir cfg");
+    let cfg_sock = cfg_dir.path().join("cfg.sock");
+
+    with_vars([("XDG_RUNTIME_DIR", Some(xdg_dir.path().display().to_string()))], || {
+      let cfg = AgencyConfig {
+        daemon: Some(DaemonConfig {
+          socket_path: Some(cfg_sock.display().to_string()),
+        }),
+        ..Default::default()
+      };
+      let path = compute_socket_path(&cfg);
+      assert_eq!(path, PathBuf::from(cfg_sock));
+      assert!(path.parent().unwrap().is_dir());
+    });
+  }
+
+  #[test]
+  fn compute_uses_xdg_when_no_env_or_config() {
+    let xdg_dir = tempfile::tempdir().expect("temp dir xdg");
+    with_vars([("XDG_RUNTIME_DIR", Some(xdg_dir.path().display().to_string()))], || {
+      let cfg = AgencyConfig::default();
+      let path = compute_socket_path(&cfg);
+      assert_eq!(path, xdg_dir.path().join("agency.sock"));
+      assert!(path.parent().unwrap().is_dir());
+    });
+  }
+
+  #[test]
+  fn compute_fallbacks_to_home_local_run() {
+    let home_dir = tempfile::tempdir().expect("temp dir home");
+    with_vars(
+      [
+        ("XDG_RUNTIME_DIR", None),
+        ("AGENCY_SOCKET_PATH", None),
+        ("HOME", Some(home_dir.path().display().to_string())),
+      ],
+      || {
+        let cfg = AgencyConfig::default();
+        let path = compute_socket_path(&cfg);
+        assert_eq!(path, home_dir.path().join(".local").join("run").join("agency.sock"));
+        assert!(path.parent().unwrap().is_dir());
+      },
+    );
+  }
 }
