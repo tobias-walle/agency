@@ -509,10 +509,13 @@ fn ui_loop(
             state.mode = Mode::SelectMenu(menu);
           }
           KeyCode::Enter => {
-            let Ok(slug) = crate::utils::task::normalize_and_validate_slug(&state.slug_input)
-            else {
-              state.mode = Mode::List;
-              continue;
+            let slug = match crate::utils::task::normalize_and_validate_slug(&state.slug_input) {
+              Ok(s) => s,
+              Err(err) => {
+                crate::log_error!("New failed: {}", err);
+                // Keep overlay open for correction
+                continue;
+              }
             };
             if start_and_attach {
               // Create and start on a background thread to avoid blocking the TUI

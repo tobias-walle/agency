@@ -107,21 +107,25 @@ pub fn next_id(tasks: &Path) -> Result<u32> {
 }
 
 pub fn normalize_and_validate_slug(input: &str) -> Result<String> {
+  // Slugify: lowercase, replace any non-alphanumeric with '-', collapse runs,
+  // and trim leading/trailing '-'. Allow Unicode alphanumerics.
   let lowered = input.to_lowercase();
-  if lowered.is_empty() {
-    bail!("invalid slug: empty");
+  let mut out = String::with_capacity(lowered.len());
+  for ch in lowered.chars() {
+    if ch.is_alphanumeric() {
+      out.push(ch);
+    } else {
+      if !out.ends_with('-') {
+        out.push('-');
+      }
+    }
   }
-  let mut chars = lowered.chars();
-  let Some(first) = chars.next() else {
-    bail!("invalid slug: empty");
-  };
-  if !first.is_alphabetic() {
-    bail!("invalid slug: must start with a letter");
+  // Trim leading/trailing '-'
+  let trimmed = out.trim_matches('-').to_string();
+  if trimmed.is_empty() {
+    bail!("invalid slug: empty after slugify");
   }
-  if !chars.all(|c| c.is_alphanumeric() || c == '-') {
-    bail!("invalid slug: only Unicode letters, digits and '-' allowed");
-  }
-  Ok(lowered)
+  Ok(trimmed)
 }
 
 pub fn resolve_id_or_slug(paths: &AgencyPaths, ident: &str) -> Result<TaskRef> {
@@ -333,10 +337,26 @@ mod tests {
 
   #[test]
   fn normalize_and_validate_slug_rules() {
-    assert!(normalize_and_validate_slug("alpha-1").is_ok());
+    // Success cases with slugify behavior
+    assert_eq!(
+      normalize_and_validate_slug("Alpha World").unwrap(),
+      "alpha-world"
+    );
+    assert_eq!(
+      normalize_and_validate_slug("alpha_world").unwrap(),
+      "alpha-world"
+    );
+    assert_eq!(
+      normalize_and_validate_slug("alpha---world").unwrap(),
+      "alpha-world"
+    );
+    assert_eq!(normalize_and_validate_slug("1invalid").unwrap(), "1invalid");
+
+    // Error cases: empty or becomes empty after slugify
     assert!(normalize_and_validate_slug("").is_err());
-    assert!(normalize_and_validate_slug("1invalid").is_err());
-    assert!(normalize_and_validate_slug("bad/slug").is_err());
+    assert!(normalize_and_validate_slug("---").is_err());
+    assert!(normalize_and_validate_slug("   ").is_err());
+    assert!(normalize_and_validate_slug("**").is_err());
   }
 
   #[test]
