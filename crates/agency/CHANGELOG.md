@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.3.0](https://github.com/tobias-walle/agency/compare/v0.2.0...v0.3.0) (2025-11-11)
+
+
+### Features
+
+* improve git merge logs ([91ce632](https://github.com/tobias-walle/agency/commit/91ce632b6e74ab7bf88b2e3514a50d9a4e0138be))
+* send full scrollback on attach to enable scrolling after reattach ([b0caa93](https://github.com/tobias-walle/agency/commit/b0caa930f261e05eda2b799645d0c9865a0cdbae))
+* show [1] Tasks and [2] Command Log hints; enlarge log to 5 lines and add focus + scrolling ([f4530db](https://github.com/tobias-walle/agency/commit/f4530dbfb79da91619d6b443ae3fdc6545fa0078))
+* slugify slugs and keep TUI overlay on error; cancel new on empty editor ([c332f81](https://github.com/tobias-walle/agency/commit/c332f812311bdc77404eae4d99601337ad6c3e70))
+* **tui:** show gray loading status during delete to give immediate feedback ([50904f5](https://github.com/tobias-walle/agency/commit/50904f5c569aa9c10adb01457b4099d50d899c41))
+
+
+### Bug Fixes
+
+* **gc:** avoid deleting agency/* branches when a worktree exists and prune worktrees first ([17068f9](https://github.com/tobias-walle/agency/commit/17068f9efc29d06654cebb7ab3f62931786dc6c9))
+* leave alternate screen during interactive to restore scrollback ([0323ae5](https://github.com/tobias-walle/agency/commit/0323ae5dae1fe31c8459534a00a8318cfa778970))
+
 ## [0.2.0](https://github.com/tobias-walle/agency/compare/v0.1.1...v0.2.0) (2025-11-11)
 
 
