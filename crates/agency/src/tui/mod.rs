@@ -45,6 +45,8 @@ struct AppState {
   rows: Vec<TaskRow>,
   selected: usize,
   mode: Mode,
+  // Pane focus: tasks table or command log
+  focus: Focus,
   slug_input: String,
   cmd_log: Vec<LogEvent>,
   paused: bool,
@@ -54,6 +56,8 @@ struct AppState {
   return_after_menu: Option<Mode>,
   // Track tasks being deleted to show immediate feedback in STATUS
   pending_delete: HashMap<u32, Instant>,
+  // Scroll offset for command log (0 = stick to bottom)
+  log_scroll: usize,
 }
 
 impl AppState {
@@ -192,7 +196,7 @@ fn ui_loop(
 
       let rects = Layout::vertical([
         Constraint::Fill(1),
-        Constraint::Length(5),
+        Constraint::Length(7),
         Constraint::Length(help_rows),
       ])
       .split(f.area());
@@ -224,6 +228,11 @@ fn ui_loop(
         ])
       });
 
+      let tasks_title = if state.focus == Focus::Tasks {
+        Line::from("[1] Tasks").fg(Color::Cyan)
+      } else {
+        Line::from("[1] Tasks")
+      };
       let table = Table::new(
         rows,
         [
@@ -237,7 +246,7 @@ fn ui_loop(
       )
       .header(header)
       .highlight_style(Style::default().bg(Color::DarkGray))
-      .block(Block::default().borders(Borders::ALL).title("Tasks"));
+      .block(Block::default().borders(Borders::ALL).title(tasks_title));
 
       let mut tstate = ratatui::widgets::TableState::default();
       tstate.select(Some(state.selected));
@@ -256,11 +265,20 @@ fn ui_loop(
           }
         }
       }
-      let log_block = Block::default().borders(Borders::ALL).title("Command Log");
-      // Render only the visible lines (auto-scroll to latest)
+      let log_title = if state.focus == Focus::Log {
+        Line::from("[2] Command Log").fg(Color::Cyan)
+      } else {
+        Line::from("[2] Command Log")
+      };
+      let log_block = Block::default().borders(Borders::ALL).title(log_title);
+      // Render only the visible lines (auto-scroll to latest or manual scroll when focused)
       let content_h = rects[1].height.saturating_sub(2) as usize; // minus borders
       let total_lines = lines.len();
-      let start = total_lines.saturating_sub(content_h);
+      let start = if state.focus == Focus::Log {
+        compute_log_start(total_lines, content_h, state.log_scroll)
+      } else {
+        total_lines.saturating_sub(content_h)
+      };
       let visible = lines[start..].to_vec();
       let log_para = Paragraph::new(visible).block(log_block);
       f.render_widget(log_para, rects[1]);
@@ -350,14 +368,29 @@ fn ui_loop(
         Mode::List => match key.code {
           KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => break,
           KeyCode::Up | KeyCode::Char('k') => {
-            if !state.rows.is_empty() {
-              state.selected = state.selected.saturating_sub(1);
+            if state.focus == Focus::Tasks {
+              if !state.rows.is_empty() {
+                state.selected = state.selected.saturating_sub(1);
+              }
+            } else {
+              state.log_scroll = state.log_scroll.saturating_add(1);
             }
           }
           KeyCode::Down | KeyCode::Char('j') => {
-            if !state.rows.is_empty() {
-              state.selected = (state.selected + 1).min(state.rows.len() - 1);
+            if state.focus == Focus::Tasks {
+              if !state.rows.is_empty() {
+                state.selected = (state.selected + 1).min(state.rows.len() - 1);
+              }
+            } else {
+              state.log_scroll = state.log_scroll.saturating_sub(1);
             }
+          }
+          KeyCode::Char('1') => {
+            state.focus = Focus::Tasks;
+            state.log_scroll = 0;
+          }
+          KeyCode::Char('2') => {
+            state.focus = Focus::Log;
           }
           KeyCode::Enter => {
             if let Some(cur) = state.rows.get(state.selected).cloned() {
@@ -804,6 +837,18 @@ mod tests {
     assert_eq!(rows.len(), 0);
     assert_eq!(sel, 0);
   }
+
+  #[test]
+  fn compute_log_start_bounds_and_offsets() {
+    // When at bottom (log_scroll=0), show latest window
+    assert_eq!(compute_log_start(100, 5, 0), 95);
+    // Scroll up by 1 line
+    assert_eq!(compute_log_start(100, 5, 1), 94);
+    // Saturate at start when scroll exceeds available history
+    assert_eq!(compute_log_start(3, 5, 10), 0);
+    // No panic on zero content_h
+    assert_eq!(compute_log_start(10, 0, 0), 10);
+  }
 }
 
 /// UI events coming from daemon subscription
@@ -921,6 +966,13 @@ fn layout_help_lines<'a>(items: &'a [&'a str], width: u16) -> Vec<Line<'a>> {
   }
   lines
 }
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+enum Focus {
+  #[default]
+  Tasks,
+  Log,
+}
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
 enum Mode {
   #[default]
@@ -929,4 +981,8 @@ enum Mode {
     start_and_attach: bool,
   },
   SelectMenu(SelectMenuState),
+}
+
+fn compute_log_start(total_lines: usize, content_h: usize, log_scroll: usize) -> usize {
+  total_lines.saturating_sub(content_h.saturating_add(log_scroll))
 }
