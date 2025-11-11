@@ -489,6 +489,18 @@ fn ui_loop(
               });
             }
           }
+          KeyCode::Char('O') => {
+            if let Some(cur) = state.rows.get(state.selected).cloned() {
+              // Open shell on a background thread; the command wraps interactive boundary
+              std::thread::spawn({
+                let ctx = ctx.clone();
+                let id = cur.id.to_string();
+                move || {
+                  let _ = crate::commands::shell::run(&ctx, &id);
+                }
+              });
+            }
+          }
           KeyCode::Char('X') => {
             if let Some(cur) = state.rows.get(state.selected).cloned() {
               state.push_log(LogEvent::Command(format!("agency rm {}", cur.id)));

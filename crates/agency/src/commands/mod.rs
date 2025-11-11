@@ -15,5 +15,6 @@ pub mod reset;
 pub mod rm;
 pub mod sessions;
 pub mod setup;
+pub mod shell;
 pub mod start;
 pub mod stop;

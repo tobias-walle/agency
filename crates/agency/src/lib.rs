@@ -45,6 +45,8 @@ enum Commands {
   Open { ident: String },
   /// Open the task's markdown in $EDITOR
   Edit { ident: String },
+  /// Open a shell with the worktree as cwd
+  Shell { ident: String },
   /// Print the absolute worktree path
   Path { ident: String },
   /// Print the branch name
@@ -137,6 +139,9 @@ pub fn run() -> Result<()> {
     }
     Some(Commands::Edit { ident }) => {
       commands::edit::run(&ctx, &ident)?;
+    }
+    Some(Commands::Shell { ident }) => {
+      commands::shell::run(&ctx, &ident)?;
     }
     Some(Commands::Path { ident }) => {
       commands::path::run(&ctx, &ident)?;

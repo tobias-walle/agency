@@ -60,6 +60,9 @@ pub struct AgencyConfig {
   pub keybindings: Option<KeybindingsConfig>,
   #[serde(default)]
   pub bootstrap: Option<BootstrapConfig>,
+  /// Command to launch when opening a shell. Defaults to user's shell.
+  #[serde(default)]
+  pub shell: Option<Vec<String>>,
 }
 
 impl AgencyConfig {
