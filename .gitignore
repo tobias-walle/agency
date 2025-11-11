@@ -3,3 +3,4 @@
 pty-demo
 .agency/*
 !.agency/setup.sh
+COMMIT.txt
