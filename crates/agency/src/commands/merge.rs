@@ -6,8 +6,8 @@ use anyhow::{Context, Result, anyhow, bail};
 use crate::config::AppContext;
 use crate::utils::daemon::{notify_after_task_change, stop_sessions_of_task};
 use crate::utils::git::{
-  current_branch_name, hard_reset_to_head, is_fast_forward, open_main_repo, rebase_onto, rev_parse,
-  stash_pop, stash_push, update_branch_ref, worktree_is_clean,
+  current_branch_name_at, git_workdir, hard_reset_to_head_at, is_fast_forward_at, rebase_onto,
+  rev_parse, stash_pop, stash_push, update_branch_ref_at, worktree_is_clean_at,
 };
 use crate::utils::task::{
   branch_name, parse_task_markdown, resolve_id_or_slug, task_file, worktree_dir,
@@ -33,18 +33,18 @@ pub fn run(ctx: &AppContext, ident: &str, base_override: Option<&str>) -> Result
       base_branch = b.to_string();
     }
 
-    // Open main repo once
-    let repo = open_main_repo(ctx.paths.cwd())?;
+    // Resolve main repo workdir once
+    let repo_workdir = git_workdir(ctx.paths.cwd())?;
 
     // If the base branch is currently checked out in the main worktree,
     // ensure we refresh it after the merge and auto-stash if required.
     let mut refresh_checked_out_base = false;
     let mut needs_auto_stash = false;
-    if let Ok(cur) = current_branch_name(&repo)
+    if let Ok(Some(cur)) = current_branch_name_at(&repo_workdir)
       && cur == base_branch
     {
       refresh_checked_out_base = true;
-      if !worktree_is_clean(&repo)? {
+      if !worktree_is_clean_at(&repo_workdir)? {
         needs_auto_stash = true;
         log_warn!(
           "Base is checked out with changes; will auto-stash before merge: {}",
@@ -71,22 +71,19 @@ pub fn run(ctx: &AppContext, ident: &str, base_override: Option<&str>) -> Result
     }
 
     // Fast-forward base to task head without switching HEAD.
-    if !is_fast_forward(&repo, &base_branch, &branch)? {
+    if !is_fast_forward_at(&repo_workdir, &base_branch, &branch)? {
       bail!("Fast-forward not possible: Base advanced; rerun after rebase");
     }
     let new_head = rev_parse(&wt_dir, "HEAD")?;
     if needs_auto_stash {
-      let workdir = repo
-        .workdir()
-        .ok_or_else(|| anyhow!("no main worktree: cannot auto-stash before merge"))?;
       let message = format!("agency auto-stash before merge {}", base_branch);
-      match stash_push(workdir, &message)? {
+      match stash_push(&repo_workdir, &message)? {
         Some(stash_ref) => {
           log_warn!(
             "Auto-stashed checked-out base before fast-forward: {}",
             base_branch
           );
-          pending_stash = Some(AutoStash::new(workdir, stash_ref));
+          pending_stash = Some(AutoStash::new(&repo_workdir, stash_ref));
         }
         None => {
           log_warn!(
@@ -97,9 +94,9 @@ pub fn run(ctx: &AppContext, ident: &str, base_override: Option<&str>) -> Result
       }
     }
     log_success!("Fast-forward {} to {} at {}", base_branch, branch, new_head);
-    update_branch_ref(&repo, &base_branch, &new_head)?;
+    update_branch_ref_at(&repo_workdir, &base_branch, &new_head)?;
     if refresh_checked_out_base {
-      hard_reset_to_head(&repo)?;
+      hard_reset_to_head_at(&repo_workdir)?;
       log_success!("Refreshed checked-out working tree for {}", base_branch);
       if let Some(mut stash) = pending_stash {
         let stash_ref = stash.stash_ref.clone();
@@ -119,9 +116,9 @@ pub fn run(ctx: &AppContext, ident: &str, base_override: Option<&str>) -> Result
     // Cleanup: worktree, branch, task file
     log_warn!("Clean up: worktree, branch, file");
     {
-      use crate::utils::git::{delete_branch_if_exists, prune_worktree_if_exists};
-      let _ = prune_worktree_if_exists(&repo, &wt_dir)?;
-      let _ = delete_branch_if_exists(&repo, &branch)?;
+      use crate::utils::git::{delete_branch_if_exists_at, prune_worktree_if_exists_at};
+      let _ = prune_worktree_if_exists_at(&repo_workdir, &wt_dir)?;
+      let _ = delete_branch_if_exists_at(&repo_workdir, &branch)?;
     }
     if file_path.exists() {
       fs::remove_file(&file_path)
