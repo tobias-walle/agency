@@ -23,7 +23,10 @@ jobs:
 
       - name: Install semantic-release + plugins
         run: |
-          npm i -D semantic-release @semantic-release/commit-analyzer @semantic-release/release-notes-generator @semantic-release/changelog @semantic-release/git semantic-release-cargo
+          npm i -D semantic-release @semantic-release/commit-analyzer @semantic-release/release-notes-generator @semantic-release/changelog @semantic-release/git @semantic-release-cargo/semantic-release-cargo
+
+      - name: Bump lockfile after version write
+        run: cargo update --workspace
 
       - name: Run semantic-release
         env:
