@@ -2,6 +2,14 @@
 
 # Agency
 
+[
+![Release](https://img.shields.io/github/v/release/tobias-walle/agency?include_prereleases)
+](https://github.com/tobias-walle/agency/releases)
+[
+![npm](https://img.shields.io/npm/v/agency-cli.svg?logo=npm&label=npm)
+](https://www.npmjs.com/package/agency-cli)
+![Platforms](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-green)
+
 Agency is an AI agent orchestrator running purely in the command line.
 
 - User-friendly TUI heavily inspired by [Lazygit](https://github.com/jesseduffield/lazygit)
@@ -12,7 +20,7 @@ Agency is an AI agent orchestrator running purely in the command line.
 ## Getting Started
 
 1. Install Agency with your preferred method (macOS and Linux supported)
-   - NPM: `npm install -g agency-ci`
+   - NPM: `npm install -g agency-cli`
    - Homebrew : `brew install tobias-walle/tap/agency`
    - Build from source: `cargo install --git https://github.com/tobias-walle/agency`
 2. Set up your preferences: `agency setup`
