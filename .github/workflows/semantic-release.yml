@@ -26,6 +26,9 @@ jobs:
             .
             crates/*
 
+      - name: Install cargo edit
+        run: cargo install cargo-edit
+
       - name: Prefetch deps
         run: cargo fetch --locked
 
@@ -39,10 +42,7 @@ jobs:
 
       - name: Install semantic-release + plugins
         run: |
-          npm i -D semantic-release @semantic-release/commit-analyzer @semantic-release/release-notes-generator @semantic-release/changelog @semantic-release/git semantic-release-cargo
-
-      - name: Bump lockfile after version write
-        run: cargo update --workspace
+          npm i -D semantic-release @semantic-release/commit-analyzer @semantic-release/release-notes-generator @semantic-release/changelog @semantic-release/git @semantic-release/exec
 
       - name: Run semantic-release
         env:

@@ -5,19 +5,21 @@
     "@semantic-release/commit-analyzer",
     "@semantic-release/release-notes-generator",
     [
-      "semantic-release-cargo",
+      "@semantic-release/exec",
       {
-        "check": false,
-        "allFeatures": false,
-        "publish": false,
-        "alwaysVerifyToken": false
+        "prepareCmd": "cargo set-version --workspace ${nextRelease.version} && cargo update --workspace"
       }
     ],
     ["@semantic-release/changelog", { "changelogFile": "CHANGELOG.md" }],
     [
       "@semantic-release/git",
       {
-        "assets": ["CHANGELOG.md", "Cargo.toml", "Cargo.lock"],
+        "assets": [
+          "CHANGELOG.md",
+          "crates/**/Cargo.toml",
+          "Cargo.toml",
+          "Cargo.lock"
+        ],
         "message": "chore(release): ${nextRelease.version}\n\n${nextRelease.notes}"
       }
     ]
