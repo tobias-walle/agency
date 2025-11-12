@@ -5,20 +5,17 @@
     "@semantic-release/commit-analyzer",
     "@semantic-release/release-notes-generator",
 
-    // Writes the new version into Cargo.toml and can publish to crates.io
     [
       "semantic-release-cargo",
       {
         "check": true,
         "allFeatures": false,
 
-        // we don't want to run `cargo publish`
         "publish": false,
         "alwaysVerifyToken": false
       }
     ],
 
-    // Optional: generate/commit a CHANGELOG + version bump back to the repo
     ["@semantic-release/changelog", { "changelogFile": "CHANGELOG.md" }],
     [
       "@semantic-release/git",
