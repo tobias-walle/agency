@@ -31,10 +31,13 @@ pub fn run(ctx: &AppContext) -> Result<()> {
 
   let wizard = Wizard::new();
   anstream::println!();
+  anstream::println!();
   Wizard::print_logo();
+  anstream::println!();
   anstream::println!();
   let welcome = texts::setup::welcome_lines(&config_display);
   Wizard::info_lines(&welcome);
+  anstream::println!();
 
   let (options, any_detected) = agent_choices(&ctx.config.agents);
   if !any_detected {

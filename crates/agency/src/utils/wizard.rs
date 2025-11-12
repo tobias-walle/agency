@@ -9,16 +9,16 @@ use crate::{log_info, log_warn};
 
 /// ASCII art logo rendered during setup flows.
 const LOGO_LINES: [&str; 10] = [
-  "       db",
-  "      d88b",
-  "     d8'`8b",
-  "    d8'  `8b      ,adPPYb,d8   ,adPPYba,  8b,dPPYba,    ,adPPYba,  8b       d8",
-  "   d8YaaaaY8b    a8\"    `Y88  a8P_____88  88P'   `\"8a  a8\"     \"\"  `8b     d8'",
-  "  d8\"\"\"\"\"\"\"8b   8b       88  8PP\"\"\"\"\"\"\"  88       88  8b           `8b   d8'",
-  " d8'        `8b  \"8a,   ,d88  \"8b,   ,aa  88       88  \"8a,   ,aa    `8b,d8'",
-  "d8'          `8b  `\"YbbdP\"Y8   `\"Ybbd8\"'  88       88   `\"Ybbd8\"'      Y88'",
-  "                  aa,    ,88                                           d8'",
-  "                   `\"Y8bbdP\"                                           d8'",
+  r#"       db"#,
+  r#"      d88b"#,
+  r#"     d8'`8b"#,
+  r#"    d8'  `8b      ,adPPYb,d8   ,adPPYba,  8b,dPPYba,    ,adPPYba,  8b       d8"#,
+  r#"   d8YaaaaY8b    a8"    `Y88  a8P_____88  88P'   `"8a  a8"     ""  `8b     d8'"#,
+  r#"  d8""""""""8b   8b       88  8PP"""""""  88       88  8b           `8b   d8'"#,
+  r#" d8'        `8b  "8a,   ,d88  "8b,   ,aa  88       88  "8a,   ,aa    `8b,d8'"#,
+  r#"d8'          `8b  `"YbbdP"Y8   `"Ybbd8"'  88       88   `"Ybbd8"'      d8'"#,
+  r#"                  aa,    ,88                                           d8'"#,
+  r#"                   `"Y8bbdP"                                           d8'"#,
 ];
 
 /// Choice item that renders nicely in interactive lists while retaining an

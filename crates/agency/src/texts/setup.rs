@@ -27,10 +27,7 @@ pub fn welcome_lines(config_path: &str) -> Vec<String> {
 }
 
 pub fn agent_prompt() -> String {
-  format!(
-    "Select the agent that you want to use by default (you can override this later with the {} option)",
-    highlight_flag()
-  )
+  "Select the agent that you want to use by default:".to_string()
 }
 
 pub fn agent_warning_when_missing() -> String {
@@ -40,7 +37,10 @@ pub fn agent_warning_when_missing() -> String {
 }
 
 pub fn detach_prompt() -> String {
-  "Which shortcut do you want to use to detach from running agents?".to_string()
+  format!(
+    "Which shortcut do you want to use to {} from agents?",
+    "detach".bright_cyan()
+  )
 }
 
 pub fn summary_lines() -> Vec<String> {
