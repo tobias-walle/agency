@@ -23,6 +23,8 @@ Agency is an AI agent orchestrator running purely in the command line.
 
 The easiest option is to use the TUI; run `agency tui` or just `agency`.
 
+![TUI](./media/tui.png)
+
 Everything available in the TUI is also available via the CLI:
 
 - `agency --help` - See all available commands
