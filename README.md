@@ -12,9 +12,9 @@ Agency is an AI agent orchestrator running purely in the command line.
 ## Getting Started
 
 1. Install Agency with your preferred method (macOS and Linux supported)
-   - Build from source: `cargo install --git <url>`
-   - NPM (_Coming soon_): `npm install -g @tobias-walle/agency`
-   - Homebrew (_Coming soon_): `brew install tobias-walle/tap/agency`
+   - NPM: `npm install -g agency-ci`
+   - Homebrew : `brew install tobias-walle/tap/agency`
+   - Build from source: `cargo install --git https://github.com/tobias-walle/agency`
 2. Set up your preferences: `agency setup`
 3. Set up Agency in your project: `agency init`
 4. Start the TUI: `agency`
