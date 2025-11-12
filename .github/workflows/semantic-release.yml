@@ -11,7 +11,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with: { fetch-depth: 0 } # semantic-release needs tags/history
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.SEMANTIC_RELEASE_GH_PAT }} # fine-grained PAT with repo contents:write, workflows
 
       - uses: dtolnay/rust-toolchain@stable
 
