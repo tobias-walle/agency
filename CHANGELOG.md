@@ -1,3 +1,10 @@
+## [1.0.1](https://github.com/tobias-walle/agency/compare/v1.0.0...v1.0.1) (2025-11-12)
+
+
+### Bug Fixes
+
+* optimise column widths ([08e8173](https://github.com/tobias-walle/agency/commit/08e8173336165c9fe1d627d339c8022909e73b81))
+
 # 1.0.0 (2025-11-12)
 
 
