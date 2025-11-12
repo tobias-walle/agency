@@ -22,11 +22,14 @@ exclude = [".git", ".agency"]
 [agents.claude]
 cmd = ["claude", "$AGENCY_TASK"]
 
+[agents.codex]
+cmd = ["codex", "--add-dir", "$AGENCY_ROOT", "$AGENCY_TASK"]
+
+[agents.gemini]
+cmd = ["gemini", "$AGENCY_TASK"]
+
 [agents.opencode]
 cmd = ["opencode", "--prompt", "$AGENCY_TASK"]
-
-[agents.codex]
-cmd = ["codex", "--full-auto", "--add-dir", "$AGENCY_ROOT", "$AGENCY_TASK"]
 
 # Used for testing
 [agents.fake]

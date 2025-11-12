@@ -2,115 +2,115 @@
 
 # Agency
 
-Agency orchestrates command-line AI agents across isolated Git worktrees.
+Agency is an AI agent orchestrator running purely in the command line.
 
-- Git like cli interface (see `agency --help`)
-- Terminal UI (`agency tui`) similar to lazygit
-- Automatic creation of worktrees and background process management
+- User-friendly TUI heavily inspired by [Lazygit](https://github.com/jesseduffield/lazygit)
+- CLI commands for easy automation
+- Supports any CLI coding agent: [Claude Code](https://github.com/anthropics/claude-code), [Codex CLI](https://github.com/openai/codex), [Gemini CLI](https://github.com/google-gemini/gemini-cli), [OpenCode](https://github.com/sst/opencode) and [you can add more](#defining-a-custom-agent)
+  - Isolated environments for each task using Git worktrees
 
-## Requirements
+## Getting Started
 
-- Rust >= 1.89
-- macOS or Linux (Windows is not supported)
+1. Install Agency with your preferred method (macOS and Linux supported)
+   - Build from source: `cargo install --git <url>`
+   - NPM (_Coming soon_): `npm install -g @tobias-walle/agency`
+   - Homebrew (_Coming soon_): `brew install tobias-walle/tap/agency`
+2. Set up your preferences: `agency setup`
+3. Set up Agency in your project: `agency init`
+4. Start the TUI: `agency`
 
-## Install
+## TUI or CLI: your choice
 
-Install the CLI from source:
+The easiest option is to use the TUI; run `agency tui` or just `agency`.
 
-```bash
-just install-globally
-```
+Everything available in the TUI is also available via the CLI:
 
-## First Run
-
-```bash
-# Run the wizard (auto-runs if you call `agency` without a config in place)
-agency setup
-
-# Scaffold project-local overrides and a bootstrap script
-agency init
-
-# Create your first task (opens the markdown and attaches by default)
-agency new implement-cool-feature
-
-# Launch the TUI (same as running `agency` with no arguments once configured)
-agency tui
-```
-
-`agency new` creates `.agency/tasks/<id>-<slug>.md`, records the current branch as the base, and starts+attaches to the configured agent through the daemon unless you pass `--draft`.
-
-## Task Workflow
-
-- `agency ps` - list tasks, worktree status, latest session id, base branch, and effective agent.
-- `agency attach <id|slug>` - attach to an already running task session.
-- `agency start <id|slug>` - prepare the branch/worktree, run bootstrap, start the session and attach; fails if already started.
-- `agency sessions` - show all live sessions for the current repo; reuse ids with `agency attach --session <id>` or `agency stop --session <id>`.
-- `agency stop [<id|slug>] [--session <id>]` - terminate sessions cleanly.
-- `agency merge <id|slug> [--branch main]` - fast-forward the worktree branch into the base and clean up branch plus worktree when complete.
-- `agency bootstrap <id|slug>` - rerun the worktree bootstrap flow without creating a session.
-- `agency open|edit|path|branch <id|slug>` - open the worktree directory, open the task markdown, print the worktree path, or print the branch name.
-- `agency rm <id|slug>` and `agency reset <id|slug>` - delete the task (including worktree and branch) or reset the worktree while keeping the markdown.
-
-The TUI mirrors these actions with keybindings (arrows/j/k to navigate, Enter to edit/attach, `n` to create, `s` to start, `S` to stop, `m` to merge, `X` to delete, `ctrl-q` to detach by default). Logs from CLI commands stream into the bottom panel so you can monitor bootstrap scripts and daemon events.
-
-## Daemon and Sessions
-
-- `agency daemon start|stop|restart` - manage the background PTY daemon manually. `agency attach` and `agency new` start it automatically when needed.
-- Sessions are keyed by repository root and run behind a Unix socket derived from config (`daemon.socket_path` overrides the `$XDG_RUNTIME_DIR/agency.sock` fallback).
-- Agent commands run inside task worktrees with `$AGENCY_TASK` set to the task markdown body (front matter and title stripped) so agents can read the prompt text directly.
+- `agency --help` - See all available commands
+- `agency new my-task` - Start a new task with slug `my-task`; opens your `$EDITOR` to describe what the agent should do.
+- `agency new --draft my-task` - Create a new task as a draft (doesn't start it yet).
+- `agency edit my-task` - Edit a draft task.
+- `agency start my-task` - Start a task that is a draft or stopped.
+- `agency attach my-task` or `agency attach 1` - Open the agent TUI by slug or ID.
+- `agency stop my-task` - Stop a running task (keep its worktree and branch).
+- `agency merge my-task` - Merge the task back into the base branch.
+- `agency path my-task` - Get the worktree path for a task.
+- `agency shell my-task` - Open a shell in the task's worktree.
+- `agency ps` - List all tasks and their status.
+- `agency daemon start|stop|restart` - Manage the background daemon that runs the agents.
+- ... and many more (see `agency --help`).
 
 ## Configuration
 
 Configuration is layered in three tiers:
 
-1. Embedded defaults (`crates/agency/defaults/agency.toml`)
+1. Defaults (see [crates/agency/defaults/agency.toml](./crates/agency/defaults/agency.toml) or `agency defaults`)
 2. Global file `~/.config/agency/agency.toml` (created by `agency setup`)
 3. Project overrides at `./.agency/agency.toml`
 
-Inspect the read-only defaults with:
+### Defining a custom agent
 
-```bash
-agency defaults
+You can define custom agents using any CLI command.
+
+```toml
+[agents.my-agent]
+cmd = ["my-agent", "-p", "$AGENCY_TASK"]
 ```
 
-Key sections you can override:
+The following environment variables are injected into the command:
 
-- `agent` - default agent when a task lacks front matter overrides.
-- `[agents.<name>.cmd]` - argv template for launching an agent. Tokens expand `$VARS` using the session environment (including `AGENCY_TASK`) and replace `<root>` with the repository root.
-- `[bootstrap]` - include/exclude lists that control which files or directories are copied into new worktrees and an optional `cmd` to run (defaults to `<root>/.agency/setup.sh`).
-- `[keybindings]` - customize TUI shortcuts (the setup wizard lets you change the `detach` binding up front).
+- `$AGENCY_TASK` - The full prompt for the current task.
+- `$AGENCY_ROOT` - The path to the folder of the main repo (not the worktree).
 
-Tasks can declare their own agent or base branch in YAML front matter:
+You can also use the `<root>` placeholder for relative paths (works in any config in which you define a path).
 
-```markdown
----
-agent: claude
-base_branch: main
----
-
-# Implement cool feature
+```toml
+[agents.my-local-agent]
+cmd = ["<root>./my-local-agent", "-p", "$AGENCY_TASK"]
 ```
 
-## Bootstrapping Worktrees
+Check out the [default config](./crates/agency/defaults/agency.toml) for a few examples.
 
-When a task session starts or you run `agency bootstrap`, Agency:
+## Architecture
 
-1. Ensures `.agency/worktrees/<id>-<slug>` exists via `git worktree add`.
-2. Copies git-ignored files (up to 10 MB each) that match `bootstrap.include` while respecting exclusions.
-3. Clones any directories listed in `bootstrap.include` (skipping `.git`, `.agency`, and entries in `bootstrap.exclude`).
-4. Runs the configured bootstrap command in the worktree. The default `<root>/.agency/setup.sh` is skipped silently if the script is missing.
+Agency uses a daemon + client architecture. The daemon manages all PTY sessions that run the agents. Clients (CLI or TUI) communicate with the daemon via a Unix socket.
 
-You can rerun the bootstrap step without creating a session via `agency bootstrap <id|slug>`.
+The socket is stored in one of the following locations:
 
-## Development
+- `$AGENCY_SOCKET_PATH` env override
+- `daemon.socket_path` in config
+- `$XDG_RUNTIME_DIR/agency.sock`
+- `~/.local/run/agency.sock` (Default)
 
-Common Just recipes:
+```mermaid
+flowchart LR
+  U[User] --> C[TUI/CLI]
+  C <--> S[Unix Socket]
+  S <--> D[Agency Daemon]
+  D --> P[PTY Sessions]
+  P --> A[CLI Agents]
 
-```bash
-just check     # Run clippy
-just test      # Run the nextest suite
-just fmt       # Format the workspace
-just agency -- <cmd>  # Run the CLI in development mode
+  subgraph Project
+    A
+  end
 ```
 
-The crate targets Rust 1.89+ (edition 2024) and uses `parking_lot`, `ratatui`, `crossterm`, `gix`, and a bespoke PTY daemon (`crates/agency/src/pty`). Browse `docs/plans/` for design history and upcoming work.
+For example, when creating a new task the message flow between daemon and client looks like this:
+
+```mermaid
+sequenceDiagram
+  participant U as User
+  participant C as Agency CLI
+  participant D as Daemon
+  participant P as PTY Manager
+  participant A as Agent
+
+  U->>C: agency new my-task
+  C->>C: Create .agency/tasks/my-task.md
+  C->>D: OpenSession(project, task, cmd, worktree) via socket
+  D->>P: Spawn PTY session
+  P->>A: Exec agent cmd in worktree
+  C->>P: Attach to session (interactive)
+  U<<->>P: Terminal I/O
+  P->>D: Status updates
+  D->>C: Notifications
+```
