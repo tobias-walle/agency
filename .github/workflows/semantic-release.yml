@@ -10,13 +10,29 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
+      ### CHECKOUT ###
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
           token: ${{ secrets.SEMANTIC_RELEASE_GH_PAT }} # fine-grained PAT with repo contents:write, workflows
 
+      ### RUST TOOLCHAIN ###
       - uses: dtolnay/rust-toolchain@stable
 
+      - name: Cache cargo/target
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            .
+            crates/*
+
+      - name: Prefetch deps (makes cache hits deterministic)
+        run: cargo fetch --locked
+
+      - name: Check
+        run: cargo check --workspace --locked -q
+
+      ### SEMANTIC RELEASE ###
       - uses: actions/setup-node@v4
         with:
           node-version: "lts/*"
