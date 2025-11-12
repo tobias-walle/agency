@@ -19,7 +19,7 @@ jobs:
       ### RUST TOOLCHAIN ###
       - uses: dtolnay/rust-toolchain@stable
 
-      - name: Cache cargo/target
+      - name: Setup rust cache
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: |
