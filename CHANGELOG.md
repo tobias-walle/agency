@@ -1,3 +1,15 @@
+# [1.1.0](https://github.com/tobias-walle/agency/compare/v1.0.1...v1.1.0) (2025-11-12)
+
+
+### Bug Fixes
+
+* resolve small styling issues in setup prompts ([b424eae](https://github.com/tobias-walle/agency/commit/b424eaef26acaac55d355e6037c2d2178ebb8170))
+
+
+### Features
+
+* add shell to setup wizard ([035dc63](https://github.com/tobias-walle/agency/commit/035dc63aebef5b8c887140ee9bda26c3dbbc5f02))
+
 ## [1.0.1](https://github.com/tobias-walle/agency/compare/v1.0.0...v1.0.1) (2025-11-12)
 
 
