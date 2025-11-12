@@ -27,7 +27,9 @@ jobs:
             crates/*
 
       - name: Install cargo edit
-        run: cargo install cargo-edit
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-edit@^0.13
 
       - name: Prefetch deps
         run: cargo fetch --locked
