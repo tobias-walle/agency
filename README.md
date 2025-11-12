@@ -11,7 +11,7 @@ Agency is an AI agent orchestrator running purely in the command line.
 - User-friendly TUI heavily inspired by [Lazygit](https://github.com/jesseduffield/lazygit)
 - CLI commands for easy automation
 - Supports any CLI coding agent: [Claude Code](https://github.com/anthropics/claude-code), [Codex CLI](https://github.com/openai/codex), [Gemini CLI](https://github.com/google-gemini/gemini-cli), [OpenCode](https://github.com/sst/opencode) and [you can add more](#defining-a-custom-agent)
-  - Isolated environments for each task using Git worktrees
+- Isolated environments for each task using Git worktrees
 
 ## Getting Started
 
