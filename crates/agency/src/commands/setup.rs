@@ -54,6 +54,23 @@ pub fn run(ctx: &AppContext) -> Result<()> {
   let detach_changed = detach != default_detach;
   anstream::println!();
 
+  // Ask for preferred shell command (argv split via shell-words)
+  let shell_prompt = texts::setup::shell_prompt();
+  // Use currently configured value (or env/SHELL, or /bin/sh) as default
+  let default_shell_argv: Vec<String> = if let Some(v) = &ctx.config.shell
+    && !v.is_empty()
+  {
+    v.clone()
+  } else if let Ok(sh) = std::env::var("SHELL")
+    && !sh.trim().is_empty()
+  {
+    vec![sh]
+  } else {
+    vec!["/bin/sh".to_string()]
+  };
+  let shell_argv = wizard.shell_words(&shell_prompt, &default_shell_argv)?;
+  anstream::println!();
+
   if let Some(parent) = config_path.parent() {
     fs::create_dir_all(parent).with_context(|| format!("failed to create {}", parent.display()))?;
   }
@@ -64,6 +81,10 @@ pub fn run(ctx: &AppContext) -> Result<()> {
     TomlValue::String(default_agent.clone()),
   );
   apply_detach(&mut table, &detach, detach_changed)?;
+  table.insert(
+    "shell".to_string(),
+    TomlValue::Array(shell_argv.into_iter().map(TomlValue::String).collect()),
+  );
 
   let data = TomlValue::Table(table);
   let serialized = toml::to_string_pretty(&data).context("failed to serialize config")?;

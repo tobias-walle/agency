@@ -114,6 +114,14 @@ impl Wizard {
     Self::fallback_text(prompt, default)
   }
 
+  /// Prompt for a command and split it into argv using shell-words.
+  pub fn shell_words(&self, prompt: &str, default_argv: &[String]) -> Result<Vec<String>> {
+    let default_str = default_argv.join(" ");
+    let input = self.text(prompt, &default_str)?;
+    let parts = shell_words::split(&input).context("invalid shell command")?;
+    Ok(parts)
+  }
+
   /// Prompt for a yes/no confirmation.
   pub fn confirm(&self, prompt: &str, default: bool) -> Result<bool> {
     if self.is_tty {

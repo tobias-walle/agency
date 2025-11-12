@@ -4,10 +4,6 @@ fn highlight_name() -> String {
   "Agency".bright_cyan().bold().to_string()
 }
 
-fn highlight_flag() -> String {
-  "-a/--agent".bright_cyan().bold().to_string()
-}
-
 fn highlight_cmd(cmd: &str) -> String {
   format!("{}", cmd.bright_cyan().bold())
 }
@@ -41,6 +37,10 @@ pub fn detach_prompt() -> String {
     "Which shortcut do you want to use to {} from agents?",
     "detach".bright_cyan()
   )
+}
+
+pub fn shell_prompt() -> String {
+  "Which shell should Agency use when opening a shell? (enter a command)".to_string()
 }
 
 pub fn summary_lines() -> Vec<String> {
