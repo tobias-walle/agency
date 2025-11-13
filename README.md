@@ -1,6 +1,4 @@
-![Agency Logo](./media/logo.svg)
-
-# Agency
+# ![Agency](./media/logo.svg)
 
 [![npm](https://img.shields.io/npm/v/agency-cli.svg?logo=npm&label=npm)](https://www.npmjs.com/package/agency-cli)
 ![Platforms](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-green)
