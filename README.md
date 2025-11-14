@@ -41,7 +41,7 @@ Everything available in the TUI is also available via the CLI:
 - `agency path my-task` - Get the worktree path for a task.
 - `agency shell my-task` - Open a shell in the task's worktree.
 - `agency ps` - List all tasks and their status.
-- `agency daemon start|stop|restart` - Manage the background daemon that runs the agents.
+- `agency daemon start|stop|restart` - Manage the background daemon that tracks sessions and notifies clients.
 - ... and many more (see `agency --help`).
 
 ## Configuration
@@ -65,6 +65,7 @@ The following environment variables are injected into the command:
 
 - `$AGENCY_TASK` - The full prompt for the current task.
 - `$AGENCY_ROOT` - The path to the folder of the main repo (not the worktree).
+- `$AGENCY_TASK_ID` - The numeric ID of the task.
 
 You can also use the `<root>` placeholder for relative paths (works in any config in which you define a path).
 
@@ -77,22 +78,29 @@ Check out the [default config](./crates/agency/defaults/agency.toml) for a few e
 
 ## Architecture
 
-Agency uses a daemon + client architecture. The daemon manages all PTY sessions that run the agents. Clients (CLI or TUI) communicate with the daemon via a Unix socket.
+Agency uses a daemon + client architecture with tmux-managed sessions. The daemon is slim: it computes session/task status from tmux and broadcasts notifications. Clients (CLI or TUI) communicate with the daemon via a Unix socket but attach directly to tmux for interactive views.
 
-The socket is stored in one of the following locations:
+Daemon socket path precedence:
 
 - `$AGENCY_SOCKET_PATH` env override
 - `daemon.socket_path` in config
 - `$XDG_RUNTIME_DIR/agency.sock`
 - `~/.local/run/agency.sock` (Default)
 
+Tmux socket path precedence (used for all sessions):
+
+- `$AGENCY_TMUX_SOCKET_PATH` env override
+- `daemon.tmux_socket_path` in config
+- `$XDG_RUNTIME_DIR/agency-tmux.sock`
+- `~/.local/run/agency-tmux.sock` (Default)
+
 ```mermaid
 flowchart LR
   U[User] --> C[TUI/CLI]
   C <--> S[Unix Socket]
   S <--> D[Agency Daemon]
-  D --> P[PTY Sessions]
-  P --> A[CLI Agents]
+  C <--> T[tmux Server]
+  T --> A[CLI Agents]
 
   subgraph Project
     A
@@ -106,16 +114,15 @@ sequenceDiagram
   participant U as User
   participant C as Agency CLI
   participant D as Daemon
-  participant P as PTY Manager
+  participant T as tmux
   participant A as Agent
 
   U->>C: agency new my-task
   C->>C: Create .agency/tasks/my-task.md
-  C->>D: OpenSession(project, task, cmd, worktree) via socket
-  D->>P: Spawn PTY session
-  P->>A: Exec agent cmd in worktree
-  C->>P: Attach to session (interactive)
-  U<<->>P: Terminal I/O
-  P->>D: Status updates
-  D->>C: Notifications
+  C->>T: new-session -d -s agency-<id>-<slug> (remain-on-exit)
+  T->>A: Exec agent cmd in worktree
+  C->>T: attach-session -t agency-<id>-<slug>
+  U<<->>T: Terminal I/O
+  T->>D: (indirect) State via list-sessions/list-panes
+  D->>C: SessionsChanged/TasksChanged
 ```

@@ -15,7 +15,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Cell, Paragraph, Row, Table};
 
 use crate::config::AppContext;
-use crate::pty::protocol::{
+use crate::daemon_protocol::{
   C2D, C2DControl, D2C, D2CControl, ProjectKey, SessionInfo, read_frame, write_frame,
 };
 use crate::utils::daemon::{connect_daemon, list_sessions_for_project};
@@ -769,10 +769,7 @@ mod tests {
   ) -> SessionInfo {
     SessionInfo {
       session_id,
-      project: ProjectKey {
-        repo_root: "repo".to_string(),
-      },
-      task: crate::pty::protocol::TaskMeta {
+      task: crate::daemon_protocol::TaskMeta {
         id: task_id,
         slug: slug.to_string(),
       },
@@ -780,11 +777,6 @@ mod tests {
       status: status.to_string(),
       clients: 1,
       created_at_ms,
-      stats: crate::pty::protocol::SessionStatsLite {
-        bytes_in: 0,
-        bytes_out: 0,
-        elapsed_ms: 0,
-      },
     }
   }
 

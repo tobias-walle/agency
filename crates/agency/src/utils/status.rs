@@ -1,7 +1,7 @@
 use owo_colors::OwoColorize as _;
 
 use crate::config::AgencyPaths;
-use crate::pty::protocol::SessionInfo;
+use crate::daemon_protocol::SessionInfo;
 use crate::utils::task::TaskRef;
 use anyhow::Result;
 use std::fs;

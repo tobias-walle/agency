@@ -45,6 +45,8 @@ impl AgentConfig {
 pub struct DaemonConfig {
   #[serde(default)]
   pub socket_path: Option<String>,
+  #[serde(default)]
+  pub tmux_socket_path: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -303,6 +305,7 @@ mod tests {
         let cfg = AgencyConfig {
           daemon: Some(DaemonConfig {
             socket_path: Some(cfg_sock.display().to_string()),
+            tmux_socket_path: None,
           }),
           ..Default::default()
         };
@@ -328,6 +331,7 @@ mod tests {
         let cfg = AgencyConfig {
           daemon: Some(DaemonConfig {
             socket_path: Some(cfg_sock.display().to_string()),
+            tmux_socket_path: None,
           }),
           ..Default::default()
         };

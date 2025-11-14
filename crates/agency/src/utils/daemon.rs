@@ -1,8 +1,8 @@
 use crate::config::{AppContext, compute_socket_path};
-use crate::log_warn;
-use crate::pty::protocol::{
+use crate::daemon_protocol::{
   C2D, C2DControl, D2C, D2CControl, ProjectKey, SessionInfo, read_frame, write_frame,
 };
+use crate::log_warn;
 use crate::utils::git::{open_main_repo, repo_workdir_or};
 use crate::utils::task::TaskRef;
 use anyhow::{Context, Result, anyhow, bail};

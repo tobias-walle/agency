@@ -7,8 +7,8 @@ use anyhow::{Context, Result};
 use log::{info, warn};
 
 use crate::config::{compute_socket_path, load_config};
-use crate::pty::daemon as pty_daemon;
-use crate::pty::protocol::{C2D, C2DControl, write_frame};
+use crate::daemon as slim_daemon;
+use crate::daemon_protocol::{C2D, C2DControl, write_frame};
 use crate::utils::daemon::connect_daemon_socket;
 
 pub fn run_blocking() -> Result<()> {
@@ -22,7 +22,7 @@ pub fn run_blocking() -> Result<()> {
   let cfg = load_config(&cwd)?;
   let socket = compute_socket_path(&cfg);
 
-  pty_daemon::run_daemon(&socket)
+  slim_daemon::run_daemon(&socket, &cfg)
 }
 
 pub fn start() -> Result<()> {

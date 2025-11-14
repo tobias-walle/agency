@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::pty::protocol::SessionInfo;
+use crate::daemon_protocol::SessionInfo;
 
 /// Build a map of the latest session per task key `(id, slug)` by `created_at_ms`.
 pub fn latest_sessions_by_task(sessions: &[SessionInfo]) -> HashMap<(u32, String), SessionInfo> {

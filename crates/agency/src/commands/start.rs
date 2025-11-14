@@ -2,9 +2,8 @@ use anyhow::Result;
 use std::collections::HashMap;
 use std::path::Path;
 
-use crate::config::{AppContext, compute_socket_path};
-use crate::pty::client as pty_client;
-use crate::pty::protocol::{ProjectKey, SessionOpenMeta, TaskMeta, WireCommand};
+use crate::config::AppContext;
+use crate::daemon_protocol::TaskMeta;
 use crate::utils::bootstrap::prepare_worktree_for_task;
 use crate::utils::cmd::{CmdCtx, expand_argv};
 use crate::utils::command::Command as LocalCommand;
@@ -12,6 +11,7 @@ use crate::utils::daemon::list_sessions_for_project;
 use crate::utils::git::{ensure_branch_at, open_main_repo, repo_workdir_or};
 use crate::utils::interactive;
 use crate::utils::task::{agent_for_task, branch_name, read_task_content, resolve_id_or_slug};
+use crate::utils::tmux;
 
 /// Start a task's session and attach. Fails if already started.
 ///
@@ -23,15 +23,9 @@ pub fn run(ctx: &AppContext, ident: &str) -> Result<()> {
   let content = read_task_content(&ctx.paths, &task)?;
   let frontmatter = content.frontmatter.clone();
 
-  // Compute socket path from config
-  let socket = compute_socket_path(&ctx.config);
-
   // Compute project key (canonical main repo workdir)
   let repo = open_main_repo(ctx.paths.cwd())?;
   let repo_root = repo_workdir_or(&repo, ctx.paths.cwd());
-  let project = ProjectKey {
-    repo_root: repo_root.display().to_string(),
-  };
 
   // Determine base branch from front matter or current HEAD
   let base_branch = frontmatter
@@ -73,22 +67,9 @@ pub fn run(ctx: &AppContext, ident: &str) -> Result<()> {
   let argv = expand_argv(&argv_tmpl, &ctx_expand);
   let cmd_local = LocalCommand::new(&argv)?;
 
-  // Build wire command
-  let cmd_wire = WireCommand {
-    program: cmd_local.program.clone(),
-    args: cmd_local.args.clone(),
-    cwd: worktree_dir.display().to_string(),
-    env: env_map.into_iter().collect(),
-  };
-
-  let open = SessionOpenMeta {
-    project,
-    task: TaskMeta {
-      id: task.id,
-      slug: task.slug.clone(),
-    },
-    worktree_dir: worktree_dir.display().to_string(),
-    cmd: cmd_wire,
+  let task_meta = TaskMeta {
+    id: task.id,
+    slug: task.slug.clone(),
   };
 
   // Fail when a session is already running for this task
@@ -99,8 +80,18 @@ pub fn run(ctx: &AppContext, ident: &str) -> Result<()> {
     anyhow::bail!("Already started. Use attach");
   }
 
-  // Attach and open a new session using real terminal size
-  interactive::scope(|| pty_client::run_attach(&socket, open, None, &ctx.config))
+  crate::utils::daemon::notify_after_task_change(ctx, || {
+    // Start tmux session and then attach
+    tmux::start_session(
+      &ctx.config,
+      &repo_root,
+      &task_meta,
+      &worktree_dir,
+      &cmd_local.program,
+      &cmd_local.args,
+    )?;
+    interactive::scope(|| tmux::attach_session(&ctx.config, &task_meta))
+  })
 }
 
 /// Build the environment map passed to agent processes.

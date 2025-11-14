@@ -66,14 +66,14 @@ fn get_status_text(status: Option<&str>) -> String {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::pty::protocol::SessionInfo;
+  use crate::daemon_protocol::SessionInfo;
   use crate::utils::term::strip_ansi_control_codes;
 
   #[test]
   fn latest_session_selection_by_created_at() {
     use crate::utils::sessions::latest_sessions_by_task;
     let base_a = SessionInfo {
-      task: crate::pty::protocol::TaskMeta {
+      task: crate::daemon_protocol::TaskMeta {
         id: 5,
         slug: "a".to_string(),
       },
@@ -91,7 +91,7 @@ mod tests {
     };
     let s3_other = SessionInfo {
       session_id: 10,
-      task: crate::pty::protocol::TaskMeta {
+      task: crate::daemon_protocol::TaskMeta {
         id: 6,
         slug: "b".to_string(),
       },

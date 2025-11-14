@@ -1,7 +1,9 @@
 use anyhow::Result;
 
 use crate::config::{AppContext, compute_socket_path};
-use crate::pty::protocol::{C2D, C2DControl, D2C, D2CControl, ProjectKey, read_frame, write_frame};
+use crate::daemon_protocol::{
+  C2D, C2DControl, D2C, D2CControl, ProjectKey, read_frame, write_frame,
+};
 use crate::utils::daemon::connect_daemon_socket;
 use crate::utils::git::{open_main_repo, repo_workdir_or};
 use crate::utils::task::resolve_id_or_slug;

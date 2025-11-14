@@ -4,7 +4,8 @@ use std::io::IsTerminal as _;
 
 mod commands;
 pub mod config;
-pub mod pty;
+pub mod daemon;
+pub mod daemon_protocol;
 mod texts;
 pub mod tui;
 mod utils;

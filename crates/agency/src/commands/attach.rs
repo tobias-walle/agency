@@ -1,12 +1,16 @@
 use anyhow::Result;
 
-use crate::config::{AppContext, compute_socket_path};
-use crate::pty::client as pty_client;
-use crate::pty::protocol::{ProjectKey, SessionOpenMeta, TaskMeta, WireCommand};
+use crate::config::AppContext;
+use crate::daemon_protocol::TaskMeta;
 use crate::utils::daemon::list_sessions_for_project;
 use crate::utils::git::{open_main_repo, repo_workdir_or};
 use crate::utils::interactive;
 use crate::utils::task::resolve_id_or_slug;
+use crate::utils::tmux;
+use crate::utils::{
+  cmd::{CmdCtx, expand_argv},
+  command::Command as LocalCommand,
+};
 
 pub fn run_with_task(ctx: &AppContext, ident: &str) -> Result<()> {
   // Initialize env_logger similar to pty-demo main
@@ -17,15 +21,9 @@ pub fn run_with_task(ctx: &AppContext, ident: &str) -> Result<()> {
   // Resolve task
   let task = resolve_id_or_slug(&ctx.paths, ident)?;
 
-  // Compute socket path from config
-  let socket = compute_socket_path(&ctx.config);
-
   // Compute project key (canonical main repo workdir)
   let repo = open_main_repo(ctx.paths.cwd())?;
   let repo_root = repo_workdir_or(&repo, ctx.paths.cwd());
-  let project = ProjectKey {
-    repo_root: repo_root.display().to_string(),
-  };
 
   // Query existing sessions and join the latest for this task; error if none
   let entries = list_sessions_for_project(ctx)?;
@@ -34,54 +32,58 @@ pub fn run_with_task(ctx: &AppContext, ident: &str) -> Result<()> {
     .filter(|e| e.task.id == task.id && e.task.slug == task.slug)
     .max_by_key(|e| e.created_at_ms);
 
-  let Some(session) = target else {
-    anyhow::bail!("Session not running. Please start it first");
+  let task_meta = TaskMeta {
+    id: task.id,
+    slug: task.slug.clone(),
   };
-
-  // For join, the open meta is unused; provide minimal values.
-  let cwd = ctx.paths.cwd().display().to_string();
-  let open = SessionOpenMeta {
-    project,
-    task: TaskMeta {
-      id: 0,
-      slug: String::new(),
-    },
-    worktree_dir: cwd.clone(),
-    cmd: WireCommand {
-      program: "sh".to_string(),
-      args: vec!["-l".to_string()],
-      cwd,
-      env: Vec::new(),
-    },
-  };
-
-  interactive::scope(|| {
-    pty_client::run_attach(&socket, open, Some(session.session_id), &ctx.config)
+  if let Some(session) = target {
+    return interactive::scope(|| tmux::attach_session(&ctx.config, &task_meta));
+  }
+  // Auto-start when missing: build agent command and start session, then attach
+  let content = crate::utils::task::read_task_content(&ctx.paths, &task)?;
+  let frontmatter = content.frontmatter.clone();
+  let description = content.body.trim().to_string();
+  let mut env_map: std::collections::HashMap<String, String> = std::env::vars().collect();
+  env_map.insert("AGENCY_TASK".to_string(), description);
+  let root_abs = repo_root
+    .canonicalize()
+    .unwrap_or(repo_root.clone())
+    .display()
+    .to_string();
+  env_map.insert("AGENCY_ROOT".to_string(), root_abs);
+  env_map.insert("AGENCY_TASK_ID".to_string(), task.id.to_string());
+  let agent_name = crate::utils::task::agent_for_task(&ctx.config, frontmatter.as_ref())
+    .ok_or_else(|| anyhow::anyhow!("no agent selected"))?;
+  let agent_cfg = ctx.config.get_agent(&agent_name)?;
+  let argv_tmpl = agent_cfg.cmd.clone();
+  let ctx_expand = CmdCtx::with_env(
+    repo_root
+      .canonicalize()
+      .unwrap_or(repo_root.clone())
+      .display()
+      .to_string(),
+    env_map.clone(),
+  );
+  let argv = expand_argv(&argv_tmpl, &ctx_expand);
+  let cmd_local = LocalCommand::new(&argv)?;
+  let worktree_dir = crate::utils::task::worktree_dir(&ctx.paths, &task);
+  crate::utils::daemon::notify_after_task_change(ctx, || {
+    tmux::start_session(
+      &ctx.config,
+      &repo_root,
+      &task_meta,
+      &worktree_dir,
+      &cmd_local.program,
+      &cmd_local.args,
+    )?;
+    interactive::scope(|| tmux::attach_session(&ctx.config, &task_meta))
   })
 }
 
 pub fn run_join_session(ctx: &AppContext, session_id: u64) -> Result<()> {
-  // For join, the open meta is unused by the handshake; provide minimal values.
-  let repo = open_main_repo(ctx.paths.cwd())?;
-  let repo_root = repo_workdir_or(&repo, ctx.paths.cwd());
-  let project = ProjectKey {
-    repo_root: repo_root.display().to_string(),
+  let entries = list_sessions_for_project(ctx)?;
+  let Some(si) = entries.into_iter().find(|e| e.session_id == session_id) else {
+    anyhow::bail!("Session not found: {}", session_id);
   };
-  let cwd = ctx.paths.cwd().display().to_string();
-  let open = SessionOpenMeta {
-    project,
-    task: TaskMeta {
-      id: 0,
-      slug: String::new(),
-    },
-    worktree_dir: cwd.clone(),
-    cmd: WireCommand {
-      program: "sh".to_string(),
-      args: vec!["-l".to_string()],
-      cwd,
-      env: Vec::new(),
-    },
-  };
-  let socket = compute_socket_path(&ctx.config);
-  interactive::scope(|| pty_client::run_attach(&socket, open, Some(session_id), &ctx.config))
+  interactive::scope(|| tmux::attach_session(&ctx.config, &si.task))
 }
