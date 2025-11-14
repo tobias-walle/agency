@@ -10,7 +10,7 @@ Agency is an AI agent orchestrator running purely in the command line.
 - User-friendly TUI heavily inspired by [Lazygit](https://github.com/jesseduffield/lazygit)
 - CLI commands for easy automation
 - Supports any CLI coding agent: [Claude Code](https://github.com/anthropics/claude-code), [Codex CLI](https://github.com/openai/codex), [Gemini CLI](https://github.com/google-gemini/gemini-cli), [OpenCode](https://github.com/sst/opencode) and [you can add more](#defining-a-custom-agent)
-- Isolated environments for each task using Git worktrees
+- Isolated environments for each task using [Git Worktrees](https://git-scm.com/docs/git-worktree) and [Tmux](https://github.com/tmux/tmux)
 
 ## Getting Started
 
@@ -51,6 +51,29 @@ Configuration is layered in three tiers:
 1. Defaults (see [crates/agency/defaults/agency.toml](./crates/agency/defaults/agency.toml) or `agency defaults`)
 2. Global file `~/.config/agency/agency.toml` (created by `agency setup`)
 3. Project overrides at `./.agency/agency.toml`
+
+### Tmux
+
+Agency uses Tmux to manage the background agents.
+
+If you attach to an agent you are basically opening Tmux.
+After applying some default Agency loads the following files for your custom options:
+
+- Global: `~/.config/agency/tmux.conf`
+- Project: `./.agency/tmux.conf`
+
+Your usual `~/.tmux.conf` is not loaded automatically.
+
+To reuse your global tmux configuration in Agency, add a source line to `~/.config/agency/tmux.conf`:
+
+```
+# Load your normal tmux config if present
+source-file -q ~/.tmux.conf
+# Optionally support XDG-style configs too
+source-file -q ~/.config/tmux/tmux.conf
+
+# Your Agency-specific overrides can follow here
+```
 
 ### Defining a custom agent
 

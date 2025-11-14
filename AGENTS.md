@@ -173,6 +173,8 @@ Structure your final plan into the following sections (replace placeholders in `
 - `[how will the behavior be changed to solve the problem (in bullet points). Stay high level and focus on architecture and avoid verbose Implementation details.]`
 - `## Architecture`
 - `[overview of the new, modified and deleted files and symbols in a tree of bullet points. Should be more detailed then solution for a quick review of a Tech Lead.]`
+- `## Testing`
+- `[Bullet point list with the test cases you want to create or modify. Mark each test with "Unit", "Integration" or "E2E".]`
 - `## Detailed Plan`
 - `HINT: Update checkboxes during the implementation and add short implementation notes (including problems that occurred on how they were solved)`
 - `[Numbered, Step by step plan on how to implement the solution. Mention relevant files and code changes in relatively high detail. Make sure the order makes sense. Keep Testing and TDD in mind and always start with tests. Add empty mardown checkboxes '[ ]' before each step for later update.]`

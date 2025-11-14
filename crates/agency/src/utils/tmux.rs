@@ -28,6 +28,8 @@ pub fn tmux_args_base(cfg: &AgencyConfig) -> Vec<String> {
     sock.display().to_string(),
     "-L".to_string(),
     "agency".to_string(),
+    "-f".to_string(),
+    "/dev/null".to_string(),
   ]
 }
 
@@ -58,61 +60,23 @@ pub fn start_session(
   run_cmd(&mut cmd).context("tmux new-session failed")?;
 
   // Remain on exit
-  run_cmd(
-    std::process::Command::new("tmux")
-      .args(tmux_args_base(cfg))
-      .arg("set-option")
-      .arg("-t")
-      .arg(&name)
-      .arg("remain-on-exit")
-      .arg("on"),
-  )
-  .context("tmux set remain-on-exit failed")?;
+  tmux_set_option(cfg, &name, "remain-on-exit", "on")?;
 
-  // Hide the status bar for a clean, app-controlled UI and fix colors
-  run_cmd(
-    std::process::Command::new("tmux")
-      .args(tmux_args_base(cfg))
-      .arg("set-option")
-      .arg("-t")
-      .arg(&name)
-      .arg("status")
-      .arg("off"),
-  )
-  .context("tmux set status off failed")?;
-  run_cmd(
-    std::process::Command::new("tmux")
-      .args(tmux_args_base(cfg))
-      .arg("set-option")
-      .arg("-t")
-      .arg(&name)
-      .arg("default-terminal")
-      .arg("tmux-256color"),
-  )
-  .context("tmux set default-terminal failed")?;
-  run_cmd(
-    std::process::Command::new("tmux")
-      .args(tmux_args_base(cfg))
-      .arg("set-option")
-      .arg("-t")
-      .arg(&name)
-      .arg("-ga")
-      .arg("terminal-overrides")
-      .arg(",*256col*:Tc"),
-  )
-  .context("tmux set terminal-overrides failed")?;
+  // Hide the status bar for a clean, app-controlled UI
+  tmux_set_option(cfg, &name, "status", "off")?;
+  // Apply Agency defaults globally, then source user config to override
+  apply_ui_defaults(cfg)?;
+  load_user_tmux_config(cfg, Some(project_root))?;
+  tmux_set_option(cfg, &name, "default-terminal", "tmux-256color")?;
+  tmux_set_option_append(cfg, &name, "terminal-overrides", ",*256col*:Tc")?;
 
   // Store project root for filtering
-  run_cmd(
-    std::process::Command::new("tmux")
-      .args(tmux_args_base(cfg))
-      .arg("set-option")
-      .arg("-t")
-      .arg(&name)
-      .arg("@agency_root")
-      .arg(project_root.display().to_string()),
-  )
-  .context("tmux set @agency_root failed")?;
+  tmux_set_option(
+    cfg,
+    &name,
+    "@agency_root",
+    &project_root.display().to_string(),
+  )?;
 
   // Enable pipe-pane to activity stamp
   let stamp = activity_stamp_path(project_root, &name);
@@ -135,6 +99,7 @@ pub fn start_session(
 
 pub fn attach_session(cfg: &AgencyConfig, task: &TaskMeta) -> Result<()> {
   let name = session_name(task.id, &task.slug);
+  // Attach without reapplying config; overrides already sourced on start
   let mut cmd = std::process::Command::new("tmux");
   cmd
     .args(tmux_args_base(cfg))
@@ -168,6 +133,101 @@ fn run_cmd(cmd: &mut std::process::Command) -> Result<()> {
     anyhow::bail!("command failed: {cmd:?}")
   }
 }
+
+fn tmux_set_option(cfg: &AgencyConfig, target: &str, key: &str, value: &str) -> Result<()> {
+  run_cmd(
+    std::process::Command::new("tmux")
+      .args(tmux_args_base(cfg))
+      .arg("set-option")
+      .arg("-t")
+      .arg(target)
+      .arg(key)
+      .arg(value),
+  )
+  .with_context(|| format!("tmux set {key} failed"))
+}
+
+fn tmux_set_option_append(cfg: &AgencyConfig, target: &str, key: &str, value: &str) -> Result<()> {
+  run_cmd(
+    std::process::Command::new("tmux")
+      .args(tmux_args_base(cfg))
+      .arg("set-option")
+      .arg("-t")
+      .arg(target)
+      .arg("-ga")
+      .arg(key)
+      .arg(value),
+  )
+  .with_context(|| format!("tmux append {key} failed"))
+}
+
+fn tmux_set_option_global(cfg: &AgencyConfig, key: &str, value: &str) -> Result<()> {
+  run_cmd(
+    std::process::Command::new("tmux")
+      .args(tmux_args_base(cfg))
+      .arg("set-option")
+      .arg("-g")
+      .arg(key)
+      .arg(value),
+  )
+  .with_context(|| format!("tmux set -g {key} failed"))
+}
+
+fn apply_ui_defaults(cfg: &AgencyConfig) -> Result<()> {
+  // Borders: subtle grey, active cyan accent
+  tmux_set_option_global(cfg, "pane-border-style", "fg=colour238")?;
+  tmux_set_option_global(cfg, "pane-active-border-style", "fg=colour39")?;
+
+  // Messages and prompts: cyan baseline
+  tmux_set_option_global(cfg, "message-style", "fg=colour255,bg=colour24")?;
+  tmux_set_option_global(cfg, "message-command-style", "fg=colour255,bg=colour24")?;
+
+  // Mode overlays (copy, choose-tree): cyan baseline
+  tmux_set_option_global(cfg, "mode-style", "fg=colour255,bg=colour24")?;
+
+  // Popups (if used): match baseline
+  tmux_set_option_global(cfg, "popup-style", "fg=colour255,bg=colour24")?;
+
+  // Display panes overlay colours
+  tmux_set_option_global(cfg, "display-panes-colour", "colour238")?;
+  tmux_set_option_global(cfg, "display-panes-active-colour", "colour39")?;
+
+  // Optional plugin/user options for scrollbar styling
+  tmux_set_option_global(cfg, "@scrollbar", "on")?;
+  tmux_set_option_global(cfg, "@scrollbar-style", "fg=colour39,bg=colour24")?;
+  Ok(())
+}
+
+fn tmux_source_file(cfg: &AgencyConfig, path: &Path) -> Result<()> {
+  run_cmd(
+    std::process::Command::new("tmux")
+      .args(tmux_args_base(cfg))
+      .arg("source-file")
+      .arg(path.display().to_string()),
+  )
+  .with_context(|| format!("tmux source-file failed for {}", path.display()))
+}
+
+fn load_user_tmux_config(cfg: &AgencyConfig, project_root: Option<&Path>) -> Result<()> {
+  // Global XDG config: ~/.config/agency/tmux.conf
+  let xdg = xdg::BaseDirectories::with_prefix("agency");
+  if let Some(global_tmux) = xdg.find_config_file("tmux.conf") {
+    if global_tmux.exists() {
+      let _ = tmux_source_file(cfg, &global_tmux);
+    }
+  }
+  // Project-local config: <project>/.agency/tmux.conf
+  if let Some(root) = project_root {
+    let proj_tmux = root.join(".agency").join("tmux.conf");
+    if proj_tmux.exists() {
+      let _ = tmux_source_file(cfg, &proj_tmux);
+    }
+  }
+  Ok(())
+}
+
+// Intentionally no one-time flag; Agency starts tmux without config, sets defaults,
+// then sources user config so overrides take effect immediately.
 
 fn shell_escape(path: &Path) -> String {
   path
