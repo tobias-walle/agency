@@ -59,14 +59,33 @@ pub fn start_session(
     .args(args);
   run_cmd(&mut cmd).context("tmux new-session failed")?;
 
-  // Remain on exit
-  tmux_set_option(cfg, &name, "remain-on-exit", "on")?;
+  // Auto-close the session when the agent exits
+  tmux_set_option(cfg, &name, "remain-on-exit", "off")?;
 
-  // Hide the status bar for a clean, app-controlled UI
-  tmux_set_option(cfg, &name, "status", "off")?;
+  // Enable a minimal, theme-friendly status bar
+  tmux_set_option(cfg, &name, "status", "on")?;
+  tmux_set_option(cfg, &name, "status-style", "bg=default,fg=cyan")?;
+  tmux_set_option(cfg, &name, "status-left", " Agency ")?;
+  tmux_set_option(cfg, &name, "status-justify", "centre")?;
+  // Hide non-current window titles and use the current one for centered task text
+  tmux_set_window_option(cfg, &name, "window-status-format", " ")?;
+  tmux_set_window_option(
+    cfg,
+    &name,
+    "window-status-current-format",
+    &format!(" Task {} (Id: {}) ", task.slug, task.id),
+  )?;
   // Apply Agency defaults globally, then source user config to override
   apply_ui_defaults(cfg)?;
   load_user_tmux_config(cfg, Some(project_root))?;
+  // After sourcing user configs, compute the actual detach binding and prefix
+  let prefix = read_tmux_prefix(cfg).unwrap_or_else(|_| "C-b".to_string());
+  let right = match find_detach_binding(cfg) {
+    Ok(DetachBinding::WithPrefix { key }) => format!(" Press {}+{} to detach ", prefix, key),
+    Ok(DetachBinding::Prefixless { key }) => format!(" Press {} to detach ", key),
+    _ => format!(" Press {}+d to detach ", prefix),
+  };
+  tmux_set_option(cfg, &name, "status-right", &right)?;
   tmux_set_option(cfg, &name, "default-terminal", "tmux-256color")?;
   tmux_set_option_append(cfg, &name, "terminal-overrides", ",*256col*:Tc")?;
 
@@ -173,6 +192,20 @@ fn tmux_set_option_global(cfg: &AgencyConfig, key: &str, value: &str) -> Result<
   .with_context(|| format!("tmux set -g {key} failed"))
 }
 
+fn tmux_set_window_option(cfg: &AgencyConfig, target: &str, key: &str, value: &str) -> Result<()> {
+  run_cmd(
+    std::process::Command::new("tmux")
+      .args(tmux_args_base(cfg))
+      .arg("set-option")
+      .arg("-w")
+      .arg("-t")
+      .arg(target)
+      .arg(key)
+      .arg(value),
+  )
+  .with_context(|| format!("tmux set -w {key} failed"))
+}
+
 fn apply_ui_defaults(cfg: &AgencyConfig) -> Result<()> {
   // Borders: subtle grey, active cyan accent
   tmux_set_option_global(cfg, "pane-border-style", "fg=colour238")?;
@@ -236,6 +269,107 @@ fn shell_escape(path: &Path) -> String {
     .replace('\\', "\\\\")
     .replace('"', "\\\"")
     .replace('\'', "'\\''")
+}
+
+fn tmux_show_option_global(cfg: &AgencyConfig, key: &str) -> Result<String> {
+  let out = std::process::Command::new("tmux")
+    .args(tmux_args_base(cfg))
+    .arg("show-options")
+    .arg("-g")
+    .arg("-v")
+    .arg(key)
+    .output()
+    .with_context(|| format!("tmux show-options -g -v {key}"))?;
+  if !out.status.success() {
+    return Ok(String::new());
+  }
+  Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
+}
+
+fn tmux_list_keys(cfg: &AgencyConfig, table: Option<&str>) -> Result<String> {
+  let mut cmd = std::process::Command::new("tmux");
+  cmd.args(tmux_args_base(cfg)).arg("list-keys");
+  if let Some(t) = table {
+    cmd.arg("-T").arg(t);
+  }
+  let out = cmd.output().context("tmux list-keys failed")?;
+  if !out.status.success() {
+    return Ok(String::new());
+  }
+  Ok(String::from_utf8_lossy(&out.stdout).to_string())
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum DetachBinding {
+  WithPrefix { key: String },
+  Prefixless { key: String },
+  None,
+}
+
+fn parse_detach_binding(prefix_output: &str, global_output: &str) -> DetachBinding {
+  // Prefer prefix-table binding
+  for line in prefix_output.lines() {
+    if !line.contains("detach-client") {
+      continue;
+    }
+    // Expect pattern: bind-key -T prefix [flags...] <key> ... detach-client
+    let tokens: Vec<&str> = line.split_whitespace().collect();
+    let mut i = 0usize;
+    // find "-T prefix"
+    while i + 1 < tokens.len() {
+      if tokens[i] == "-T" && tokens[i + 1] == "prefix" {
+        i += 2;
+        break;
+      }
+      i += 1;
+    }
+    if i >= tokens.len() {
+      continue;
+    }
+    // find first non-flag token as key
+    while i < tokens.len() && tokens[i].starts_with('-') {
+      i += 1;
+    }
+    if i < tokens.len() {
+      let key = tokens[i].to_string();
+      return DetachBinding::WithPrefix { key };
+    }
+  }
+  // Fallback: prefixless -n binding
+  for line in global_output.lines() {
+    if !line.contains("detach-client") {
+      continue;
+    }
+    // Expect: bind-key [flags...] -n <key> ... detach-client
+    let tokens: Vec<&str> = line.split_whitespace().collect();
+    let mut i = 0usize;
+    while i < tokens.len() {
+      if tokens[i] == "-n" && i + 1 < tokens.len() {
+        let key = tokens[i + 1].to_string();
+        return DetachBinding::Prefixless { key };
+      }
+      i += 1;
+    }
+  }
+  DetachBinding::None
+}
+
+fn read_tmux_prefix(cfg: &AgencyConfig) -> Result<String> {
+  let p = tmux_show_option_global(cfg, "prefix")?;
+  if !p.trim().is_empty() {
+    return Ok(p.trim().to_string());
+  }
+  let p2 = tmux_show_option_global(cfg, "prefix2")?;
+  if !p2.trim().is_empty() {
+    return Ok(p2.trim().to_string());
+  }
+  Ok("C-b".to_string())
+}
+
+fn find_detach_binding(cfg: &AgencyConfig) -> Result<DetachBinding> {
+  let pref = tmux_list_keys(cfg, Some("prefix")).unwrap_or_default();
+  let glob = tmux_list_keys(cfg, None).unwrap_or_default();
+  Ok(parse_detach_binding(&pref, &glob))
 }
 
 pub fn list_sessions_for_project(
@@ -361,4 +495,41 @@ fn is_idle(project_root: &Path, name: &str) -> Result<bool> {
     .duration_since(mtime)
     .unwrap_or_default();
   Ok(age >= std::time::Duration::from_secs(1))
+}
+
+#[cfg(test)]
+mod tests {
+  use super::{DetachBinding, parse_detach_binding};
+
+  #[test]
+  fn parse_prefix_table_detach() {
+    let pref = "bind-key -T prefix d detach-client\n";
+    let glob = "";
+    let got = parse_detach_binding(pref, glob);
+    assert_eq!(got, DetachBinding::WithPrefix { key: "d".into() });
+  }
+
+  #[test]
+  fn parse_prefix_table_with_flags() {
+    let pref = "bind-key -T prefix -r D if-shell -F '#{?client_attached,1,0}' 'detach-client' ''\n";
+    let glob = "";
+    let got = parse_detach_binding(pref, glob);
+    assert_eq!(got, DetachBinding::WithPrefix { key: "D".into() });
+  }
+
+  #[test]
+  fn parse_prefixless_detach() {
+    let pref = "";
+    let glob = "bind-key -n M-d detach-client\n";
+    let got = parse_detach_binding(pref, glob);
+    assert_eq!(got, DetachBinding::Prefixless { key: "M-d".into() });
+  }
+
+  #[test]
+  fn prefer_prefix_over_prefixless_when_both() {
+    let pref = "bind-key -T prefix d detach-client\n";
+    let glob = "bind-key -n M-d detach-client\n";
+    let got = parse_detach_binding(pref, glob);
+    assert_eq!(got, DetachBinding::WithPrefix { key: "d".into() });
+  }
 }
