@@ -401,7 +401,7 @@ fn new_supports_placeholder_root_in_bootstrap_cmd() -> Result<()> {
 fn new_writes_yaml_header_when_agent_specified() -> Result<()> {
   let env = common::TestEnv::new();
   env.init_repo()?;
-  let (id, slug) = env.new_task("alpha-task", &["--no-edit", "-a", "fake"])?;
+  let (id, slug) = env.new_task("alpha-task", &["--no-edit", "-a", "sh"])?;
   // Check markdown content includes YAML front matter
   let file = env.task_file_path(id, &slug);
   let data = std::fs::read_to_string(&file)?;
@@ -410,15 +410,15 @@ fn new_writes_yaml_header_when_agent_specified() -> Result<()> {
     "file should start with YAML '---' block"
   );
   assert!(
-    data.contains("agent: fake\n"),
-    "front matter should contain agent: fake"
+    data.contains("agent: sh\n"),
+    "front matter should contain agent: sh"
   );
   assert!(
     data.contains("base_branch: main\n"),
     "front matter should contain base_branch: main"
   );
   assert_eq!(
-    data, "---\nagent: fake\nbase_branch: main\n---\n",
+    data, "---\nagent: sh\nbase_branch: main\n---\n",
     "task should contain only front matter when no description"
   );
 

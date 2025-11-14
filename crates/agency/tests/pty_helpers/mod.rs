@@ -16,13 +16,7 @@ pub fn bin() -> PathBuf {
   assert_cmd::cargo::cargo_bin!("agency").to_path_buf()
 }
 
-pub fn ensure_fake_agent(workdir: &Path) -> anyhow::Result<()> {
-  common::ensure_fake_agent_at(workdir)
-}
-
 pub fn spawn_daemon(bin: &Path, workdir: &Path) -> anyhow::Result<Child> {
-  // Ensure the test workdir has the fake agent available at ./scripts/fake_agent.py
-  ensure_fake_agent(workdir)?;
   let mut cmd = Command::new(bin);
   cmd
     .arg("daemon")

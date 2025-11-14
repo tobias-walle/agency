@@ -50,10 +50,13 @@ pub struct Wizard {
 impl Wizard {
   #[must_use]
   pub fn new() -> Self {
+    // Allow tests to force non-TTY behavior via env to exercise fallback paths
+    let force_non_tty = std::env::var("AGENCY_TEST").is_ok();
     let stdin_tty = io::stdin().is_terminal();
     let stdout_tty = io::stdout().is_terminal();
+    let interactive = stdin_tty && stdout_tty && !force_non_tty;
     Self {
-      is_tty: stdin_tty && stdout_tty,
+      is_tty: interactive,
     }
   }
 

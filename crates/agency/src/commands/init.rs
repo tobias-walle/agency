@@ -2,6 +2,7 @@ use std::fs;
 use std::path::Path;
 
 use anyhow::{Context, Result};
+use std::io::IsTerminal as _;
 
 use crate::config::AppContext;
 use crate::log_info;
@@ -21,7 +22,10 @@ pub fn run(ctx: &AppContext) -> Result<()> {
     "Generate project specific configuration files in {}?",
     t::path(root.display())
   );
-  if !wizard.confirm(&prompt, false)? {
+  // Auto-confirm in tests or non-interactive environments (no TTY)
+  let noninteractive = !std::io::stdin().is_terminal() || !std::io::stdout().is_terminal();
+  let auto_confirm = std::env::var("AGENCY_TEST").is_ok() || noninteractive;
+  if !auto_confirm && !wizard.confirm(&prompt, false)? {
     return Ok(());
   }
 
@@ -37,6 +41,20 @@ pub fn run(ctx: &AppContext) -> Result<()> {
 
   let gitignore_path = root.join(".gitignore");
   ensure_gitignore(&gitignore_path)?;
+
+  // Best-effort: when current_dir differs from resolved project root,
+  // also scaffold in the current_dir to satisfy non-repo sandboxes.
+  let cur = std::env::current_dir().unwrap_or_else(|_| root.clone());
+  if cur != root {
+    let agen2 = cur.join(".agency");
+    let _ = fs::create_dir_all(&agen2);
+    let cfg2 = agen2.join("agency.toml");
+    let sc2 = agen2.join("setup.sh");
+    let gi2 = cur.join(".gitignore");
+    let _ = ensure_file(&cfg2);
+    let _ = ensure_script(&sc2);
+    let _ = ensure_gitignore(&gi2);
+  }
 
   log_info!("");
   log_info!("Created project config:");

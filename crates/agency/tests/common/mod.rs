@@ -21,11 +21,15 @@ impl TestEnv {
       .prefix("agency-test-")
       .tempdir_in(root)
       .expect("temp dir");
-    // Ensure the fake agent script is available relative to the temp workdir
-    // so the daemon (which uses relative ./scripts/fake_agent.py) can start.
+    // Provide a local agent configuration for tests using a simple shell.
+    // This ensures `-a sh` is valid without relying on embedded defaults.
     let workdir = temp.path();
-    if let Err(err) = ensure_fake_agent_at(workdir) {
-      panic!("prepare fake agent failed: {}", err);
+    let agen_dir = workdir.join(".agency");
+    let _ = std::fs::create_dir_all(&agen_dir);
+    let cfg_path = agen_dir.join("agency.toml");
+    let cfg = "[agents.sh]\ncmd = [\"sh\"]\n";
+    if let Err(err) = std::fs::write(&cfg_path, cfg) {
+      panic!("write test agent config failed: {}", err);
     }
 
     // Create a unique, short runtime dir per test to isolate daemon sockets
@@ -80,6 +84,8 @@ impl TestEnv {
     // so the daemon socket is created inside the sandbox workspace.
     cmd.current_dir(self.path());
     cmd.env("XDG_RUNTIME_DIR", &self.runtime_dir);
+    // Hint CLI to treat STDIN/STDOUT as non-TTY for wizard fallbacks
+    cmd.env("AGENCY_TEST", "1");
     Ok(cmd)
   }
 
@@ -114,6 +120,16 @@ impl TestEnv {
 
   /// Convenience to run `agency new [extra_args...] <slug>` and parse `(id, final_slug)`.
   pub fn new_task(&self, slug: &str, extra_args: &[&str]) -> Result<(u32, String)> {
+    // Ensure a local agent configuration is present for tests that specify `-a sh`
+    // without relying on embedded defaults.
+    let agen_dir = self.path().join(".agency");
+    let cfg_path = agen_dir.join("agency.toml");
+    if !cfg_path.exists() {
+      let _ = std::fs::create_dir_all(&agen_dir);
+      let cfg = "[agents.sh]\ncmd = [\"sh\"]\n";
+      std::fs::write(&cfg_path, cfg).context("write test agent config")?;
+    }
+
     let mut cmd = self.bin_cmd()?;
     cmd.arg("new");
     // Default to draft mode in tests unless explicitly overridden
@@ -226,21 +242,4 @@ pub fn runtime_dir_create() -> std::path::PathBuf {
   dir
 }
 
-/// Ensure the fake agent script exists at `<workdir>/scripts/fake_agent.py` and is executable.
-pub fn ensure_fake_agent_at(workdir: &std::path::Path) -> anyhow::Result<()> {
-  use std::fs;
-  let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../scripts/fake_agent.py");
-  let scripts_dir = workdir.join("scripts");
-  let _ = fs::create_dir_all(&scripts_dir);
-  let dst = scripts_dir.join("fake_agent.py");
-  fs_extra::file::copy(&src, &dst, &fs_extra::file::CopyOptions::new())
-    .with_context(|| format!("copy {} -> {}", src.display(), dst.display()))?;
-  #[cfg(unix)]
-  {
-    use std::os::unix::fs::PermissionsExt as _;
-    let mut perms = fs::metadata(&dst)?.permissions();
-    perms.set_mode(0o755);
-    fs::set_permissions(&dst, perms)?;
-  }
-  Ok(())
-}
+// No external agent preparation needed for tests; we use `/bin/sh` via [agents.sh].

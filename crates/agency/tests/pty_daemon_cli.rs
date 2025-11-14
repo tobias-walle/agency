@@ -23,8 +23,7 @@ fn daemon_start_stop_restart_creates_and_removes_socket() -> Result<()> {
   let runtime = runtime_dir_for(workdir);
   let sock = runtime.join("agency.sock");
 
-  // Ensure fake agent is present for daemon
-  ensure_fake_agent(workdir)?;
+  // No agent preparation needed; tests use a local [agents.sh] running the system shell
 
   // start
   let mut cmd = new_cmd_in_runtime(workdir, &runtime);

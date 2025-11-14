@@ -387,10 +387,10 @@ mod tests {
 
   #[test]
   fn parse_task_markdown_with_agent() {
-    let input = "---\nagent: fake\n---\n\n# Task 1: alpha\n";
+    let input = "---\nagent: sh\n---\n\n# Task 1: alpha\n";
     let (fm, body) = parse_task_markdown(input);
     let fm = fm.expect("front matter present");
-    assert_eq!(fm.agent.as_deref(), Some("fake"));
+    assert_eq!(fm.agent.as_deref(), Some("sh"));
     assert!(body.starts_with("\n# Task 1: alpha\n") || body.starts_with("# Task 1: alpha\n"));
   }
 
@@ -404,7 +404,7 @@ mod tests {
 
   #[test]
   fn parse_task_markdown_ignores_unclosed_block() {
-    let input = "---\nagent: fake\n# Task 3: gamma\n"; // no closing delimiter
+    let input = "---\nagent: sh\n# Task 3: gamma\n"; // no closing delimiter
     let (fm, body) = parse_task_markdown(input);
     assert!(fm.is_none());
     assert_eq!(body, input);
