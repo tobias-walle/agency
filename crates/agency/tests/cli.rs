@@ -1030,6 +1030,41 @@ fn merge_refreshes_checked_out_base_worktree() -> Result<()> {
 }
 
 #[test]
+fn merge_fails_when_no_changes() -> Result<()> {
+  let env = common::TestEnv::new();
+  env.init_repo()?;
+
+  // Create a new task without making any commits on the task branch
+  let (id, slug) = env.new_task("merge-no-changes", &["--no-edit", "--draft"])?;
+  // Prepare branch/worktree (no changes introduced)
+  env.bootstrap_task(id)?;
+
+  // Attempt to merge should fail due to no differences vs base
+  let mut cmd = env.bin_cmd()?;
+  let output = cmd.arg("merge").arg(id.to_string()).output()?;
+  assert!(
+    !output.status.success(),
+    "merge unexpectedly succeeded for no-op task"
+  );
+
+  // Ensure resources are retained after failure
+  assert!(
+    env.branch_exists(id, &slug)?,
+    "branch should remain after failed merge"
+  );
+  assert!(
+    env.task_file_path(id, &slug).exists(),
+    "task file should remain"
+  );
+  assert!(
+    env.worktree_dir_path(id, &slug).exists(),
+    "worktree should remain"
+  );
+
+  Ok(())
+}
+
+#[test]
 fn edit_opens_markdown_via_editor() -> Result<()> {
   let env = common::TestEnv::new();
   env.init_repo()?;

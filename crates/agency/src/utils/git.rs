@@ -206,6 +206,27 @@ pub fn is_fast_forward_at(cwd: &Path, base: &str, task_branch: &str) -> Result<b
   anyhow::bail!("git merge-base --is-ancestor failed: status={status}");
 }
 
+/// Returns true if `branch` has no diff compared to `base` within `cwd`.
+/// Uses `git diff --quiet base..branch` which exits 0 when there are no changes
+/// and 1 when there are changes; other exit codes are treated as errors.
+pub fn branch_has_no_changes_at(cwd: &Path, base: &str, branch: &str) -> Result<bool> {
+  let range = format!("{base}..{branch}");
+  let status = std::process::Command::new("git")
+    .current_dir(cwd)
+    .args(["diff", "--quiet", range.as_str()])
+    .stdout(std::process::Stdio::null())
+    .stderr(std::process::Stdio::null())
+    .status()
+    .with_context(|| "failed to run git diff --quiet")?;
+  if status.success() {
+    return Ok(true);
+  }
+  if status.code() == Some(1) {
+    return Ok(false);
+  }
+  anyhow::bail!("git diff --quiet failed: status={status}");
+}
+
 pub fn rev_parse(cwd: &Path, rev: &str) -> Result<String> {
   let out = std::process::Command::new("git")
     .current_dir(cwd)

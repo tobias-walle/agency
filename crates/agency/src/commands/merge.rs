@@ -6,8 +6,9 @@ use anyhow::{Context, Result, bail};
 use crate::config::AppContext;
 use crate::utils::daemon::{notify_after_task_change, stop_sessions_of_task};
 use crate::utils::git::{
-  current_branch_name_at, git_workdir, hard_reset_to_head_at, is_fast_forward_at, rebase_onto,
-  rev_parse, stash_pop, stash_push, update_branch_ref_at, worktree_is_clean_at,
+  branch_has_no_changes_at, current_branch_name_at, git_workdir, hard_reset_to_head_at,
+  is_fast_forward_at, rebase_onto, rev_parse, stash_pop, stash_push, update_branch_ref_at,
+  worktree_is_clean_at,
 };
 use crate::utils::task::{
   branch_name, parse_task_markdown, resolve_id_or_slug, task_file, worktree_dir,
@@ -70,11 +71,28 @@ pub fn run(ctx: &AppContext, ident: &str, base_override: Option<&str>) -> Result
       );
     }
 
+    // Detect no-op: task has no diff vs base or identical heads
+    let base_head = rev_parse(&repo_workdir, &base_branch)?;
+    let new_head = rev_parse(&wt_dir, "HEAD")?;
+    if base_head == new_head {
+      bail!(
+        "No changes to merge: {} already at {}",
+        base_branch,
+        new_head
+      );
+    }
+    if branch_has_no_changes_at(&repo_workdir, &base_branch, &branch)? {
+      bail!(
+        "No changes to merge: {} has no diff vs {}",
+        branch,
+        base_branch
+      );
+    }
+
     // Fast-forward base to task head without switching HEAD.
     if !is_fast_forward_at(&repo_workdir, &base_branch, &branch)? {
       bail!("Fast-forward not possible: Base advanced; rerun after rebase");
     }
-    let new_head = rev_parse(&wt_dir, "HEAD")?;
     if needs_auto_stash {
       let message = format!("agency auto-stash before merge {}", base_branch);
       match stash_push(&repo_workdir, &message)? {
