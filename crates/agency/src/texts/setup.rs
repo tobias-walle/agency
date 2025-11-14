@@ -32,13 +32,6 @@ pub fn agent_warning_when_missing() -> String {
     .to_string()
 }
 
-pub fn detach_prompt() -> String {
-  format!(
-    "Which shortcut do you want to use to {} from agents?",
-    "detach".bright_cyan()
-  )
-}
-
 pub fn shell_prompt() -> String {
   "Which shell should Agency use when opening a shell? (enter a command)".to_string()
 }

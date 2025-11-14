@@ -22,12 +22,6 @@ pub fn run(ctx: &AppContext) -> Result<()> {
     .get("agent")
     .and_then(|value| value.as_str())
     .map(std::string::ToString::to_string);
-  let existing_detach = table
-    .get("keybindings")
-    .and_then(|value| value.as_table())
-    .and_then(|tbl| tbl.get("detach"))
-    .and_then(|value| value.as_str())
-    .map(std::string::ToString::to_string);
 
   let wizard = Wizard::new();
   anstream::println!();
@@ -46,12 +40,6 @@ pub fn run(ctx: &AppContext) -> Result<()> {
   }
   let agent_prompt = texts::setup::agent_prompt();
   let default_agent = wizard.select(&agent_prompt, &options, existing_agent.as_deref())?;
-  anstream::println!();
-
-  let default_detach = existing_detach.unwrap_or_else(|| "ctrl-q".to_string());
-  let detach_prompt = texts::setup::detach_prompt();
-  let detach = wizard.text(&detach_prompt, &default_detach)?;
-  let detach_changed = detach != default_detach;
   anstream::println!();
 
   // Ask for preferred shell command (argv split via shell-words)
@@ -80,7 +68,6 @@ pub fn run(ctx: &AppContext) -> Result<()> {
     "agent".to_string(),
     TomlValue::String(default_agent.clone()),
   );
-  apply_detach(&mut table, &detach, detach_changed)?;
   table.insert(
     "shell".to_string(),
     TomlValue::Array(shell_argv.into_iter().map(TomlValue::String).collect()),
@@ -142,18 +129,4 @@ fn read_existing_table(path: &Path) -> Result<TomlTable> {
       path.display()
     )),
   }
-}
-
-fn apply_detach(table: &mut TomlTable, detach: &str, changed: bool) -> Result<()> {
-  if !changed {
-    return Ok(());
-  }
-  let entry = table
-    .entry("keybindings".to_string())
-    .or_insert_with(|| TomlValue::Table(TomlTable::new()));
-  let keybindings = entry
-    .as_table_mut()
-    .ok_or_else(|| anyhow!("keybindings must be a table"))?;
-  keybindings.insert("detach".to_string(), TomlValue::String(detach.to_string()));
-  Ok(())
 }

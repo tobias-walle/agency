@@ -59,8 +59,6 @@ pub struct AgencyConfig {
   #[serde(default)]
   pub daemon: Option<DaemonConfig>,
   #[serde(default)]
-  pub keybindings: Option<KeybindingsConfig>,
-  #[serde(default)]
   pub bootstrap: Option<BootstrapConfig>,
   /// Command to launch when opening a shell. Defaults to user's shell.
   #[serde(default)]
@@ -136,11 +134,6 @@ impl AgencyPaths {
 pub struct AppContext {
   pub paths: AgencyPaths,
   pub config: AgencyConfig,
-}
-#[derive(Debug, Clone, Default, Deserialize)]
-pub struct KeybindingsConfig {
-  #[serde(default)]
-  pub detach: String,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]

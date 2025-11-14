@@ -147,7 +147,7 @@ fn setup_creates_global_config_via_wizard() -> Result<()> {
   );
   assert!(
     !data.contains("keybindings"),
-    "default detach should not produce keybinding overrides: {data}"
+    "no keybinding overrides present by default: {data}"
   );
   Ok(())
 }
@@ -172,7 +172,7 @@ include = ["scripts"]
     [("XDG_CONFIG_HOME", Some(config_home.display().to_string()))],
     || {
       let mut cmd = env.bin_cmd().unwrap();
-      cmd.arg("setup").write_stdin("opencode\nctrl-d\n");
+      cmd.arg("setup").write_stdin("opencode\nzsh\n");
       cmd
         .assert()
         .success()
@@ -186,8 +186,8 @@ include = ["scripts"]
     "agent should be updated: {data}"
   );
   assert!(
-    data.contains("detach = \"ctrl-d\""),
-    "detach shortcut override should be persisted: {data}"
+    data.contains("shell = [\"zsh\"]"),
+    "shell command override should be persisted: {data}"
   );
   assert!(
     data.contains("[bootstrap]"),
