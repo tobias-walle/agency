@@ -1,3 +1,19 @@
+# [1.2.0](https://github.com/tobias-walle/agency/compare/v1.1.0...v1.2.0) (2025-11-14)
+
+
+### Bug Fixes
+
+* fix warnings ([5e8ce0b](https://github.com/tobias-walle/agency/commit/5e8ce0b5ebe3067b967fbbe80df66d6f8ef682a3))
+* improve tmux defaults ([57e1f19](https://github.com/tobias-walle/agency/commit/57e1f192ebb4036412f54dbf5ffde9216381fad0))
+* small tui ux improvements ([909f07c](https://github.com/tobias-walle/agency/commit/909f07cd4817b64fbcd54acadc0c12406c21efd9))
+
+
+### Features
+
+* fail merge when task has no changes ([290bc68](https://github.com/tobias-walle/agency/commit/290bc68913e585bab6fea7734689fd5de4192df2))
+* migrate from PTY to tmux sessions to avoid edge cases ([77655dc](https://github.com/tobias-walle/agency/commit/77655dc498073bc2ad26fff4fb107b4b01466e9e))
+* show tmux status bar and real detach binding; close on exit ([f4aaa86](https://github.com/tobias-walle/agency/commit/f4aaa86322c94baf156199bfd4ed65e10a7f4899))
+
 # [1.1.0](https://github.com/tobias-walle/agency/compare/v1.0.1...v1.1.0) (2025-11-12)
 
 
