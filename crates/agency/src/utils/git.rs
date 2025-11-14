@@ -21,7 +21,7 @@ pub fn resolve_main_workdir(cwd: &Path) -> PathBuf {
         repo
           .main_repo()
           .ok()
-          .and_then(|r| r.workdir().map(|p| p.to_path_buf()))
+          .and_then(|r| r.workdir().map(std::path::Path::to_path_buf))
           .unwrap_or_else(|| cwd.to_path_buf())
       }
       _ => cwd.to_path_buf(),
@@ -47,8 +47,6 @@ pub fn repo_workdir_or(repo: &git::Repository, fallback: &Path) -> PathBuf {
     |p| p.canonicalize().unwrap_or_else(|_| p.to_path_buf()),
   )
 }
-
-// removed: ensure_branch (no longer used after lazy worktrees)
 
 /// Return the current HEAD branch name or "main" if unavailable.
 ///
@@ -175,7 +173,7 @@ fn run_git(args: &[&str], cwd: &Path) -> Result<()> {
 /// Run a `git` command while streaming stdout/stderr to the TUI sink when set, or
 /// inheriting stdio in regular CLI mode. Fails if git exits with a non-zero status.
 pub fn git(args: &[&str], cwd: &Path) -> Result<()> {
-  let argv: Vec<String> = args.iter().map(|s| s.to_string()).collect();
+  let argv: Vec<String> = args.iter().map(|s| (*s).to_string()).collect();
   let status = run_child_process("git", &argv, cwd, &[])?;
   if !status.success() {
     bail!("git {} exited with status {}", args.join(" "), status);
@@ -204,27 +202,6 @@ pub fn is_fast_forward_at(cwd: &Path, base: &str, task_branch: &str) -> Result<b
     return Ok(false);
   }
   anyhow::bail!("git merge-base --is-ancestor failed: status={status}");
-}
-
-/// Returns true if `branch` has no diff compared to `base` within `cwd`.
-/// Uses `git diff --quiet base..branch` which exits 0 when there are no changes
-/// and 1 when there are changes; other exit codes are treated as errors.
-pub fn branch_has_no_changes_at(cwd: &Path, base: &str, branch: &str) -> Result<bool> {
-  let range = format!("{base}..{branch}");
-  let status = std::process::Command::new("git")
-    .current_dir(cwd)
-    .args(["diff", "--quiet", range.as_str()])
-    .stdout(std::process::Stdio::null())
-    .stderr(std::process::Stdio::null())
-    .status()
-    .with_context(|| "failed to run git diff --quiet")?;
-  if status.success() {
-    return Ok(true);
-  }
-  if status.code() == Some(1) {
-    return Ok(false);
-  }
-  anyhow::bail!("git diff --quiet failed: status={status}");
 }
 
 pub fn rev_parse(cwd: &Path, rev: &str) -> Result<String> {
@@ -373,7 +350,7 @@ pub fn delete_branch_if_exists_at(cwd: &Path, name: &str) -> Result<bool> {
     return Ok(false);
   }
   if !status.success() {
-    anyhow::bail!("git show-ref --verify failed: status={}", status);
+    anyhow::bail!("git show-ref --verify failed: status={status}");
   }
   git(&["branch", "-D", name], cwd)?;
   Ok(true)
@@ -413,7 +390,7 @@ mod tests {
       .args(args)
       .status()
       .expect("spawn git");
-    assert!(status.success(), "git {:?} failed: {:?}", args, status);
+    assert!(status.success(), "git {args:?} failed: {status:?}");
   }
 
   #[test]

@@ -127,8 +127,7 @@ pub fn normalize_and_validate_slug(input: &str) -> Result<String> {
   if !trimmed
     .chars()
     .next()
-    .map(|c| c.is_ascii_alphabetic())
-    .unwrap_or(false)
+    .is_some_and(|c| c.is_ascii_alphabetic())
   {
     bail!("invalid slug: must start with a letter");
   }

@@ -29,7 +29,7 @@ impl TestEnv {
     let cfg_path = agen_dir.join("agency.toml");
     let cfg = "[agents.sh]\ncmd = [\"sh\"]\n";
     if let Err(err) = std::fs::write(&cfg_path, cfg) {
-      panic!("write test agent config failed: {}", err);
+      panic!("write test agent config failed: {err}");
     }
 
     // Create a unique, short runtime dir per test to isolate daemon sockets

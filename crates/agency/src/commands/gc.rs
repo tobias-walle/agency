@@ -74,17 +74,17 @@ pub fn run(ctx: &AppContext) -> Result<()> {
   for short in list_agency_branches(&repo)? {
     if !valid.contains(&short) {
       let wt_dir_for_branch = wt_root.join(&short);
-      if !wt_dir_for_branch.exists() {
+      if wt_dir_for_branch.exists() {
+        log_warn!(
+          "Skip branch without task due to existing worktree {}",
+          t::path(wt_dir_for_branch.display())
+        );
+      } else {
         let full = format!("agency/{short}");
         if delete_branch_if_exists(&repo, &full)? {
           deleted_branches += 1;
           log_success!("Deleted branch {}", full);
         }
-      } else {
-        log_warn!(
-          "Skip branch without task due to existing worktree {}",
-          t::path(wt_dir_for_branch.display())
-        );
       }
     }
   }

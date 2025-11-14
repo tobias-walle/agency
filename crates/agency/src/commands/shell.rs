@@ -35,11 +35,15 @@ pub fn run(ctx: &AppContext, ident: &str) -> Result<()> {
   }
 
   let argv = resolve_shell_argv(&ctx.config);
-  let program = argv.first().map(|s| s.trim()).unwrap_or("");
+  let program = argv.first().map_or("", |s| s.trim());
   if program.is_empty() {
     bail!("shell program is empty");
   }
-  let args: Vec<&str> = argv.iter().skip(1).map(|s| s.as_str()).collect();
+  let args: Vec<&str> = argv
+    .iter()
+    .skip(1)
+    .map(std::string::String::as_str)
+    .collect();
 
   log_info!("Open shell {}", t::path(wt_dir.display()));
 

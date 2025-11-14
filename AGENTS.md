@@ -48,7 +48,10 @@ When committing, always follow these rules
 - NEVER add semicolons in the message and keep the title shorter than 80 chars.
 - Don't add a commit body or footer
 - You might want to create multiple commits if the changes are not related.
-- After every task, you MUST update `./COMMIT.txt` with a commit message summarizing the work we did since the start of the chat or the last commit. It will be used to commit manually. Always directly override this file (no need to read it).
+- After every task, you SHOULD:
+  - Run `just test` and make sure it runs
+  - Run `just fix` and fix all warnings
+  - Commit the changes
 
 Add the files and commit in a single command, e.g. `git add file1.ts file2.ts && git commit -m "..."`
 

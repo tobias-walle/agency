@@ -1,4 +1,3 @@
-use crate::config::compute_socket_path;
 use crate::daemon_protocol as proto;
 use crate::daemon_protocol::{
   C2D, C2DControl, D2C, D2CControl, ProjectKey, read_frame, write_frame,
@@ -7,7 +6,7 @@ use crate::utils::tmux::list_sessions_for_project as tmux_list;
 use anyhow::Result;
 use log::{error, info, warn};
 use parking_lot::Mutex;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::os::unix::net::{UnixListener, UnixStream};
@@ -44,6 +43,7 @@ struct Subscriber {
 }
 
 impl SlimDaemon {
+  #[must_use]
   pub fn new(
     listener: UnixListener,
     cfg: crate::config::AgencyConfig,
@@ -75,24 +75,23 @@ impl SlimDaemon {
             let snap = tmux_list(&cfg, &path).unwrap_or_default();
             let mut last = cache.lock();
             let prev = last.get(&pk.repo_root);
-            let changed = prev.map_or(true, |p| p != &snap);
+            let changed = prev != Some(&snap);
             if changed {
               last.insert(pk.repo_root.clone(), snap.clone());
               // Broadcast
               let mut remove_idx = Vec::new();
               let mut list = subs.lock();
               for (i, sub) in list.iter_mut().enumerate() {
-                if sub.project.repo_root == pk.repo_root {
-                  if write_frame(
+                if sub.project.repo_root == pk.repo_root
+                  && write_frame(
                     &mut sub.stream,
                     &D2C::Control(D2CControl::SessionsChanged {
                       entries: snap.clone(),
                     }),
                   )
                   .is_err()
-                  {
-                    remove_idx.push(i);
-                  }
+                {
+                  remove_idx.push(i);
                 }
               }
               // Remove disconnected subscribers
@@ -108,14 +107,14 @@ impl SlimDaemon {
       match self.listener.accept() {
         Ok((mut stream, _)) => {
           if let Err(err) = self.handle_connection(&mut stream) {
-            error!("Connection error: {}", err);
+            error!("Connection error: {err}");
           }
         }
         Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
           std::thread::sleep(Duration::from_millis(50));
         }
         Err(e) => {
-          error!("Accept error: {}", e);
+          error!("Accept error: {e}");
           std::thread::sleep(Duration::from_millis(100));
         }
       }
@@ -227,14 +226,7 @@ impl SlimDaemon {
       Ok(C2D::Control(C2DControl::Ping { nonce })) => {
         let _ = write_frame(&mut *stream, &D2C::Control(D2CControl::Pong { nonce }));
       }
-      Ok(other) => {
-        let _ = write_frame(
-          &mut *stream,
-          &D2C::Control(D2CControl::Error {
-            message: format!("Unsupported message: {other:?}"),
-          }),
-        );
-      }
+
       Err(err) => {
         let _ = write_frame(
           &mut *stream,

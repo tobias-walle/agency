@@ -32,7 +32,7 @@ pub fn tmux_args_base(cfg: &AgencyConfig) -> Vec<String> {
 }
 
 pub fn session_name(task_id: u32, slug: &str) -> String {
-  format!("agency-{}-{}", task_id, slug)
+  format!("agency-{task_id}-{slug}")
 }
 
 pub fn start_session(
@@ -161,11 +161,11 @@ pub fn kill_session(cfg: &AgencyConfig, task: &TaskMeta) -> Result<()> {
 }
 
 fn run_cmd(cmd: &mut std::process::Command) -> Result<()> {
-  let status = cmd.status().with_context(|| format!("spawn {:?}", cmd))?;
+  let status = cmd.status().with_context(|| format!("spawn {cmd:?}"))?;
   if status.success() {
     Ok(())
   } else {
-    anyhow::bail!("command failed: {:?}", cmd)
+    anyhow::bail!("command failed: {cmd:?}")
   }
 }
 
@@ -287,7 +287,7 @@ fn activity_stamp_path(project_root: &Path, session_name: &str) -> PathBuf {
     .join(".agency")
     .join("state")
     .join("tmux-activity")
-    .join(format!("{}.stamp", session_name))
+    .join(format!("{session_name}.stamp"))
 }
 
 fn is_idle(project_root: &Path, name: &str) -> Result<bool> {

@@ -36,7 +36,7 @@ pub fn run_with_task(ctx: &AppContext, ident: &str) -> Result<()> {
     id: task.id,
     slug: task.slug.clone(),
   };
-  if let Some(session) = target {
+  if target.is_some() {
     return interactive::scope(|| tmux::attach_session(&ctx.config, &task_meta));
   }
   // Auto-start when missing: build agent command and start session, then attach
@@ -83,7 +83,7 @@ pub fn run_with_task(ctx: &AppContext, ident: &str) -> Result<()> {
 pub fn run_join_session(ctx: &AppContext, session_id: u64) -> Result<()> {
   let entries = list_sessions_for_project(ctx)?;
   let Some(si) = entries.into_iter().find(|e| e.session_id == session_id) else {
-    anyhow::bail!("Session not found: {}", session_id);
+    anyhow::bail!("Session not found: {session_id}");
   };
   interactive::scope(|| tmux::attach_session(&ctx.config, &si.task))
 }

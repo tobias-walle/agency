@@ -82,7 +82,7 @@ enum Commands {
   },
   /// List running sessions in this project
   Sessions {},
-  /// Mark a task as Completed (uses $AGENCY_TASK_ID when omitted)
+  /// Mark a task as Completed (uses $`AGENCY_TASK_ID` when omitted)
   Complete { ident: Option<String> },
   /// Run the setup wizard to configure Agency
   Setup {},
