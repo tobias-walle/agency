@@ -182,7 +182,8 @@ fn ui_loop(
       let help_items = [
         "Select: ↑/↓ j/k",
         "Edit/Attach: ⏎",
-        "New: n/N",
+        "New: n",
+        "New + Start: N",
         "Start: s",
         "Stop: S",
         "Merge: m",
@@ -206,7 +207,6 @@ fn ui_loop(
         Cell::from("ID"),
         Cell::from("SLUG"),
         Cell::from("STATUS"),
-        Cell::from("SESSION"),
         Cell::from("BASE"),
         Cell::from("AGENT"),
       ])
@@ -222,7 +222,6 @@ fn ui_loop(
           Cell::from(r.id.to_string()),
           Cell::from(r.slug.clone()),
           status_cell,
-          Cell::from(r.session.map(|s| s.to_string()).unwrap_or_default()),
           Cell::from(r.base.clone()),
           Cell::from(r.agent.clone()),
         ])
@@ -297,11 +296,7 @@ fn ui_loop(
       // Input overlay
       if let Mode::InputSlug { start_and_attach } = state.mode {
         let area = centered_rect(rects[0], 50, 3);
-        let left_title = if start_and_attach {
-          "New Task + Start"
-        } else {
-          "New Task"
-        };
+        let left_title = "Task slug (e.g. my-task)";
         let agent_name = state
           .selected_agent
           .clone()
