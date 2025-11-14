@@ -26,14 +26,6 @@ pub fn restore_terminal_state() {
   let _ = stdout.flush();
 }
 
-/// Clear scrollback and viewport to avoid interleaving histories before printing a full transcript.
-/// Uses CSI 3J to clear scrollback, CSI 2J to clear the screen, and homes the cursor.
-pub fn clear_terminal_scrollback() {
-  let mut stdout = io::stdout().lock();
-  let _ = stdout.write_all(b"\x1b[3J\x1b[2J\x1b[H");
-  let _ = stdout.flush();
-}
-
 /// Print a simple ASCII table to stdout.
 /// Column widths are derived from headers and string lengths of rows.
 pub fn print_table(headers: &[&str], rows: &[Vec<String>]) {

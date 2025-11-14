@@ -13,7 +13,6 @@
 
 use crate::pty::idle::{IdleState, IdleTracker};
 use crate::pty::protocol::D2COutputChannel;
-use crate::pty::transcript::Transcript;
 use crate::utils::command::Command;
 use anyhow::Context;
 use parking_lot::Mutex;
@@ -36,8 +35,6 @@ pub struct Session {
   pub start: Instant,
   idle: Arc<Mutex<IdleTracker>>,
   output_sinks: Arc<Mutex<Vec<D2COutputChannel>>>,
-  /// Raw transcript of PTY output chunks since session start (capped in bytes).
-  transcript: Arc<Transcript>,
   cmd: Command,
 }
 
@@ -69,7 +66,6 @@ impl Session {
     let writer = Arc::new(Mutex::new(writer));
 
     let output_sinks: Arc<Mutex<Vec<D2COutputChannel>>> = Arc::new(Mutex::new(Vec::new()));
-    let transcript: Arc<Transcript> = Arc::new(Transcript::new(8 * 1024 * 1024));
 
     let sess = Self {
       master,
@@ -81,7 +77,6 @@ impl Session {
       start,
       idle,
       output_sinks,
-      transcript,
       cmd,
     };
     sess.start_read_pump();
@@ -126,8 +121,6 @@ impl Session {
       *idle = IdleTracker::new(now);
       self.start = now;
     }
-    // Clear transcript so new shell history starts cleanly
-    self.transcript.clear();
 
     // Start a fresh PTY read pump bound to the new master
     self.start_read_pump();
@@ -159,7 +152,6 @@ impl Session {
     let bytes_out = self.bytes_out.clone();
     let sinks = self.output_sinks.clone();
     let idle = self.idle.clone();
-    let transcript = self.transcript.clone();
 
     thread::spawn(move || {
       let mut reader = master_for_read
@@ -181,8 +173,6 @@ impl Session {
               let now = Instant::now();
               tracker.record_output(now, chunk);
             }
-            // Record raw output chunk into transcript
-            transcript.push(chunk);
             bytes_out.fetch_add(n as u64, Ordering::Relaxed);
             // Forward to all attached clients (non-blocking, lossy)
             let guard = sinks.lock();
@@ -235,13 +225,7 @@ impl Session {
     (ansi, (rows, cols))
   }
 
-  /// Returns the raw transcript of PTY output since session start (capped), along with current size.
-  #[must_use]
-  pub fn snapshot_full_scrollback(&self) -> (Vec<u8>, (u16, u16)) {
-    let (rows, cols) = self.size();
-    let out = self.transcript.gather();
-    (out, (rows, cols))
-  }
+  // Removed: raw transcript snapshot; vt100-only snapshot is provided by `snapshot()`
 
   /// Returns the current PTY size as `(rows, cols)` without generating ANSI.
   #[must_use]

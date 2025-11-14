@@ -295,10 +295,7 @@ impl SessionRegistry {
 
   #[must_use]
   pub fn snapshot(&self, session_id: u64) -> Option<(Vec<u8>, (u16, u16))> {
-    self
-      .sessions
-      .get(&session_id)
-      .map(|e| e.session.snapshot_full_scrollback())
+    self.sessions.get(&session_id).map(|e| e.session.snapshot())
   }
 
   pub fn poll_idle_sessions(&mut self, now: Instant) -> Vec<ProjectKey> {

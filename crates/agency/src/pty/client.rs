@@ -20,7 +20,6 @@ use std::time::Duration;
 use termwiz::input::{InputEvent, InputParser, KeyEvent};
 
 mod tty;
-use crate::utils::term::clear_terminal_scrollback;
 use crate::utils::term::restore_terminal_state;
 use tty::{RawModeGuard, RawModePauseGuard};
 
@@ -111,8 +110,6 @@ impl Client {
         session_id, ansi, ..
       }) => {
         self.session_id = Some(session_id);
-        // Clear scrollback to avoid interleaving histories before printing full transcript
-        clear_terminal_scrollback();
         let mut stdout = std::io::stdout().lock();
         let _ = stdout.write_all(&ansi);
         let _ = stdout.flush();

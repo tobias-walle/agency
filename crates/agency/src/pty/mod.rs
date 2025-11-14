@@ -5,4 +5,3 @@ pub mod idle;
 pub mod protocol;
 pub mod registry;
 pub mod session;
-pub mod transcript;

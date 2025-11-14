@@ -1,1 +1,0 @@
-fail merge when task has no changes to avoid cleanup on no-op merges
