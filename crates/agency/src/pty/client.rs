@@ -21,7 +21,9 @@ use termwiz::input::{InputEvent, InputParser, KeyEvent};
 
 mod tty;
 use crate::utils::term::clear_terminal_scrollback;
-use crate::utils::term::restore_terminal_state;
+use crate::utils::term::force_primary_screen_and_modes_off;
+use crate::utils::term::restore_terminal_state_and_clear_scrollback;
+use crate::utils::term::sanitize_transcript;
 use tty::{RawModeGuard, RawModePauseGuard};
 
 /// Attaches to the daemon and delegates lifecycle orchestration to `Client`.
@@ -36,6 +38,13 @@ pub fn run_attach(
   config: &AgencyConfig,
 ) -> Result<()> {
   let _raw = RawModeGuard::enable()?;
+
+  // Start clean: clear scrollback and force a known-safe state before any attach I/O
+  clear_terminal_scrollback();
+  {
+    let mut out = std::io::stdout().lock();
+    force_primary_screen_and_modes_off(&mut out);
+  }
 
   let stream = connect_daemon_socket(socket_path)?;
 
@@ -114,7 +123,11 @@ impl Client {
         // Clear scrollback to avoid interleaving histories before printing full transcript
         clear_terminal_scrollback();
         let mut stdout = std::io::stdout().lock();
-        let _ = stdout.write_all(&ansi);
+        // Sanitize transcript to prevent alt-screen and special modes
+        let sanitized = sanitize_transcript(&ansi);
+        let _ = stdout.write_all(&sanitized);
+        // After replaying the transcript, force a known terminal state
+        force_primary_screen_and_modes_off(&mut stdout);
         let _ = stdout.flush();
         Ok(())
       }
@@ -340,8 +353,8 @@ impl Client {
     let _ = writer_handle.join();
     let _ = resize_handle.join();
 
-    // Soft-reset the view (keep scrollback) after detach/exit
-    restore_terminal_state();
+    // After exiting, clear scrollback and restore known-safe terminal state
+    restore_terminal_state_and_clear_scrollback();
 
     Ok(())
   }
