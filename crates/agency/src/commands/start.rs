@@ -2,11 +2,13 @@ use anyhow::Result;
 use std::collections::HashMap;
 use std::path::Path;
 
+use crate::commands::shell::resolve_shell_argv;
 use crate::config::AppContext;
 use crate::daemon_protocol::TaskMeta;
 use crate::utils::bootstrap::prepare_worktree_for_task;
 use crate::utils::cmd::{CmdCtx, expand_argv};
 use crate::utils::command::Command as LocalCommand;
+use crate::utils::command::as_shell_command;
 use crate::utils::daemon::list_sessions_for_project;
 use crate::utils::git::{ensure_branch_at, open_main_repo, repo_workdir_or};
 use crate::utils::interactive;
@@ -65,7 +67,17 @@ pub fn run(ctx: &AppContext, ident: &str) -> Result<()> {
     env_map.clone(),
   );
   let argv = expand_argv(&argv_tmpl, &ctx_expand);
-  let cmd_local = LocalCommand::new(&argv)?;
+  let mut cmd_local = LocalCommand::new(&argv)?;
+  // Always wrap agent commands in the user's shell to inherit its environment
+  let sh_argv = resolve_shell_argv(&ctx.config);
+  let sh_prog = sh_argv.first().cloned().unwrap_or_else(|| "/bin/sh".into());
+  let sh_args: Vec<String> = sh_argv.into_iter().skip(1).collect();
+  let payload = as_shell_command(&cmd_local.program, &cmd_local.args);
+  let mut new_args = sh_args;
+  new_args.push("-c".into());
+  new_args.push(payload);
+  cmd_local.program = sh_prog;
+  cmd_local.args = new_args;
 
   let task_meta = TaskMeta {
     id: task.id,

@@ -35,6 +35,35 @@ impl Command {
   }
 }
 
+/// Escape a token for safe inclusion in a POSIX shell command string.
+/// Uses single-quote wrapping with the standard `'` -> `'
+/// '"'` pattern.
+fn shell_escape_token(s: &str) -> String {
+  if s.is_empty() {
+    return "''".to_string();
+  }
+  let escaped = s.replace('\'', "'\\''");
+  format!("'{escaped}'")
+}
+
+/// Build a single shell `-c` string from a program and args.
+/// Example: program `echo`, args `["hi", "there"]` -> `echo 'hi' 'there'`.
+#[must_use]
+pub fn as_shell_command(program: &str, args: &[String]) -> String {
+  let mut out = String::new();
+  // Program name: leave as-is (common shells search PATH); quote if contains whitespace
+  if program.contains(char::is_whitespace) {
+    out.push_str(&shell_escape_token(program));
+  } else {
+    out.push_str(program);
+  }
+  for a in args {
+    out.push(' ');
+    out.push_str(&shell_escape_token(a));
+  }
+  out
+}
+
 /// Expand "$VAR" references in argv using the given env map. Does not support ${} forms.
 #[cfg(test)]
 pub fn expand_vars_in_argv(
@@ -55,8 +84,8 @@ pub fn expand_vars_in_argv(
 
 #[cfg(test)]
 mod tests {
-  use super::Command;
   use super::expand_vars_in_argv;
+  use super::{Command, as_shell_command};
   use crate::config::AgentConfig;
   use anyhow::Result;
   use std::collections::HashMap;
@@ -139,5 +168,14 @@ mod tests {
     let argv = vec!["echo".to_string(), "pre-$AGENCY_TASK-post".to_string()];
     let expanded = expand_vars_in_argv(&argv, &env);
     assert_eq!(expanded, vec!["echo", "pre-X-post"]);
+  }
+
+  #[test]
+  fn as_shell_command_quotes_and_escapes() {
+    let cmd = as_shell_command("echo", &vec!["hi there".into(), "a'b".into(), "".into()]);
+    assert!(cmd.starts_with("echo "));
+    assert!(cmd.contains("'hi there'"));
+    assert!(cmd.contains("'a'\\''b'"));
+    assert!(cmd.ends_with(" ''"));
   }
 }

@@ -8,7 +8,7 @@ use crate::utils::interactive;
 use crate::utils::log::t;
 use crate::utils::task::{resolve_id_or_slug, worktree_dir};
 
-fn resolve_shell_argv(cfg: &AgencyConfig) -> Vec<String> {
+pub(crate) fn resolve_shell_argv(cfg: &AgencyConfig) -> Vec<String> {
   if let Some(v) = &cfg.shell
     && !v.is_empty()
   {

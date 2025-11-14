@@ -28,8 +28,6 @@ pub fn tmux_args_base(cfg: &AgencyConfig) -> Vec<String> {
     sock.display().to_string(),
     "-L".to_string(),
     "agency".to_string(),
-    "-f".to_string(),
-    "/dev/null".to_string(),
   ]
 }
 
@@ -46,6 +44,33 @@ pub fn start_session(
   args: &[String],
 ) -> Result<()> {
   let name = session_name(task.id, &task.slug);
+  // Resolve default-terminal from the outer environment
+  let default_term = std::env::var("TERM")
+    .ok()
+    .filter(|s| !s.trim().is_empty())
+    .unwrap_or_else(|| "tmux-256color".to_string());
+  // Load user's default tmux config first, then apply Agency defaults and
+  // finally Agency-specific user overrides. Do this BEFORE creating the session,
+  // so the initial pane inherits the final environment and options.
+  load_default_tmux_config(cfg)?;
+  apply_ui_defaults(cfg)?;
+  load_user_tmux_config(cfg, Some(project_root))?;
+  // Truecolor: set globally so first pane sees it
+  tmux_set_option_global(cfg, "default-terminal", &default_term)?;
+  // Broadly enable truecolor for terminals; tmux will ignore unsupported
+  tmux_set_option_append(cfg, "", "terminal-overrides", ",*:Tc")?;
+  let _ = tmux_set_option_append(
+    cfg,
+    "",
+    "terminal-features",
+    &format!(",{}:RGB", default_term),
+  );
+  let _ = tmux_set_option_append(cfg, "", "terminal-features", ",tmux-256color:RGB");
+  let _ = tmux_set_option_append(cfg, "", "terminal-features", ",xterm-256color:RGB");
+  // Environment for child processes
+  let _ = tmux_set_env_global(cfg, "COLORTERM", "truecolor");
+
+  // Create session and launch program
   let mut cmd = std::process::Command::new("tmux");
   cmd
     .args(tmux_args_base(cfg))
@@ -75,10 +100,7 @@ pub fn start_session(
     "window-status-current-format",
     &format!(" Task {} (Id: {}) ", task.slug, task.id),
   )?;
-  // Apply Agency defaults globally, then source user config to override
-  apply_ui_defaults(cfg)?;
-  load_user_tmux_config(cfg, Some(project_root))?;
-  // After sourcing user configs, compute the actual detach binding and prefix
+  // After sourcing configs, compute the actual detach binding and prefix
   let prefix = read_tmux_prefix(cfg).unwrap_or_else(|_| "C-b".to_string());
   let right = match find_detach_binding(cfg) {
     Ok(DetachBinding::WithPrefix { key }) => format!(" Press {}+{} to detach ", prefix, key),
@@ -86,8 +108,6 @@ pub fn start_session(
     _ => format!(" Press {}+d to detach ", prefix),
   };
   tmux_set_option(cfg, &name, "status-right", &right)?;
-  tmux_set_option(cfg, &name, "default-terminal", "tmux-256color")?;
-  tmux_set_option_append(cfg, &name, "terminal-overrides", ",*256col*:Tc")?;
 
   // Store project root for filtering
   tmux_set_option(
@@ -167,17 +187,15 @@ fn tmux_set_option(cfg: &AgencyConfig, target: &str, key: &str, value: &str) -> 
 }
 
 fn tmux_set_option_append(cfg: &AgencyConfig, target: &str, key: &str, value: &str) -> Result<()> {
-  run_cmd(
-    std::process::Command::new("tmux")
-      .args(tmux_args_base(cfg))
-      .arg("set-option")
-      .arg("-t")
-      .arg(target)
-      .arg("-ga")
-      .arg(key)
-      .arg(value),
-  )
-  .with_context(|| format!("tmux append {key} failed"))
+  let mut cmd = std::process::Command::new("tmux");
+  cmd.args(tmux_args_base(cfg)).arg("set-option");
+  if target.is_empty() {
+    cmd.arg("-g");
+  } else {
+    cmd.arg("-t").arg(target);
+  }
+  cmd.arg("-ga").arg(key).arg(value);
+  run_cmd(&mut cmd).with_context(|| format!("tmux append {key} failed"))
 }
 
 fn tmux_set_option_global(cfg: &AgencyConfig, key: &str, value: &str) -> Result<()> {
@@ -190,6 +208,29 @@ fn tmux_set_option_global(cfg: &AgencyConfig, key: &str, value: &str) -> Result<
       .arg(value),
   )
   .with_context(|| format!("tmux set -g {key} failed"))
+}
+
+fn tmux_set_env(cfg: &AgencyConfig, target: &str, key: &str, value: &str) -> Result<()> {
+  run_cmd(
+    std::process::Command::new("tmux")
+      .args(tmux_args_base(cfg))
+      .arg("set-environment")
+      .arg("-t")
+      .arg(target)
+      .arg(key)
+      .arg(value),
+  )
+}
+
+fn tmux_set_env_global(cfg: &AgencyConfig, key: &str, value: &str) -> Result<()> {
+  run_cmd(
+    std::process::Command::new("tmux")
+      .args(tmux_args_base(cfg))
+      .arg("set-environment")
+      .arg("-g")
+      .arg(key)
+      .arg(value),
+  )
 }
 
 fn tmux_set_window_option(cfg: &AgencyConfig, target: &str, key: &str, value: &str) -> Result<()> {
@@ -207,9 +248,13 @@ fn tmux_set_window_option(cfg: &AgencyConfig, target: &str, key: &str, value: &s
 }
 
 fn apply_ui_defaults(cfg: &AgencyConfig) -> Result<()> {
+  // Enable mouse support by default
+  tmux_set_option_global(cfg, "mouse", "on")?;
   // Borders: subtle grey, active cyan accent
   tmux_set_option_global(cfg, "pane-border-style", "fg=colour238")?;
   tmux_set_option_global(cfg, "pane-active-border-style", "fg=colour39")?;
+
+  tmux_set_option_global(cfg, "escape-time", "0")?;
 
   // Messages and prompts: cyan baseline
   tmux_set_option_global(cfg, "message-style", "fg=colour255,bg=colour24")?;
@@ -239,6 +284,24 @@ fn tmux_source_file(cfg: &AgencyConfig, path: &Path) -> Result<()> {
       .arg(path.display().to_string()),
   )
   .with_context(|| format!("tmux source-file failed for {}", path.display()))
+}
+
+fn load_default_tmux_config(cfg: &AgencyConfig) -> Result<()> {
+  // Best-effort: quietly source user's default tmux config if present.
+  if let Ok(home) = std::env::var("HOME") {
+    let p1 = PathBuf::from(&home).join(".tmux.conf");
+    if p1.exists() {
+      let _ = tmux_source_file(cfg, &p1);
+    }
+    let p2 = PathBuf::from(&home)
+      .join(".config")
+      .join("tmux")
+      .join("tmux.conf");
+    if p2.exists() {
+      let _ = tmux_source_file(cfg, &p2);
+    }
+  }
+  Ok(())
 }
 
 fn load_user_tmux_config(cfg: &AgencyConfig, project_root: Option<&Path>) -> Result<()> {

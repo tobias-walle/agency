@@ -1,7 +1,9 @@
 use anyhow::Result;
 
+use crate::commands::shell::resolve_shell_argv;
 use crate::config::AppContext;
 use crate::daemon_protocol::TaskMeta;
+use crate::utils::command::as_shell_command;
 use crate::utils::daemon::list_sessions_for_project;
 use crate::utils::git::{open_main_repo, repo_workdir_or};
 use crate::utils::interactive;
@@ -65,7 +67,17 @@ pub fn run_with_task(ctx: &AppContext, ident: &str) -> Result<()> {
     env_map.clone(),
   );
   let argv = expand_argv(&argv_tmpl, &ctx_expand);
-  let cmd_local = LocalCommand::new(&argv)?;
+  let mut cmd_local = LocalCommand::new(&argv)?;
+  // Always wrap agent commands in user's shell
+  let sh_argv = resolve_shell_argv(&ctx.config);
+  let sh_prog = sh_argv.first().cloned().unwrap_or_else(|| "/bin/sh".into());
+  let sh_args: Vec<String> = sh_argv.into_iter().skip(1).collect();
+  let payload = as_shell_command(&cmd_local.program, &cmd_local.args);
+  let mut new_args = sh_args;
+  new_args.push("-c".into());
+  new_args.push(payload);
+  cmd_local.program = sh_prog;
+  cmd_local.args = new_args;
   let worktree_dir = crate::utils::task::worktree_dir(&ctx.paths, &task);
   crate::utils::daemon::notify_after_task_change(ctx, || {
     tmux::start_session(

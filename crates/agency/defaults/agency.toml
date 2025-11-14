@@ -4,6 +4,7 @@ agent = "claude"
 # Example: Override shell used by `agency shell` (defaults to $SHELL or /bin/sh)
 # shell = ["zsh"]
 
+
 ## Keybindings removed: detach is no longer configurable via global config
 
 # Configure the bootstrap process then creating new git worktrees

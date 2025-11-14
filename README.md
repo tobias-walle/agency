@@ -57,23 +57,13 @@ Configuration is layered in three tiers:
 Agency uses Tmux to manage the background agents.
 
 If you attach to an agent you are basically opening Tmux.
-After applying some default Agency loads the following files for your custom options:
 
-- Global: `~/.config/agency/tmux.conf`
-- Project: `./.agency/tmux.conf`
+Config precedence when starting sessions:
 
-Your usual `~/.tmux.conf` is not loaded automatically.
-
-To reuse your global tmux configuration in Agency, add a source line to `~/.config/agency/tmux.conf`:
-
-```
-# Load your normal tmux config if present
-source-file -q ~/.tmux.conf
-# Optionally support XDG-style configs too
-source-file -q ~/.config/tmux/tmux.conf
-
-# Your Agency-specific overrides can follow here
-```
+1. User defaults (best-effort): `~/.tmux.conf`, then `~/.config/tmux/tmux.conf`
+2. Agency defaults (baseline UI/options applied programmatically)
+3. Agency global overrides: `~/.config/agency/tmux.conf`
+4. Project overrides: `./.agency/tmux.conf`
 
 ### Defining a custom agent
 
