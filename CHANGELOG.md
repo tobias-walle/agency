@@ -1,3 +1,15 @@
+# [1.4.0](https://github.com/tobias-walle/agency/compare/v1.3.0...v1.4.0) (2025-11-15)
+
+
+### Bug Fixes
+
+* make new prompt clearer ([12664f1](https://github.com/tobias-walle/agency/commit/12664f195ba3df110610dc2756b8806999da4df0))
+
+
+### Features
+
+* run agents via shell send-keys to improve ctrl-c/z behavior ([1409e6c](https://github.com/tobias-walle/agency/commit/1409e6c5f5474c30de65a045ef00b7ade0ed9e9d))
+
 # [1.3.0](https://github.com/tobias-walle/agency/compare/v1.2.0...v1.3.0) (2025-11-15)
 
 
