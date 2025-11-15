@@ -335,15 +335,16 @@ fn ui_loop(
       } = state.mode
       {
         let area = centered_rect(rects[0], 50, 3);
-        let left_title = "Task slug (e.g. my-task)";
+        let left_title = "Task Slug";
         let agent_name = state
           .selected_agent
           .clone()
           .unwrap_or_else(|| "-".to_string());
         let right_title = Line::from(vec![
-          Span::raw("Agent: "),
           Span::raw(agent_name).fg(Color::Cyan),
-          Span::raw(" (^A to switch)"),
+          Span::raw(" ("),
+          Span::raw("^A").fg(Color::Cyan),
+          Span::raw(" to switch) "),
         ])
         .right_aligned();
         let block = Block::default()
