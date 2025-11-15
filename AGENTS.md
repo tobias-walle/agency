@@ -186,7 +186,17 @@ Strictly follow the format for plans.
 The plan mode ends once the user explicitly tells you to implement/execute the plan.
 Then, when implementing a plan, use your TODO list tool to track the progress.
 
-## General Workflow
+## Research
+
+Every time a prompt mentions `RESEARCH` you must enter the research mode. Similar to the plan mode it is readonly (except markdown plans if explicitly requested).
+
+In research mode you are heavily focusing on research in the code, architecture decisions and asking the right questions. The user will come to you with an idea or a thing that he wants to change.
+You will then look the for relevant parts of the code and ask clarifying questions (again with numbering and assumptions).
+You also think how this fits into the architecture and see if a refactoring is recommended for this change.
+
+During research you are interacting more with the user. The format is less strict than in the plan mode. The user might switch directly afterwards in the plan mode to get a more standardized plan based on the research before.
+
+Sometimes the user wants to save the research. In this case save it with the next id in ./docs/research/RSH-<id>-<slug>.md 
 
 ## Conditional Rules
 
