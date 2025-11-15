@@ -1,3 +1,19 @@
+# [1.3.0](https://github.com/tobias-walle/agency/compare/v1.2.0...v1.3.0) (2025-11-15)
+
+
+### Bug Fixes
+
+* autostart tmux server ([5949f00](https://github.com/tobias-walle/agency/commit/5949f00c113a2aefae3a87c43dc129f81e907494))
+* fix tests ([aab2a32](https://github.com/tobias-walle/agency/commit/aab2a32d9fd61f1466c1204328967ec9ad962cad))
+
+
+### Features
+
+* add description and no-attach to new/start to enable non-interactive creation and optional detach ([839e445](https://github.com/tobias-walle/agency/commit/839e445595afe83d49dd84a0e1934c014f2befd5))
+* autostart daemon and restart on version mismatch ([4c0d535](https://github.com/tobias-walle/agency/commit/4c0d5353a45bb567767913c7980d7e1b34f3c28f))
+* config-based editor, tasks cmd, config cmd, better git errors, setup docs ([ed9b303](https://github.com/tobias-walle/agency/commit/ed9b303ad5e9b22fc0c8aa61611186a6fab1f371))
+* show changes in overview ([c96d532](https://github.com/tobias-walle/agency/commit/c96d532087341505e6d182a535ab9c11e3f17a4b))
+
 # [1.2.0](https://github.com/tobias-walle/agency/compare/v1.1.0...v1.2.0) (2025-11-14)
 
 
