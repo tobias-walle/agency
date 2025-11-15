@@ -17,7 +17,7 @@ install-globally:
 
 # Run the tests with nextest
 test *ARGS:
-  RUSTFLAGS="${RUSTFLAGS:-} -Awarnings" cargo nextest run --cargo-quiet --status-level leak {{ARGS}}
+  RUSTFLAGS="${RUSTFLAGS:-} -Awarnings" cargo nextest run --no-fail-fast --cargo-quiet --status-level leak {{ARGS}}
 
 # Check for compiler or linting errors
 check:

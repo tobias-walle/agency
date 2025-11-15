@@ -251,27 +251,36 @@ fn daemon_reports_version_via_protocol() -> Result<()> {
   daemon_start.assert().success();
 
   // Connect and request version
-  let cwd = env.path().to_path_buf();
-  let cfg = agency::config::load_config(&cwd)?;
-  let socket = agency::config::compute_socket_path(&cfg);
-  let mut stream = std::os::unix::net::UnixStream::connect(&socket)?;
-  agency::daemon_protocol::write_frame(
-    &mut stream,
-    &agency::daemon_protocol::C2D::Control(agency::daemon_protocol::C2DControl::GetVersion),
+  with_vars(
+    [(
+      "XDG_RUNTIME_DIR",
+      Some(env.runtime_dir().display().to_string()),
+    )],
+    || -> Result<()> {
+      let cwd = env.path().to_path_buf();
+      let cfg = agency::config::load_config(&cwd)?;
+      let socket = agency::config::compute_socket_path(&cfg);
+      let mut stream = std::os::unix::net::UnixStream::connect(&socket)?;
+      agency::daemon_protocol::write_frame(
+        &mut stream,
+        &agency::daemon_protocol::C2D::Control(agency::daemon_protocol::C2DControl::GetVersion),
+      )?;
+      let reply: agency::daemon_protocol::D2C = agency::daemon_protocol::read_frame(&mut stream)?;
+      match reply {
+        agency::daemon_protocol::D2C::Control(agency::daemon_protocol::D2CControl::Version {
+          version,
+        }) => {
+          let cli_version = env!("CARGO_PKG_VERSION");
+          assert_eq!(
+            version, cli_version,
+            "daemon version must match CLI version",
+          );
+        }
+        other => panic!("unexpected reply: {other:?}"),
+      }
+      Ok(())
+    },
   )?;
-  let reply: agency::daemon_protocol::D2C = agency::daemon_protocol::read_frame(&mut stream)?;
-  match reply {
-    agency::daemon_protocol::D2C::Control(agency::daemon_protocol::D2CControl::Version {
-      version,
-    }) => {
-      let cli_version = env!("CARGO_PKG_VERSION");
-      assert_eq!(
-        version, cli_version,
-        "daemon version must match CLI version"
-      );
-    }
-    other => panic!("unexpected reply: {other:?}"),
-  }
 
   let mut daemon_stop = env.bin_cmd()?;
   daemon_stop.arg("daemon").arg("stop");

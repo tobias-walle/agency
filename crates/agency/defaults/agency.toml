@@ -4,9 +4,6 @@ agent = "claude"
 # Example: Override shell used by `agency shell` (defaults to $SHELL or /bin/sh)
 # shell = ["zsh"]
 
-
-## Keybindings removed: detach is no longer configurable via global config
-
 # Configure the bootstrap process then creating new git worktrees
 [bootstrap]
 # Run an optional bootstrap script inside each new worktree.
@@ -29,5 +26,3 @@ cmd = ["gemini", "$AGENCY_TASK"]
 
 [agents.opencode]
 cmd = ["opencode", "--prompt", "$AGENCY_TASK"]
-
-# Used for testing
