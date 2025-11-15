@@ -13,6 +13,7 @@ mod utils;
 use crate::config::{AgencyPaths, AppContext, global_config_exists, load_config};
 use crate::utils::daemon::ensure_running_and_latest_version;
 use crate::utils::git::resolve_main_workdir;
+use crate::utils::tmux::ensure_server as ensure_tmux_server;
 
 /// Agency - An AI agent manager and orchestrator in your command line.
 #[derive(Debug, Parser)]
@@ -137,6 +138,7 @@ pub fn run() -> Result<()> {
     Some(Commands::Daemon { .. }) => {}
     Some(_) => {
       let _ = ensure_running_and_latest_version(&ctx);
+      let _ = ensure_tmux_server(&ctx.config);
     }
     None => {}
   }
@@ -238,6 +240,7 @@ pub fn run() -> Result<()> {
       }
       // Only autostart daemon once we know global config exists to avoid setup
       let _ = ensure_running_and_latest_version(&ctx);
+      let _ = ensure_tmux_server(&ctx.config);
       if stdout_tty {
         crate::tui::run(&ctx)?;
       } else {

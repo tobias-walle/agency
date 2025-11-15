@@ -40,3 +40,9 @@ fix:
 commit:
   git add --all
   git commit -F COMMIT.txt
+
+tmux *ARGS:
+  tmux -S $AGENCY_TMUX_SOCKET_PATH {{ARGS}}
+
+tmux-kill:
+  just tmux kill-server

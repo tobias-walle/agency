@@ -23,12 +23,56 @@ pub fn tmux_socket_path(cfg: &AgencyConfig) -> PathBuf {
 
 pub fn tmux_args_base(cfg: &AgencyConfig) -> Vec<String> {
   let sock = tmux_socket_path(cfg);
-  vec![
-    "-S".to_string(),
-    sock.display().to_string(),
-    "-L".to_string(),
-    "agency".to_string(),
-  ]
+  vec!["-S".to_string(), sock.display().to_string()]
+}
+
+/// Ensure a dedicated tmux server is running on our socket by maintaining a
+/// hidden guard session. Creates the socket directory (0700) if needed.
+pub fn ensure_server(cfg: &AgencyConfig) -> Result<()> {
+  use std::os::unix::fs::PermissionsExt;
+  let sock = tmux_socket_path(cfg);
+  if let Some(dir) = sock.parent() {
+    let _ = std::fs::create_dir_all(dir);
+    let _ = std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700));
+  }
+  let guard = "__agency_guard__";
+  // If guard exists, server is up
+  if let Ok(st) = std::process::Command::new("tmux")
+    .args(tmux_args_base(cfg))
+    .arg("has-session")
+    .arg("-t")
+    .arg(guard)
+    .status()
+  {
+    if st.success() {
+      return Ok(());
+    }
+  }
+  // Create a detached guard session (starts server if needed)
+  let create = std::process::Command::new("tmux")
+    .args(tmux_args_base(cfg))
+    .arg("new-session")
+    .arg("-d")
+    .arg("-s")
+    .arg(guard)
+    .status()
+    .context("tmux new-session (guard) failed")?;
+  if create.success() {
+    return Ok(());
+  }
+  // If new-session failed (could be duplicate during a race), recheck
+  if let Ok(st2) = std::process::Command::new("tmux")
+    .args(tmux_args_base(cfg))
+    .arg("has-session")
+    .arg("-t")
+    .arg(guard)
+    .status()
+  {
+    if st2.success() {
+      return Ok(());
+    }
+  }
+  anyhow::bail!("tmux server not reachable on configured socket")
 }
 
 pub fn session_name(task_id: u32, slug: &str) -> String {
@@ -44,6 +88,8 @@ pub fn start_session(
   args: &[String],
 ) -> Result<()> {
   let name = session_name(task.id, &task.slug);
+  // Ensure tmux server is up before applying any configuration
+  ensure_server(cfg)?;
   // Resolve default-terminal from the outer environment
   let default_term = std::env::var("TERM")
     .ok()
@@ -275,18 +321,18 @@ fn tmux_source_file(cfg: &AgencyConfig, path: &Path) -> Result<()> {
 }
 
 fn load_default_tmux_config(cfg: &AgencyConfig) -> Result<()> {
-  // Best-effort: quietly source user's default tmux config if present.
+  // Source user's default tmux config if present.
   if let Ok(home) = std::env::var("HOME") {
     let p1 = PathBuf::from(&home).join(".tmux.conf");
     if p1.exists() {
-      let _ = tmux_source_file(cfg, &p1);
+      tmux_source_file(cfg, &p1)?;
     }
     let p2 = PathBuf::from(&home)
       .join(".config")
       .join("tmux")
       .join("tmux.conf");
     if p2.exists() {
-      let _ = tmux_source_file(cfg, &p2);
+      tmux_source_file(cfg, &p2)?;
     }
   }
   Ok(())
@@ -298,13 +344,13 @@ fn load_user_tmux_config(cfg: &AgencyConfig, project_root: Option<&Path>) -> Res
   if let Some(global_tmux) = xdg.find_config_file("tmux.conf")
     && global_tmux.exists()
   {
-    let _ = tmux_source_file(cfg, &global_tmux);
+    tmux_source_file(cfg, &global_tmux)?;
   }
   // Project-local config: <project>/.agency/tmux.conf
   if let Some(root) = project_root {
     let proj_tmux = root.join(".agency").join("tmux.conf");
     if proj_tmux.exists() {
-      let _ = tmux_source_file(cfg, &proj_tmux);
+      tmux_source_file(cfg, &proj_tmux)?;
     }
   }
   Ok(())
