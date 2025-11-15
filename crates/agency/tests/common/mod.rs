@@ -84,6 +84,11 @@ impl TestEnv {
     // so the daemon socket is created inside the sandbox workspace.
     cmd.current_dir(self.path());
     cmd.env("XDG_RUNTIME_DIR", &self.runtime_dir);
+    // Ensure sockets are isolated per test via explicit env overrides
+    let uds_path = self.runtime_dir.join("agency.sock");
+    let tmux_sock_path = self.runtime_dir.join("agency-tmux.sock");
+    cmd.env("AGENCY_SOCKET_PATH", &uds_path);
+    cmd.env("AGENCY_TMUX_SOCKET_PATH", &tmux_sock_path);
     // Hint CLI to treat STDIN/STDOUT as non-TTY for wizard fallbacks
     cmd.env("AGENCY_TEST", "1");
     Ok(cmd)
