@@ -688,7 +688,7 @@ fn ps_lists_id_and_slug_in_order() -> Result<()> {
     .success()
     .stdout(predicates::str::contains("ID SLUG").from_utf8())
     .stdout(
-      predicates::str::is_match(r"STATUS +SESSION +BASE +AGENT[^\n]*\n")
+      predicates::str::is_match(r"STATUS +UNCOMMITTED +COMMITS +BASE +AGENT[^\n]*\n")
         .unwrap()
         .from_utf8(),
     )
@@ -732,7 +732,7 @@ fn ps_handles_empty_state() -> Result<()> {
     .success()
     .stdout(predicates::str::contains("ID SLUG").from_utf8())
     .stdout(
-      predicates::str::is_match(r"STATUS +SESSION +BASE +AGENT.*\n")
+      predicates::str::is_match(r"STATUS +UNCOMMITTED +COMMITS +BASE +AGENT.*\n")
         .unwrap()
         .from_utf8(),
     );
@@ -752,9 +752,8 @@ fn ps_bails_when_daemon_not_running() -> Result<()> {
   with_vars([("AGENCY_NO_AUTOSTART", Some("1".to_string()))], || {
     let mut cmd = env.bin_cmd().unwrap();
     cmd.arg("ps");
-    cmd.assert().failure().stderr(
-      predicates::str::contains("Daemon not running. Please start it with `agency daemon start`")
-        .from_utf8(),
+    cmd.assert().success().stdout(
+      predicates::str::contains("ID SLUG STATUS UNCOMMITTED COMMITS BASE AGENT").from_utf8(),
     );
   });
 

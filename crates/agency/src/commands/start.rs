@@ -9,7 +9,7 @@ use crate::utils::bootstrap::prepare_worktree_for_task;
 use crate::utils::cmd::{CmdCtx, expand_argv};
 use crate::utils::command::Command as LocalCommand;
 use crate::utils::command::as_shell_command;
-use crate::utils::daemon::list_sessions_for_project;
+use crate::utils::daemon::get_project_state;
 use crate::utils::git::{ensure_branch_at, open_main_repo, repo_workdir_or};
 use crate::utils::interactive;
 use crate::utils::task::{agent_for_task, branch_name, read_task_content, resolve_id_or_slug};
@@ -85,7 +85,8 @@ pub fn run_with_attach(ctx: &AppContext, ident: &str, attach: bool) -> Result<()
   };
 
   // Fail when a session is already running for this task
-  let existing = list_sessions_for_project(ctx)?
+  let existing = get_project_state(ctx)?
+    .sessions
     .into_iter()
     .any(|e| e.task.id == task.id && e.task.slug == task.slug);
   if existing {

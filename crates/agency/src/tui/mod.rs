@@ -18,7 +18,7 @@ use crate::config::AppContext;
 use crate::daemon_protocol::{
   C2D, C2DControl, D2C, D2CControl, ProjectKey, SessionInfo, read_frame, write_frame,
 };
-use crate::utils::daemon::{connect_daemon, list_sessions_for_project};
+use crate::utils::daemon::{connect_daemon, get_project_state};
 use crate::utils::git::{open_main_repo, repo_workdir_or};
 use crate::utils::task::{TaskRef, list_tasks};
 use crate::{log_error, log_info};
@@ -38,6 +38,8 @@ struct TaskRow {
   session: Option<u64>,
   base: String,
   agent: String,
+  uncommitted_display: String,
+  commits_display: String,
 }
 
 #[derive(Default)]
@@ -64,8 +66,37 @@ impl AppState {
   fn refresh(&mut self, ctx: &AppContext) -> Result<()> {
     let mut tasks = list_tasks(&ctx.paths)?;
     tasks.sort_by_key(|t| t.id);
-    let sessions = list_sessions_for_project(ctx)?;
-    let (rows, sel) = build_task_rows(ctx, &tasks, &sessions, self.selected);
+    let snap = get_project_state(ctx)?;
+    let sessions = snap.sessions;
+    let metric_map: std::collections::HashMap<(u32, String), (u64, u64, u64)> = snap
+      .metrics
+      .into_iter()
+      .map(|m| {
+        (
+          (m.task.id, m.task.slug),
+          (m.uncommitted_add, m.uncommitted_del, m.commits_ahead),
+        )
+      })
+      .collect();
+    let (mut rows, sel) = build_task_rows(ctx, &tasks, &sessions, self.selected);
+    for r in &mut rows {
+      let key = (r.id, r.slug.clone());
+      if let Some((a, d, ahead)) = metric_map.get(&key) {
+        r.uncommitted_display = if *a == 0 && *d == 0 {
+          "+0-0".to_string()
+        } else {
+          format!("+{a}-{d}")
+        };
+        r.commits_display = if *ahead == 0 {
+          "-".to_string()
+        } else {
+          ahead.to_string()
+        };
+      } else {
+        r.uncommitted_display = "-".to_string();
+        r.commits_display = "-".to_string();
+      }
+    }
     self.rows = rows;
     self.selected = sel;
     Ok(())
@@ -207,6 +238,8 @@ fn ui_loop(
         Cell::from("ID"),
         Cell::from("SLUG"),
         Cell::from("STATUS"),
+        Cell::from("UNCOMMITTED"),
+        Cell::from("COMMITS"),
         Cell::from("BASE"),
         Cell::from("AGENT"),
       ])
@@ -222,6 +255,8 @@ fn ui_loop(
           Cell::from(r.id.to_string()),
           Cell::from(r.slug.clone()),
           status_cell,
+          uncommitted_cell(&r.uncommitted_display),
+          commits_cell(&r.commits_display),
           Cell::from(r.base.clone()),
           Cell::from(r.agent.clone()),
         ])
@@ -235,12 +270,13 @@ fn ui_loop(
       let table = Table::new(
         rows,
         [
-          Constraint::Percentage(10),
+          Constraint::Percentage(8),
           Constraint::Percentage(20),
-          Constraint::Percentage(15),
-          Constraint::Percentage(15),
-          Constraint::Percentage(15),
-          Constraint::Percentage(15),
+          Constraint::Percentage(14),
+          Constraint::Percentage(14),
+          Constraint::Percentage(10),
+          Constraint::Percentage(14),
+          Constraint::Percentage(20),
         ],
       )
       .header(header)
@@ -339,7 +375,7 @@ fn ui_loop(
     // Handle daemon events
     while let Ok(ev) = events_rx.try_recv() {
       match ev {
-        UiEvent::TasksChanged | UiEvent::SessionsChanged => {
+        UiEvent::ProjectState => {
           state.refresh(ctx).map_err(|err| {
             log_error!("{}", err);
             err
@@ -659,6 +695,46 @@ fn status_style(status: &str) -> Style {
   }
 }
 
+fn uncommitted_cell(text: &str) -> Cell<'_> {
+  // Expect "+A-B"; render +A in green, -B in red. For missing/unknown ("-"), show "+0-0" gray.
+  if text == "-" {
+    return Cell::from(Line::from(vec![
+      Span::raw("+0").style(Style::default().fg(Color::Gray)),
+      Span::raw("-0").style(Style::default().fg(Color::Gray)),
+    ]));
+  }
+  let s = text.trim();
+  // Parse numbers in a forgiving way
+  if let Some((plus, rest)) = s.strip_prefix('+').and_then(|p| p.split_once('-')) {
+    let a = plus;
+    let b = rest;
+    let a_num = a.parse::<u64>().unwrap_or(0);
+    let b_num = b.parse::<u64>().unwrap_or(0);
+    return Cell::from(Line::from(vec![
+      if a_num > 0 {
+        Span::styled(format!("+{}", a_num), Style::default().fg(Color::Green))
+      } else {
+        Span::styled("+0", Style::default().fg(Color::Gray))
+      },
+      if b_num > 0 {
+        Span::styled(format!("-{}", b_num), Style::default().fg(Color::Red))
+      } else {
+        Span::styled("-0", Style::default().fg(Color::Gray))
+      },
+    ]));
+  }
+  // Fallback: raw text
+  Cell::from(text.to_string())
+}
+
+fn commits_cell(text: &str) -> Cell<'_> {
+  // Show number in cyan when >0; gray when "-" or 0.
+  if text == "-" || text == "0" {
+    return Cell::from(text.to_string()).style(Style::default().fg(Color::Gray));
+  }
+  Cell::from(text.to_string()).style(Style::default().fg(Color::Cyan))
+}
+
 fn build_task_rows(
   ctx: &AppContext,
   tasks: &[TaskRef],
@@ -698,6 +774,8 @@ fn build_task_rows(
       session: latest_sess.map(|s| s.session_id),
       base: base.clone(),
       agent,
+      uncommitted_display: "-".to_string(),
+      commits_display: "-".to_string(),
     });
   }
 
@@ -861,8 +939,7 @@ mod tests {
 
 /// UI events coming from daemon subscription
 enum UiEvent {
-  TasksChanged,
-  SessionsChanged,
+  ProjectState,
   Disconnected(Error),
 }
 
@@ -889,11 +966,8 @@ fn subscribe_events(ctx: &AppContext) -> Result<Receiver<UiEvent>> {
       loop {
         let msg: Result<D2C> = read_frame(&mut stream);
         match msg {
-          Ok(D2C::Control(D2CControl::TasksChanged { .. })) => {
-            let _ = tx_events.send(UiEvent::TasksChanged);
-          }
-          Ok(D2C::Control(D2CControl::SessionsChanged { .. })) => {
-            let _ = tx_events.send(UiEvent::SessionsChanged);
+          Ok(D2C::Control(D2CControl::ProjectState { .. })) => {
+            let _ = tx_events.send(UiEvent::ProjectState);
           }
           Ok(_) => {}
           Err(err) => {

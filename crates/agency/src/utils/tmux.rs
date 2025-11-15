@@ -43,10 +43,9 @@ pub fn ensure_server(cfg: &AgencyConfig) -> Result<()> {
     .arg("-t")
     .arg(guard)
     .status()
+    && st.success()
   {
-    if st.success() {
-      return Ok(());
-    }
+    return Ok(());
   }
   // Create a detached guard session (starts server if needed)
   let create = std::process::Command::new("tmux")
@@ -67,10 +66,9 @@ pub fn ensure_server(cfg: &AgencyConfig) -> Result<()> {
     .arg("-t")
     .arg(guard)
     .status()
+    && st2.success()
   {
-    if st2.success() {
-      return Ok(());
-    }
+    return Ok(());
   }
   anyhow::bail!("tmux server not reachable on configured socket")
 }

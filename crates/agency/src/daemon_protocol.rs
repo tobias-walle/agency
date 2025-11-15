@@ -14,6 +14,14 @@ pub struct TaskMeta {
   pub slug: String,
 }
 
+/// Enriched task info for project snapshots
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default, Encode, Decode)]
+pub struct TaskInfo {
+  pub id: u32,
+  pub slug: String,
+  pub base_branch: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default, Encode, Decode)]
 pub struct SessionInfo {
   pub session_id: u64,
@@ -24,10 +32,21 @@ pub struct SessionInfo {
   pub cwd: String,
 }
 
+/// Live Git metrics per task
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default, Encode, Decode)]
+pub struct TaskMetrics {
+  pub task: TaskMeta,
+  pub uncommitted_add: u64,
+  pub uncommitted_del: u64,
+  pub commits_ahead: u64,
+  pub updated_at_ms: u64,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Encode, Decode)]
 pub enum C2DControl {
-  ListSessions {
-    project: Option<ProjectKey>,
+  /// One-shot snapshot of the full project state
+  ListProjectState {
+    project: ProjectKey,
   },
   SubscribeEvents {
     project: ProjectKey,
@@ -53,14 +72,12 @@ pub enum C2DControl {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Encode, Decode)]
 pub enum D2CControl {
-  Sessions {
-    entries: Vec<SessionInfo>,
-  },
-  SessionsChanged {
-    entries: Vec<SessionInfo>,
-  },
-  TasksChanged {
+  /// Streamed or one-shot snapshot of the full project state
+  ProjectState {
     project: ProjectKey,
+    tasks: Vec<TaskInfo>,
+    sessions: Vec<SessionInfo>,
+    metrics: Vec<TaskMetrics>,
   },
   Ack {
     stopped: usize,

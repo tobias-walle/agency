@@ -1,12 +1,13 @@
 use anyhow::Result;
 
 use crate::config::AppContext;
-use crate::utils::daemon::list_sessions_for_project;
+use crate::utils::daemon::get_project_state;
 use crate::utils::git::head_branch;
 use crate::utils::sessions::latest_sessions_by_task;
 use crate::utils::status::{TaskStatus, derive_status, is_task_completed, status_label};
 use crate::utils::task::{agent_for_task, list_tasks, read_task_frontmatter, worktree_dir};
 use crate::utils::term::print_table;
+use owo_colors::OwoColorize as _;
 #[cfg(test)]
 use owo_colors::OwoColorize as _;
 
@@ -14,8 +15,23 @@ pub fn run(ctx: &AppContext) -> Result<()> {
   let mut tasks = list_tasks(&ctx.paths)?;
   tasks.sort_by_key(|t| t.id);
 
-  // Query sessions for current project and build latest-session map
-  let sessions = list_sessions_for_project(ctx)?;
+  // Query project state (sessions + metrics); fallback gracefully when daemon unavailable
+  let (sessions, metrics_map) = match get_project_state(ctx) {
+    Ok(state) => {
+      let m: std::collections::HashMap<(u32, String), (u64, u64, u64)> = state
+        .metrics
+        .into_iter()
+        .map(|m| {
+          (
+            (m.task.id, m.task.slug),
+            (m.uncommitted_add, m.uncommitted_del, m.commits_ahead),
+          )
+        })
+        .collect();
+      (state.sessions, m)
+    }
+    Err(_) => (Vec::new(), std::collections::HashMap::new()),
+  };
   let latest = latest_sessions_by_task(&sessions);
   let base = head_branch(ctx);
   let rows: Vec<Vec<String>> = tasks
@@ -33,20 +49,51 @@ pub fn run(ctx: &AppContext) -> Result<()> {
       let status_text = status_label(&effective_status);
       let fm = read_task_frontmatter(&ctx.paths, t);
       let agent = agent_for_task(&ctx.config, fm.as_ref());
+      let (unc_text, commits_text) = if let Some((a, d, ahead)) = metrics_map.get(&key) {
+        let plus = if *a == 0 {
+          "+0".to_string().dimmed().to_string()
+        } else {
+          format!("+{}", a).green().to_string()
+        };
+        let minus = if *d == 0 {
+          "-0".to_string().dimmed().to_string()
+        } else {
+          format!("-{}", d).red().to_string()
+        };
+        let unc = format!("{}{}", plus, minus);
+        let commits = if *ahead == 0 {
+          "-".to_string().dimmed().to_string()
+        } else {
+          ahead.to_string().cyan().to_string()
+        };
+        (unc, commits)
+      } else {
+        ("+0-0".to_string().dimmed().to_string(), "-".to_string().dimmed().to_string())
+      };
       vec![
         t.id.to_string(),
         t.slug.clone(),
         status_text,
-        latest_sess
-          .map(|s| s.session_id.to_string())
-          .unwrap_or_default(),
+        unc_text,
+        commits_text,
         base.clone(),
         agent.unwrap_or_else(|| "-".to_string()),
       ]
     })
     .collect();
 
-  print_table(&["ID", "SLUG", "STATUS", "SESSION", "BASE", "AGENT"], &rows);
+  print_table(
+    &[
+      "ID",
+      "SLUG",
+      "STATUS",
+      "UNCOMMITTED",
+      "COMMITS",
+      "BASE",
+      "AGENT",
+    ],
+    &rows,
+  );
 
   Ok(())
 }

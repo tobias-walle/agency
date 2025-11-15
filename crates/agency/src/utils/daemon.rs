@@ -1,6 +1,7 @@
 use crate::config::{AppContext, compute_socket_path};
 use crate::daemon_protocol::{
-  C2D, C2DControl, D2C, D2CControl, ProjectKey, SessionInfo, read_frame, write_frame,
+  C2D, C2DControl, D2C, D2CControl, ProjectKey, SessionInfo, TaskInfo, TaskMetrics, read_frame,
+  write_frame,
 };
 use crate::log_warn;
 use crate::utils::git::{open_main_repo, repo_workdir_or};
@@ -115,7 +116,15 @@ fn notify_tasks_changed(ctx: &AppContext) -> anyhow::Result<()> {
 /// Best-effort helper to list sessions for the current project.
 ///
 /// Returns an error with guidance if the daemon is unavailable.
-pub fn list_sessions_for_project(ctx: &AppContext) -> anyhow::Result<Vec<SessionInfo>> {
+#[derive(Debug, Clone)]
+pub struct ProjectState {
+  pub tasks: Vec<TaskInfo>,
+  pub sessions: Vec<SessionInfo>,
+  pub metrics: Vec<TaskMetrics>,
+}
+
+/// Best-effort helper to fetch a one-shot project state snapshot.
+pub fn get_project_state(ctx: &AppContext) -> anyhow::Result<ProjectState> {
   let socket = compute_socket_path(&ctx.config);
   let repo = open_main_repo(ctx.paths.cwd())?;
   let repo_root = repo_workdir_or(&repo, ctx.paths.cwd());
@@ -126,17 +135,24 @@ pub fn list_sessions_for_project(ctx: &AppContext) -> anyhow::Result<Vec<Session
   let mut stream = connect_daemon_socket(&socket)?;
   write_frame(
     &mut stream,
-    &C2D::Control(C2DControl::ListSessions {
-      project: Some(project),
-    }),
+    &C2D::Control(C2DControl::ListProjectState { project }),
   )
-  .context("failed to write ListSessions frame")?;
+  .context("failed to write ListProjectState frame")?;
 
   let reply: Result<D2C> = read_frame(&mut stream);
   match reply {
-    Ok(D2C::Control(D2CControl::Sessions { entries })) => Ok(entries),
+    Ok(D2C::Control(D2CControl::ProjectState {
+      project: _,
+      tasks,
+      sessions,
+      metrics,
+    })) => Ok(ProjectState {
+      tasks,
+      sessions,
+      metrics,
+    }),
     Ok(D2C::Control(D2CControl::Error { message })) => bail!("{message}"),
-    Ok(_) => bail!("Protocol error: Expected Sessions reply"),
+    Ok(_) => bail!("Protocol error: Expected ProjectState reply"),
     Err(err) => Err(err),
   }
 }

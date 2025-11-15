@@ -167,21 +167,18 @@ fn maybe_autostash(
   }
   let message = format!("agency auto-stash before merge {base_branch}");
   let result = stash_push(repo_workdir, &message)?;
-  let stash = match result {
-    Some(stash_ref) => {
-      log_warn!(
-        "Auto-stashed checked-out base before fast-forward: {}",
-        base_branch
-      );
-      Some(AutoStash::new(repo_workdir, stash_ref))
-    }
-    None => {
-      log_warn!(
-        "Base reported dirty but nothing to stash; continuing merge: {}",
-        base_branch
-      );
-      None
-    }
+  let stash = if let Some(stash_ref) = result {
+    log_warn!(
+      "Auto-stashed checked-out base before fast-forward: {}",
+      base_branch
+    );
+    Some(AutoStash::new(repo_workdir, stash_ref))
+  } else {
+    log_warn!(
+      "Base reported dirty but nothing to stash; continuing merge: {}",
+      base_branch
+    );
+    None
   };
   Ok(stash)
 }

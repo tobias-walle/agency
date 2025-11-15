@@ -4,7 +4,7 @@ use crate::commands::shell::resolve_shell_argv;
 use crate::config::AppContext;
 use crate::daemon_protocol::TaskMeta;
 use crate::utils::command::as_shell_command;
-use crate::utils::daemon::list_sessions_for_project;
+use crate::utils::daemon::get_project_state;
 use crate::utils::git::{open_main_repo, repo_workdir_or};
 use crate::utils::interactive;
 use crate::utils::task::resolve_id_or_slug;
@@ -28,7 +28,7 @@ pub fn run_with_task(ctx: &AppContext, ident: &str) -> Result<()> {
   let repo_root = repo_workdir_or(&repo, ctx.paths.cwd());
 
   // Query existing sessions and join the latest for this task; error if none
-  let entries = list_sessions_for_project(ctx)?;
+  let entries = get_project_state(ctx)?.sessions;
   let target = entries
     .into_iter()
     .filter(|e| e.task.id == task.id && e.task.slug == task.slug)
@@ -93,7 +93,7 @@ pub fn run_with_task(ctx: &AppContext, ident: &str) -> Result<()> {
 }
 
 pub fn run_join_session(ctx: &AppContext, session_id: u64) -> Result<()> {
-  let entries = list_sessions_for_project(ctx)?;
+  let entries = get_project_state(ctx)?.sessions;
   let Some(si) = entries.into_iter().find(|e| e.session_id == session_id) else {
     anyhow::bail!("Session not found: {session_id}");
   };
