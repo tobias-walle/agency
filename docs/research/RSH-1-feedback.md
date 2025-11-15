@@ -9,5 +9,5 @@
 - [x] Make `agency config` open the config JSON file.
 - [x] Show unstaged changes and number of commits against base branch
 - [ ] Allow definition of base branch. If selected branch doesn't exists, create a new one
-- [-] Investigate C-z
+- [x] Investigate C-z
 - [ ] Add --follow commands
