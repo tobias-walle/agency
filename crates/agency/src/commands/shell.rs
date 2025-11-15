@@ -39,7 +39,7 @@ pub fn run(ctx: &AppContext, ident: &str) -> Result<()> {
   if program.is_empty() {
     bail!("shell program is empty");
   }
-  let args: Vec<&str> = argv
+  let argv_tail: Vec<&str> = argv
     .iter()
     .skip(1)
     .map(std::string::String::as_str)
@@ -49,7 +49,7 @@ pub fn run(ctx: &AppContext, ident: &str) -> Result<()> {
 
   interactive::scope(|| {
     let status = ProcCommand::new(program)
-      .args(&args)
+      .args(&argv_tail)
       .current_dir(&wt_dir)
       .status()
       .with_context(|| format!("failed to spawn shell program: {program}"))?;

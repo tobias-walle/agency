@@ -80,8 +80,8 @@ impl SlimDaemon {
               last.insert(pk.repo_root.clone(), snap.clone());
               // Broadcast
               let mut remove_idx = Vec::new();
-              let mut list = subs.lock();
-              for (i, sub) in list.iter_mut().enumerate() {
+              let mut subs_list = subs.lock();
+              for (i, sub) in subs_list.iter_mut().enumerate() {
                 if sub.project.repo_root == pk.repo_root
                   && write_frame(
                     &mut sub.stream,
@@ -96,7 +96,7 @@ impl SlimDaemon {
               }
               // Remove disconnected subscribers
               for i in remove_idx.into_iter().rev() {
-                list.remove(i);
+                subs_list.remove(i);
               }
             }
           }

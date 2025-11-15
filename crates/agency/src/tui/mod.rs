@@ -294,7 +294,7 @@ fn ui_loop(
       );
 
       // Input overlay
-      if let Mode::InputSlug { start_and_attach } = state.mode {
+      if let Mode::InputSlug { start_and_attach: _ } = state.mode {
         let area = centered_rect(rects[0], 50, 3);
         let left_title = "Task slug (e.g. my-task)";
         let agent_name = state
@@ -607,10 +607,10 @@ fn ui_loop(
             MenuOutcome::Canceled => {
               state.mode = state.return_after_menu.take().unwrap_or(Mode::List);
             }
-            MenuOutcome::Selected(idx) => {
+            MenuOutcome::Selected(selected_idx) => {
               // Update selected agent unless user chose Cancel
-              if idx < menu.items.len() {
-                state.selected_agent = Some(menu.items[idx].clone());
+              if selected_idx < menu.items.len() {
+                state.selected_agent = Some(menu.items[selected_idx].clone());
               }
               state.mode = state.return_after_menu.take().unwrap_or(Mode::List);
             }

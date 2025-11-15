@@ -63,7 +63,7 @@ pub fn start_session(
     cfg,
     "",
     "terminal-features",
-    &format!(",{}:RGB", default_term),
+    &format!(",{default_term}:RGB"),
   );
   let _ = tmux_set_option_append(cfg, "", "terminal-features", ",tmux-256color:RGB");
   let _ = tmux_set_option_append(cfg, "", "terminal-features", ",xterm-256color:RGB");
@@ -71,8 +71,8 @@ pub fn start_session(
   let _ = tmux_set_env_global(cfg, "COLORTERM", "truecolor");
 
   // Create session and launch program
-  let mut cmd = std::process::Command::new("tmux");
-  cmd
+  let mut tmux_cmd = std::process::Command::new("tmux");
+  tmux_cmd
     .args(tmux_args_base(cfg))
     .arg("new-session")
     .arg("-d")
@@ -82,7 +82,7 @@ pub fn start_session(
     .arg(cwd.display().to_string())
     .arg(program)
     .args(args);
-  run_cmd(&mut cmd).context("tmux new-session failed")?;
+  run_cmd(&mut tmux_cmd).context("tmux new-session failed")?;
 
   // Auto-close the session when the agent exits
   tmux_set_option(cfg, &name, "remain-on-exit", "off")?;
@@ -103,9 +103,9 @@ pub fn start_session(
   // After sourcing configs, compute the actual detach binding and prefix
   let prefix = read_tmux_prefix(cfg).unwrap_or_else(|_| "C-b".to_string());
   let right = match find_detach_binding(cfg) {
-    Ok(DetachBinding::WithPrefix { key }) => format!(" Press {}+{} to detach ", prefix, key),
-    Ok(DetachBinding::Prefixless { key }) => format!(" Press {} to detach ", key),
-    _ => format!(" Press {}+d to detach ", prefix),
+    Ok(DetachBinding::WithPrefix { key }) => format!(" Press {prefix}+{key} to detach "),
+    Ok(DetachBinding::Prefixless { key }) => format!(" Press {key} to detach "),
+    _ => format!(" Press {prefix}+d to detach "),
   };
   tmux_set_option(cfg, &name, "status-right", &right)?;
 
@@ -139,13 +139,13 @@ pub fn start_session(
 pub fn attach_session(cfg: &AgencyConfig, task: &TaskMeta) -> Result<()> {
   let name = session_name(task.id, &task.slug);
   // Attach without reapplying config; overrides already sourced on start
-  let mut cmd = std::process::Command::new("tmux");
-  cmd
+  let mut tmux_cmd = std::process::Command::new("tmux");
+  tmux_cmd
     .args(tmux_args_base(cfg))
     .arg("attach-session")
     .arg("-t")
     .arg(&name);
-  let status = cmd.status().context("failed to exec tmux attach")?;
+  let status = tmux_cmd.status().context("failed to exec tmux attach")?;
   if status.success() {
     Ok(())
   } else {
@@ -187,15 +187,15 @@ fn tmux_set_option(cfg: &AgencyConfig, target: &str, key: &str, value: &str) -> 
 }
 
 fn tmux_set_option_append(cfg: &AgencyConfig, target: &str, key: &str, value: &str) -> Result<()> {
-  let mut cmd = std::process::Command::new("tmux");
-  cmd.args(tmux_args_base(cfg)).arg("set-option");
+  let mut tmux_cmd = std::process::Command::new("tmux");
+  tmux_cmd.args(tmux_args_base(cfg)).arg("set-option");
   if target.is_empty() {
-    cmd.arg("-g");
+    tmux_cmd.arg("-g");
   } else {
-    cmd.arg("-t").arg(target);
+    tmux_cmd.arg("-t").arg(target);
   }
-  cmd.arg("-ga").arg(key).arg(value);
-  run_cmd(&mut cmd).with_context(|| format!("tmux append {key} failed"))
+  tmux_cmd.arg("-ga").arg(key).arg(value);
+  run_cmd(&mut tmux_cmd).with_context(|| format!("tmux append {key} failed"))
 }
 
 fn tmux_set_option_global(cfg: &AgencyConfig, key: &str, value: &str) -> Result<()> {
@@ -208,18 +208,6 @@ fn tmux_set_option_global(cfg: &AgencyConfig, key: &str, value: &str) -> Result<
       .arg(value),
   )
   .with_context(|| format!("tmux set -g {key} failed"))
-}
-
-fn tmux_set_env(cfg: &AgencyConfig, target: &str, key: &str, value: &str) -> Result<()> {
-  run_cmd(
-    std::process::Command::new("tmux")
-      .args(tmux_args_base(cfg))
-      .arg("set-environment")
-      .arg("-t")
-      .arg(target)
-      .arg(key)
-      .arg(value),
-  )
 }
 
 fn tmux_set_env_global(cfg: &AgencyConfig, key: &str, value: &str) -> Result<()> {
@@ -307,10 +295,10 @@ fn load_default_tmux_config(cfg: &AgencyConfig) -> Result<()> {
 fn load_user_tmux_config(cfg: &AgencyConfig, project_root: Option<&Path>) -> Result<()> {
   // Global XDG config: ~/.config/agency/tmux.conf
   let xdg = xdg::BaseDirectories::with_prefix("agency");
-  if let Some(global_tmux) = xdg.find_config_file("tmux.conf") {
-    if global_tmux.exists() {
-      let _ = tmux_source_file(cfg, &global_tmux);
-    }
+  if let Some(global_tmux) = xdg.find_config_file("tmux.conf")
+    && global_tmux.exists()
+  {
+    let _ = tmux_source_file(cfg, &global_tmux);
   }
   // Project-local config: <project>/.agency/tmux.conf
   if let Some(root) = project_root {

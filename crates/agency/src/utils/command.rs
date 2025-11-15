@@ -172,7 +172,7 @@ mod tests {
 
   #[test]
   fn as_shell_command_quotes_and_escapes() {
-    let cmd = as_shell_command("echo", &vec!["hi there".into(), "a'b".into(), "".into()]);
+    let cmd = as_shell_command("echo", &["hi there".into(), "a'b".into(), String::new()]);
     assert!(cmd.starts_with("echo "));
     assert!(cmd.contains("'hi there'"));
     assert!(cmd.contains("'a'\\''b'"));

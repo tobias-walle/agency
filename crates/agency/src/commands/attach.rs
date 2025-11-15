@@ -71,9 +71,9 @@ pub fn run_with_task(ctx: &AppContext, ident: &str) -> Result<()> {
   // Always wrap agent commands in user's shell
   let sh_argv = resolve_shell_argv(&ctx.config);
   let sh_prog = sh_argv.first().cloned().unwrap_or_else(|| "/bin/sh".into());
-  let sh_args: Vec<String> = sh_argv.into_iter().skip(1).collect();
+  let shell_args: Vec<String> = sh_argv.into_iter().skip(1).collect();
   let payload = as_shell_command(&cmd_local.program, &cmd_local.args);
-  let mut new_args = sh_args;
+  let mut new_args = shell_args;
   new_args.push("-c".into());
   new_args.push(payload);
   cmd_local.program = sh_prog;

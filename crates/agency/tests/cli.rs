@@ -270,7 +270,7 @@ fn daemon_reports_version_via_protocol() -> Result<()> {
         "daemon version must match CLI version"
       );
     }
-    other => panic!("unexpected reply: {:?}", other),
+    other => panic!("unexpected reply: {other:?}"),
   }
 
   let mut daemon_stop = env.bin_cmd()?;

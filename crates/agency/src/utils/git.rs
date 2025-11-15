@@ -173,8 +173,8 @@ fn run_git(args: &[&str], cwd: &Path) -> Result<()> {
 /// Run a `git` command while streaming stdout/stderr to the TUI sink when set, or
 /// inheriting stdio in regular CLI mode. Fails if git exits with a non-zero status.
 pub fn git(args: &[&str], cwd: &Path) -> Result<()> {
-  let argv: Vec<String> = args.iter().map(|s| (*s).to_string()).collect();
-  let status = run_child_process("git", &argv, cwd, &[])?;
+  let arg_vec: Vec<String> = args.iter().map(|s| (*s).to_string()).collect();
+  let status = run_child_process("git", &arg_vec, cwd, &[])?;
   if !status.success() {
     bail!("git {} exited with status {}", args.join(" "), status);
   }

@@ -47,7 +47,7 @@ pub fn run(ctx: &AppContext) -> Result<()> {
     D2C::Control(D2CControl::Error { message }) => {
       anyhow::bail!("Daemon error: {message}");
     }
-    _ => {
+    D2C::Control(_) => {
       anyhow::bail!("Protocol error: Expected Sessions reply");
     }
   }
