@@ -265,6 +265,18 @@ fn tmux_set_env_global(cfg: &AgencyConfig, key: &str, value: &str) -> Result<()>
   )
 }
 
+pub fn tmux_set_env_local(cfg: &AgencyConfig, target: &str, key: &str, value: &str) -> Result<()> {
+  run_cmd(
+    std::process::Command::new("tmux")
+      .args(tmux_args_base(cfg))
+      .arg("set-environment")
+      .arg("-t")
+      .arg(target)
+      .arg(key)
+      .arg(value),
+  )
+}
+
 fn tmux_set_window_option(cfg: &AgencyConfig, target: &str, key: &str, value: &str) -> Result<()> {
   run_cmd(
     std::process::Command::new("tmux")
@@ -316,6 +328,28 @@ fn tmux_source_file(cfg: &AgencyConfig, path: &Path) -> Result<()> {
       .arg(path.display().to_string()),
   )
   .with_context(|| format!("tmux source-file failed for {}", path.display()))
+}
+
+pub fn send_keys(cfg: &AgencyConfig, target: &str, text: &str) -> Result<()> {
+  run_cmd(
+    std::process::Command::new("tmux")
+      .args(tmux_args_base(cfg))
+      .arg("send-keys")
+      .arg("-t")
+      .arg(target)
+      .arg(text),
+  )
+}
+
+pub fn send_keys_enter(cfg: &AgencyConfig, target: &str) -> Result<()> {
+  run_cmd(
+    std::process::Command::new("tmux")
+      .args(tmux_args_base(cfg))
+      .arg("send-keys")
+      .arg("-t")
+      .arg(target)
+      .arg("Enter"),
+  )
 }
 
 fn load_default_tmux_config(cfg: &AgencyConfig) -> Result<()> {

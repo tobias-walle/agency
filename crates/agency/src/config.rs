@@ -99,19 +99,16 @@ impl AgencyConfig {
   /// Splits the env var via shell-words to support composite commands.
   #[must_use]
   pub fn editor_argv(&self) -> Vec<String> {
-    if let Some(v) = &self.editor {
-      if !v.is_empty() {
-        return v.clone();
-      }
+    if let Some(v) = &self.editor && !v.is_empty() {
+      return v.clone();
     }
     if let Ok(ed) = std::env::var("EDITOR") {
       let ed = ed.trim();
-      if !ed.is_empty() {
-        if let Ok(tokens) = shell_words::split(ed) {
-          if !tokens.is_empty() {
-            return tokens;
-          }
-        }
+      if !ed.is_empty()
+        && let Ok(tokens) = shell_words::split(ed)
+        && !tokens.is_empty()
+      {
+        return tokens;
       }
     }
     vec!["vi".to_string()]

@@ -118,6 +118,7 @@ fn notify_tasks_changed(ctx: &AppContext) -> anyhow::Result<()> {
 /// Returns an error with guidance if the daemon is unavailable.
 #[derive(Debug, Clone)]
 pub struct ProjectState {
+  #[allow(dead_code)]
   pub tasks: Vec<TaskInfo>,
   pub sessions: Vec<SessionInfo>,
   pub metrics: Vec<TaskMetrics>,

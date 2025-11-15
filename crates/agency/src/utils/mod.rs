@@ -7,6 +7,7 @@ pub mod editor;
 pub mod git;
 pub mod interactive;
 pub mod log;
+pub mod session;
 pub mod sessions;
 pub mod status;
 pub mod task;

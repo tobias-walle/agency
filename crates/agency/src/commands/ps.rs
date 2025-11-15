@@ -7,9 +7,7 @@ use crate::utils::sessions::latest_sessions_by_task;
 use crate::utils::status::{TaskStatus, derive_status, is_task_completed, status_label};
 use crate::utils::task::{agent_for_task, list_tasks, read_task_frontmatter, worktree_dir};
 use crate::utils::term::print_table;
-use owo_colors::OwoColorize as _;
-#[cfg(test)]
-use owo_colors::OwoColorize as _;
+use owo_colors::OwoColorize;
 
 pub fn run(ctx: &AppContext) -> Result<()> {
   let mut tasks = list_tasks(&ctx.paths)?;
