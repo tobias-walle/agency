@@ -9,7 +9,7 @@ The Agency tool orchestrates parallel-running AI CLI agents in isolated Git work
 
 ## Structure
 
-- `./docs/plans/PLN-[id]-[slug].md` - Concrete plans to add or modify features or to fix bugs.
+- `./docs/plans/PLN-[id]-[slug].md` - Concrete plans to add or modify features or to fix bugs (You MUST exclude this in your search if not otherwise requested, to avoid confusion)
 - `./docs/rules/[slug].md` - Special rules for you, the AI Agent, to read if needed. See also [Conditional Rules](#conditional-rules).
 - `./justfile` - Project scripts
 - `./crates` - Contains all the rust crates (apps & libraries) used for this project
@@ -33,7 +33,8 @@ The Agency tool orchestrates parallel-running AI CLI agents in isolated Git work
   - `just agency ...` - Runs the app with the given commands
   - `just test ...` - Runs the tests with `nextest run`
   - `just check` - Check the code for errors. Use this often and fix the errors immediately.
-  - `just fix` - Fixes all linting errors and prints pedantic warnings and formats the code afterwards. Use this if the user asks you to fix the lints. In this case make sure all warnings are resolved if they couldn't be fixed automatically.
+  - `just check-verbose` - Check the code for errors & warnings. Always run this at the end of your plan.
+  - `just fix` - Fixes all linting errors and prints pedantic warnings and formats the code afterwards. At the very end, stage all changes and run this command and fix warnings to make sure your code is clean.
   - `just fmt` - Just formats the code. Run this after finishing a feature or fix.
 
 ## Commit Rules
@@ -48,10 +49,7 @@ When committing, always follow these rules
 - NEVER add semicolons in the message and keep the title shorter than 80 chars.
 - Don't add a commit body or footer
 - You might want to create multiple commits if the changes are not related.
-- After every task, you SHOULD:
-  - Run `just test` and make sure it runs
-  - Run `just fix` and fix all warnings
-  - Commit the changes
+- Commit the changes after every task. If the users asks you fix things afterwards, use commit amend to keep the history clean.
 
 Add the files and commit in a single command, e.g. `git add file1.ts file2.ts && git commit -m "..."`
 
