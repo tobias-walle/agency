@@ -6,7 +6,7 @@ use anyhow::{Context, Result, bail};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 
-use crate::config::AgencyPaths;
+use crate::config::{AgencyConfig, AgencyPaths};
 
 static TASK_FILE_RE: OnceLock<Regex> = OnceLock::new();
 static TRAILING_NUM_RE: OnceLock<Regex> = OnceLock::new();
@@ -274,6 +274,7 @@ pub fn write_task_content(
 }
 
 pub fn edit_task_description(
+  cfg: &AgencyConfig,
   paths: &AgencyPaths,
   task: &TaskRef,
   project_root: &Path,
@@ -287,7 +288,7 @@ pub fn edit_task_description(
   std::fs::write(&temp_path, initial_body)
     .with_context(|| format!("failed to write {}", temp_path.display()))?;
 
-  let editor_result = crate::utils::editor::open_path(&temp_path, project_root);
+  let editor_result = crate::utils::editor::open_path(cfg, &temp_path, project_root);
   let updated = std::fs::read_to_string(&temp_path)
     .with_context(|| format!("failed to read {}", temp_path.display()));
   let _ = std::fs::remove_file(&temp_path);

@@ -31,7 +31,7 @@ The easiest option is to use the TUI; run `agency tui` or just `agency`.
 Everything available in the TUI is also available via the CLI:
 
 - `agency --help` - See all available commands
-- `agency new my-task` - Start a new task with slug `my-task`; opens your `$EDITOR` to describe what the agent should do.
+- `agency new my-task` - Start a new task with slug `my-task`; opens your configured editor to describe what the agent should do.
 - `agency new --draft my-task` - Create a new task as a draft (doesn't start it yet).
 - `agency edit my-task` - Edit a draft task.
 - `agency start my-task` - Start a task that is a draft or stopped.
@@ -40,7 +40,8 @@ Everything available in the TUI is also available via the CLI:
 - `agency merge my-task` - Merge the task back into the base branch.
 - `agency path my-task` - Get the worktree path for a task.
 - `agency shell my-task` - Open a shell in the task's worktree.
-- `agency ps` - List all tasks and their status.
+- `agency tasks` - List all tasks and their status.
+- `agency config` - Open the global Agency config in your editor.
 - `agency daemon start|stop|restart` - Manage the background daemon that tracks sessions and notifies clients.
 - ... and many more (see `agency --help`).
 
@@ -88,6 +89,21 @@ cmd = ["<root>./my-local-agent", "-p", "$AGENCY_TASK"]
 ```
 
 Check out the [default config](./crates/agency/defaults/agency.toml) for a few examples.
+
+### Editor
+
+Control which editor Agency uses when opening files (e.g. task descriptions, worktrees, and config):
+
+```toml
+# Preferred editor argv. If unset, Agency falls back to $EDITOR, then to `vi`.
+editor = ["nvim"]
+
+# Examples:
+# editor = ["code", "-w"]
+# editor = ["zed", "--wait"]
+```
+
+You can also run `agency config` to open (and create if missing) the global config file directly in your editor.
 
 ## Architecture
 

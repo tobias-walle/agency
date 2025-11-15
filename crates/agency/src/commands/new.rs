@@ -31,7 +31,12 @@ pub fn run(
     let slug = compute_unique_slug(&tasks, &base_slug)?;
 
     // Determine base branch from current repo HEAD
-    let repo = open_main_repo(ctx.paths.cwd())?;
+    let repo = match open_main_repo(ctx.paths.cwd()) {
+      Ok(r) => r,
+      Err(_) => {
+        bail!("Not in a git repository. Please run `git init` or cd to a repo.");
+      }
+    };
     let base_branch = match current_branch_name(&repo) {
       Ok(name) => name,
       Err(_) => "main".to_string(),
@@ -70,7 +75,13 @@ pub fn run(
       let interactive = std::io::stdout().is_terminal();
       if interactive {
         // Open editor first; only write if content is non-empty
-        match edit_task_description(&ctx.paths, &task, ctx.paths.cwd(), &content.body)? {
+        match edit_task_description(
+          &ctx.config,
+          &ctx.paths,
+          &task,
+          ctx.paths.cwd(),
+          &content.body,
+        )? {
           Some(updated_body) => {
             content.body = updated_body;
             write_task_content(&ctx.paths, &task, &content)?;

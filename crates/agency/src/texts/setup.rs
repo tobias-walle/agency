@@ -33,7 +33,11 @@ pub fn agent_warning_when_missing() -> String {
 }
 
 pub fn shell_prompt() -> String {
-  "Which shell should Agency use when opening a shell? (enter a command)".to_string()
+  "Which shell should Agency use when opening a shell?".to_string()
+}
+
+pub fn editor_prompt() -> String {
+  "Which editor should Agency use when opening files?".to_string()
 }
 
 pub fn summary_lines() -> Vec<String> {

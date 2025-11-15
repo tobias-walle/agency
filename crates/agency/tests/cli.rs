@@ -125,7 +125,7 @@ fn setup_creates_global_config_via_wizard() -> Result<()> {
     ],
     || {
       let mut cmd = env.bin_cmd().unwrap();
-      cmd.arg("setup").write_stdin("claude\n\n");
+      cmd.arg("setup").write_stdin("claude\n\n\n");
       cmd
         .assert()
         .success()
@@ -172,7 +172,7 @@ include = ["scripts"]
     [("XDG_CONFIG_HOME", Some(config_home.display().to_string()))],
     || {
       let mut cmd = env.bin_cmd().unwrap();
-      cmd.arg("setup").write_stdin("opencode\nzsh\n");
+      cmd.arg("setup").write_stdin("opencode\nzsh\n\n");
       cmd
         .assert()
         .success()
@@ -218,9 +218,9 @@ fn ps_autostarts_daemon_when_missing() -> Result<()> {
     return Ok(());
   }
 
-  // Run ps without starting daemon; autostart should kick in
+  // Run tasks without starting daemon; autostart should kick in
   let mut cmd = env.bin_cmd()?;
-  cmd.arg("ps");
+  cmd.arg("tasks");
   cmd
     .assert()
     .success()
@@ -680,9 +680,9 @@ fn ps_lists_id_and_slug_in_order() -> Result<()> {
   daemon_start.arg("daemon").arg("start");
   daemon_start.assert().success();
 
-  // Run ps
+  // Run tasks
   let mut cmd = env.bin_cmd()?;
-  cmd.arg("ps");
+  cmd.arg("tasks");
   cmd
     .assert()
     .success()
@@ -724,9 +724,9 @@ fn ps_handles_empty_state() -> Result<()> {
   daemon_start.arg("daemon").arg("start");
   daemon_start.assert().success();
 
-  // Run ps with no tasks
+  // Run tasks with no tasks
   let mut cmd = env.bin_cmd()?;
-  cmd.arg("ps");
+  cmd.arg("tasks");
   cmd
     .assert()
     .success()
@@ -751,7 +751,7 @@ fn ps_bails_when_daemon_not_running() -> Result<()> {
 
   with_vars([("AGENCY_NO_AUTOSTART", Some("1".to_string()))], || {
     let mut cmd = env.bin_cmd().unwrap();
-    cmd.arg("ps");
+    cmd.arg("tasks");
     cmd.assert().success().stdout(
       predicates::str::contains("ID SLUG STATUS UNCOMMITTED COMMITS BASE AGENT").from_utf8(),
     );

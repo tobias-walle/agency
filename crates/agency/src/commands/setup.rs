@@ -59,6 +59,12 @@ pub fn run(ctx: &AppContext) -> Result<()> {
   let shell_argv = wizard.shell_words(&shell_prompt, &default_shell_argv)?;
   anstream::println!();
 
+  // Ask for preferred editor command (argv split via shell-words)
+  let editor_prompt = texts::setup::editor_prompt();
+  let default_editor_argv: Vec<String> = ctx.config.editor_argv();
+  let editor_argv = wizard.shell_words(&editor_prompt, &default_editor_argv)?;
+  anstream::println!();
+
   if let Some(parent) = config_path.parent() {
     fs::create_dir_all(parent).with_context(|| format!("failed to create {}", parent.display()))?;
   }
@@ -71,6 +77,10 @@ pub fn run(ctx: &AppContext) -> Result<()> {
   table.insert(
     "shell".to_string(),
     TomlValue::Array(shell_argv.into_iter().map(TomlValue::String).collect()),
+  );
+  table.insert(
+    "editor".to_string(),
+    TomlValue::Array(editor_argv.into_iter().map(TomlValue::String).collect()),
   );
 
   let data = TomlValue::Table(table);

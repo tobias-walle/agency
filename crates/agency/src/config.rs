@@ -63,6 +63,9 @@ pub struct AgencyConfig {
   /// Command to launch when opening a shell. Defaults to user's shell.
   #[serde(default)]
   pub shell: Option<Vec<String>>,
+  /// Preferred editor command argv. Falls back to $EDITOR or `vi` when unset.
+  #[serde(default)]
+  pub editor: Option<Vec<String>>,
 }
 
 impl AgencyConfig {
@@ -90,6 +93,28 @@ impl AgencyConfig {
     dedup_keep_first(&mut cfg.include);
     dedup_keep_first(&mut cfg.exclude);
     cfg
+  }
+
+  /// Resolve the editor argv with precedence: config.editor -> $EDITOR -> ["vi"].
+  /// Splits the env var via shell-words to support composite commands.
+  #[must_use]
+  pub fn editor_argv(&self) -> Vec<String> {
+    if let Some(v) = &self.editor {
+      if !v.is_empty() {
+        return v.clone();
+      }
+    }
+    if let Ok(ed) = std::env::var("EDITOR") {
+      let ed = ed.trim();
+      if !ed.is_empty() {
+        if let Ok(tokens) = shell_words::split(ed) {
+          if !tokens.is_empty() {
+            return tokens;
+          }
+        }
+      }
+    }
+    vec!["vi".to_string()]
   }
 }
 

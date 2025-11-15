@@ -65,7 +65,7 @@ enum Commands {
   /// Reset a task's worktree and branch (keep markdown)
   Reset { ident: String },
   /// List tasks (ID and SLUG)
-  Ps {},
+  Tasks {},
   /// Daemon control commands
   Daemon {
     #[command(subcommand)]
@@ -97,6 +97,8 @@ enum Commands {
   Complete { ident: Option<String> },
   /// Run the setup wizard to configure Agency
   Setup {},
+  /// Open the global config in the configured editor
+  Config {},
   /// Print embedded defaults for inspection
   Defaults {},
   /// Scaffold a .agency/ directory with starter files
@@ -184,7 +186,7 @@ pub fn run() -> Result<()> {
     Some(Commands::Reset { ident }) => {
       commands::reset::run(&ctx, &ident)?;
     }
-    Some(Commands::Ps {}) => {
+    Some(Commands::Tasks {}) => {
       commands::ps::run(&ctx)?;
     }
     Some(Commands::Daemon { cmd }) => match cmd {
@@ -215,6 +217,9 @@ pub fn run() -> Result<()> {
     }
     Some(Commands::Setup {}) => {
       commands::setup::run(&ctx)?;
+    }
+    Some(Commands::Config {}) => {
+      commands::config::run(&ctx)?;
     }
     Some(Commands::Defaults {}) => {
       commands::defaults::run()?;

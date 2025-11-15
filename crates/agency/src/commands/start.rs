@@ -10,7 +10,7 @@ use crate::utils::cmd::{CmdCtx, expand_argv};
 use crate::utils::command::Command as LocalCommand;
 use crate::utils::command::as_shell_command;
 use crate::utils::daemon::get_project_state;
-use crate::utils::git::{ensure_branch_at, open_main_repo, repo_workdir_or};
+use crate::utils::git::{ensure_branch_at, open_main_repo, repo_workdir_or, rev_parse};
 use crate::utils::interactive;
 use crate::utils::task::{agent_for_task, branch_name, read_task_content, resolve_id_or_slug};
 use crate::utils::tmux;
@@ -37,6 +37,12 @@ pub fn run_with_attach(ctx: &AppContext, ident: &str, attach: bool) -> Result<()
 
   // Ensure task branch exists at the desired start point
   let branch = branch_name(&task);
+  // Verify base branch resolves to a commit; provide clear guidance if unborn
+  if rev_parse(&repo_root, &base_branch).is_err() {
+    anyhow::bail!(
+      "No worktree can be created as base branch has no commits. Please create an initial commit in your basebranch, e.g. by using `touch README.md; git add .; git commit -m 'init'`."
+    );
+  }
   let _ = ensure_branch_at(&repo, &branch, &base_branch)?;
 
   let worktree_dir = prepare_worktree_for_task(ctx, &repo, &task, &branch)?;
