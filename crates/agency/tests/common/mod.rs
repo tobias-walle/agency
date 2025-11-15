@@ -134,14 +134,22 @@ impl TestEnv {
     cmd.arg("new");
     // Default to draft mode in tests unless explicitly overridden
     let mut has_draft = false;
+    let mut has_description = false;
     for arg_value in extra_args {
       if *arg_value == "--draft" {
         has_draft = true;
+      }
+      if *arg_value == "--description" {
+        has_description = true;
       }
       cmd.arg(arg_value);
     }
     if !has_draft {
       cmd.arg("--draft");
+    }
+    // Ensure non-interactive by default with a fixed description
+    if !has_description {
+      cmd.arg("--description").arg("Automated test");
     }
     cmd.arg(slug);
     let out = cmd.output().context("run agency new")?;

@@ -35,7 +35,6 @@ The Agency tool orchestrates parallel-running AI CLI agents in isolated Git work
   - `just check` - Check the code for errors. Use this often and fix the errors immediately.
   - `just check-verbose` - Check the code for errors & warnings. Always run this at the end of your plan.
   - `just fix` - Fixes all linting errors and prints pedantic warnings and formats the code afterwards. At the very end, stage all changes and run this command and fix warnings to make sure your code is clean.
-  - `just fmt` - Just formats the code. Run this after finishing a feature or fix.
 
 ## Commit Rules
 
@@ -205,7 +204,3 @@ Sometimes the user wants to save the research. In this case save it with the nex
 In the following these conditional rule files are listed:
 
 - `./docs/rules/rust-best-practices.md` - You MUST read this if you are working with Rust Code. Either if you are implementing rust code or planning to modify it.
-
-```
-
-```

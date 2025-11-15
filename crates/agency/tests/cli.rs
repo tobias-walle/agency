@@ -27,7 +27,7 @@ fn gc_removes_orphans_safely() -> Result<()> {
   env.init_repo()?;
 
   // Create a valid task and prepare its branch/worktree
-  let (id, slug) = env.new_task("alpha", &["--draft", "--no-edit"])?;
+  let (id, slug) = env.new_task("alpha", &["--draft"])?;
   env.bootstrap_task(id)?;
 
   // Resolve HEAD commit via git process for simplicity
@@ -359,7 +359,7 @@ fn new_creates_markdown_branch_and_worktree() -> Result<()> {
   env.init_repo()?;
 
   // Create task
-  let (id, slug) = env.new_task("alpha-task", &["--no-edit"])?;
+  let (id, slug) = env.new_task("alpha-task", &[])?;
 
   // Check markdown
   let file = env.task_file_path(id, &slug);
@@ -379,6 +379,22 @@ fn new_creates_markdown_branch_and_worktree() -> Result<()> {
   assert!(env.branch_exists(id, &slug)?);
   assert!(wt_dir.is_dir());
 
+  Ok(())
+}
+
+#[test]
+fn new_persists_description_when_provided() -> Result<()> {
+  let env = common::TestEnv::new();
+  env.init_repo()?;
+
+  // Provide explicit description and keep as draft (no attach)
+  let (id, slug) = env.new_task(
+    "desc-task",
+    &["--draft", "--description", "Automated test body"],
+  )?;
+  let file = env.task_file_path(id, &slug);
+  let data = std::fs::read_to_string(&file)?;
+  assert!(data.contains("Automated test body"));
   Ok(())
 }
 
@@ -416,7 +432,7 @@ fn new_runs_default_bootstrap_cmd_when_present() -> Result<()> {
     std::fs::set_permissions(&script, perms)?;
   }
 
-  let (id, slug) = env.new_task("boot-cmd", &["--no-edit", "--draft"])?;
+  let (id, slug) = env.new_task("boot-cmd", &["--draft"])?;
   // Prepare and run bootstrap without PTY
   env.bootstrap_task(id)?;
   let wt = env.worktree_dir_path(id, &slug);
@@ -432,7 +448,7 @@ fn new_skips_default_bootstrap_when_missing() -> Result<()> {
   // Ensure no .agency/setup.sh exists
   std::fs::create_dir_all(env.path().join(".agency"))?;
 
-  let (id, slug) = env.new_task("no-boot-script", &["--no-edit"])?;
+  let (id, slug) = env.new_task("no-boot-script", &[])?;
   // Prepare worktree without daemon/PTY
   env.bootstrap_task(id)?;
   let wt = env.worktree_dir_path(id, &slug);
@@ -453,7 +469,7 @@ fn new_supports_placeholder_root_in_bootstrap_cmd() -> Result<()> {
     "[bootstrap]\ncmd=[\"bash\",\"-lc\",\"echo <root> > root.txt\"]\n",
   )?;
 
-  let (id, slug) = env.new_task("boot-root", &["--no-edit"])?;
+  let (id, slug) = env.new_task("boot-root", &[])?;
   // Bootstrap to run configured command
   env.bootstrap_task(id)?;
   let wt = env.worktree_dir_path(id, &slug);
@@ -472,7 +488,7 @@ fn new_supports_placeholder_root_in_bootstrap_cmd() -> Result<()> {
 fn new_writes_yaml_header_when_agent_specified() -> Result<()> {
   let env = common::TestEnv::new();
   env.init_repo()?;
-  let (id, slug) = env.new_task("alpha-task", &["--no-edit", "-a", "sh"])?;
+  let (id, slug) = env.new_task("alpha-task", &["-a", "sh", "--description", ""])?;
   // Check markdown content includes YAML front matter
   let file = env.task_file_path(id, &slug);
   let data = std::fs::read_to_string(&file)?;
@@ -500,7 +516,7 @@ fn new_writes_yaml_header_when_agent_specified() -> Result<()> {
 fn path_prints_absolute_worktree_path_by_id_and_slug() -> Result<()> {
   let env = common::TestEnv::new();
   env.init_repo()?;
-  let (id, slug) = env.new_task("beta-task", &["--no-edit"])?;
+  let (id, slug) = env.new_task("beta-task", &[])?;
 
   let expected = env.worktree_dir_path(id, &slug);
   let expected_canon = expected.canonicalize().unwrap_or(expected.clone());
@@ -529,7 +545,7 @@ fn path_prints_absolute_worktree_path_by_id_and_slug() -> Result<()> {
 fn branch_prints_branch_name_by_id_and_slug() -> Result<()> {
   let env = common::TestEnv::new();
   env.init_repo()?;
-  let (id, slug) = env.new_task("gamma-task", &["--no-edit"])?;
+  let (id, slug) = env.new_task("gamma-task", &[])?;
 
   // by id
   let mut cmd = env.bin_cmd()?;
@@ -554,7 +570,7 @@ fn branch_prints_branch_name_by_id_and_slug() -> Result<()> {
 fn rm_confirms_and_removes_on_y_or_y() -> Result<()> {
   let env = common::TestEnv::new();
   env.init_repo()?;
-  let (id, slug) = env.new_task("delta-task", &["--no-edit"])?;
+  let (id, slug) = env.new_task("delta-task", &[])?;
 
   // Ensure branch/worktree exist for this test
   env.bootstrap_task(id)?;
@@ -603,7 +619,7 @@ fn new_rejects_slugs_starting_with_digits() -> Result<()> {
   env.simulate_initial_commit()?;
 
   let mut cmd = env.bin_cmd()?;
-  cmd.arg("new").arg("--no-edit").arg("1invalid");
+  cmd.arg("new").arg("1invalid");
   cmd
     .assert()
     .failure()
@@ -616,8 +632,8 @@ fn new_rejects_slugs_starting_with_digits() -> Result<()> {
 fn new_auto_suffixes_duplicate_slug_to_slug2() -> Result<()> {
   let env = common::TestEnv::new();
   env.init_repo()?;
-  let (_id1, _slug1) = env.new_task("alpha", &["--no-edit"])?;
-  let (id2, slug2) = env.new_task("alpha", &["--no-edit"])?;
+  let (_id1, _slug1) = env.new_task("alpha", &[])?;
+  let (id2, slug2) = env.new_task("alpha", &[])?;
 
   // Check file for the second task (branch/worktree are created on attach)
   let file = env.task_file_path(id2, &slug2);
@@ -630,8 +646,8 @@ fn new_auto_suffixes_duplicate_slug_to_slug2() -> Result<()> {
 fn new_increments_trailing_number_slug() -> Result<()> {
   let env = common::TestEnv::new();
   env.init_repo()?;
-  let (_id1, _slug1) = env.new_task("alpha2", &["--no-edit"])?;
-  let (id2, slug2) = env.new_task("alpha2", &["--no-edit"])?;
+  let (_id1, _slug1) = env.new_task("alpha2", &[])?;
+  let (id2, slug2) = env.new_task("alpha2", &[])?;
 
   // Check artifacts for the second task (branch/worktree are created on attach)
   let file = env.task_file_path(id2, &slug2);
@@ -648,8 +664,8 @@ fn ps_lists_id_and_slug_in_order() -> Result<()> {
     eprintln!("Skipping ps_lists_id_and_slug_in_order: Unix sockets not available in sandbox");
     return Ok(());
   }
-  let (id1, slug1) = env.new_task("alpha-task", &["--no-edit"])?;
-  let (id2, slug2) = env.new_task("beta-task", &["--no-edit"])?;
+  let (id1, slug1) = env.new_task("alpha-task", &[])?;
+  let (id2, slug2) = env.new_task("beta-task", &[])?;
 
   let mut daemon_start = env.bin_cmd()?;
   daemon_start.arg("daemon").arg("start");
@@ -780,7 +796,7 @@ fn new_bootstraps_git_ignored_root_files_with_defaults() -> Result<()> {
   std::fs::write(env.path().join(".direnv").join("env.txt"), "x\n")?;
 
   // Create task and bootstrap to populate worktree
-  let (id, slug) = env.new_task("bootstrap-a", &["--no-edit"])?;
+  let (id, slug) = env.new_task("bootstrap-a", &[])?;
   env.bootstrap_task(id)?;
   let wt = env.worktree_dir_path(id, &slug);
 
@@ -838,7 +854,7 @@ fn new_bootstrap_respects_config_includes_and_excludes() -> Result<()> {
   with_vars(
     [("XDG_CONFIG_HOME", Some(xdg_root.display().to_string()))],
     || {
-      let (id, slug) = env.new_task("bootstrap-b", &["--no-edit"]).unwrap();
+      let (id, slug) = env.new_task("bootstrap-b", &[]).unwrap();
       // Bootstrap to create worktree and run command
       env.bootstrap_task(id).unwrap();
       let wt = env.worktree_dir_path(id, &slug);
@@ -862,7 +878,7 @@ fn new_bootstrap_respects_config_includes_and_excludes() -> Result<()> {
 fn open_opens_worktree_via_editor() -> Result<()> {
   let env = common::TestEnv::new();
   env.init_repo()?;
-  let (id, _slug) = env.new_task("open-task", &["--no-edit", "--draft"])?;
+  let (id, _slug) = env.new_task("open-task", &["--draft"])?;
 
   with_vars([("EDITOR", Some("true".to_string()))], || {
     let mut cmd = env.bin_cmd().unwrap();
@@ -879,7 +895,7 @@ fn complete_marks_status_completed_and_uses_env() -> Result<()> {
   env.init_repo()?;
 
   // Create a task
-  let (id, _slug) = env.new_task("complete-a", &["--no-edit", "--draft"])?;
+  let (id, _slug) = env.new_task("complete-a", &["--draft"])?;
 
   // Mark complete by explicit id
   {
@@ -904,7 +920,7 @@ fn complete_marks_status_completed_and_uses_env() -> Result<()> {
   }
 
   // Create another task and mark complete via env var
-  let (id2, _slug2) = env.new_task("complete-b", &["--no-edit", "--draft"])?;
+  let (id2, _slug2) = env.new_task("complete-b", &["--draft"])?;
   {
     let mut cmd = env.bin_cmd()?;
     cmd.arg("complete");
@@ -933,7 +949,7 @@ fn complete_marks_status_completed_and_uses_env() -> Result<()> {
 fn reset_clears_completed_status() -> Result<()> {
   let env = common::TestEnv::new();
   env.init_repo()?;
-  let (id, slug) = env.new_task("complete-reset", &["--no-edit", "--draft"])?;
+  let (id, slug) = env.new_task("complete-reset", &["--draft"])?;
 
   // Mark complete
   {
@@ -971,7 +987,7 @@ fn reset_clears_completed_status() -> Result<()> {
 fn merge_fast_forwards_and_cleans_up() -> Result<()> {
   let env = common::TestEnv::new();
   env.init_repo()?;
-  let (id, slug) = env.new_task("merge-task", &["--no-edit", "--draft"])?;
+  let (id, slug) = env.new_task("merge-task", &["--draft"])?;
   // Prepare branch/worktree for merge
   env.bootstrap_task(id)?;
 
@@ -1008,7 +1024,7 @@ fn merge_fast_forwards_and_cleans_up() -> Result<()> {
 fn merge_stashes_and_restores_dirty_base() -> Result<()> {
   let env = common::TestEnv::new();
   env.init_repo()?;
-  let (id, slug) = env.new_task("merge-dirty", &["--no-edit", "--draft"])?;
+  let (id, slug) = env.new_task("merge-dirty", &["--draft"])?;
   // Prepare branch/worktree
   env.bootstrap_task(id)?;
 
@@ -1068,7 +1084,7 @@ fn merge_stashes_and_restores_dirty_base() -> Result<()> {
 fn merge_refreshes_checked_out_base_worktree() -> Result<()> {
   let env = common::TestEnv::new();
   env.init_repo()?;
-  let (id, slug) = env.new_task("merge-refresh", &["--no-edit", "--draft"])?;
+  let (id, slug) = env.new_task("merge-refresh", &["--draft"])?;
   // Prepare branch/worktree
   env.bootstrap_task(id)?;
 
@@ -1110,7 +1126,7 @@ fn merge_fails_when_no_changes() -> Result<()> {
   env.init_repo()?;
 
   // Create a new task without making any commits on the task branch
-  let (id, slug) = env.new_task("merge-no-changes", &["--no-edit", "--draft"])?;
+  let (id, slug) = env.new_task("merge-no-changes", &["--draft"])?;
   // Prepare branch/worktree (no changes introduced)
   env.bootstrap_task(id)?;
 
@@ -1143,7 +1159,7 @@ fn merge_fails_when_no_changes() -> Result<()> {
 fn edit_opens_markdown_via_editor() -> Result<()> {
   let env = common::TestEnv::new();
   env.init_repo()?;
-  let (id, _slug) = env.new_task("edit-task", &["--no-edit", "--draft"])?;
+  let (id, _slug) = env.new_task("edit-task", &["--draft"])?;
 
   // Use a no-op editor that exits successfully
   with_vars([("EDITOR", Some("bash -lc true".to_string()))], || {
@@ -1159,7 +1175,7 @@ fn edit_opens_markdown_via_editor() -> Result<()> {
 fn reset_prunes_worktree_and_branch_keeps_markdown() -> Result<()> {
   let env = common::TestEnv::new();
   env.init_repo()?;
-  let (id, slug) = env.new_task("reset-task", &["--no-edit", "--draft"])?;
+  let (id, slug) = env.new_task("reset-task", &["--draft"])?;
 
   // Ensure branch/worktree exist before reset
   env.bootstrap_task(id)?;

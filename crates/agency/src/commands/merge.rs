@@ -31,11 +31,8 @@ pub fn run(ctx: &AppContext, ident: &str, base_override: Option<&str>) -> Result
       &inputs.branch,
     )?;
 
-    let mut pending_stash = maybe_autostash(
-      &inputs.repo_workdir,
-      &inputs.base_branch,
-      needs_auto_stash,
-    )?;
+    let mut pending_stash =
+      maybe_autostash(&inputs.repo_workdir, &inputs.base_branch, needs_auto_stash)?;
 
     log_success!(
       "Fast-forward {} to {} at {}",
@@ -55,7 +52,12 @@ pub fn run(ctx: &AppContext, ident: &str, base_override: Option<&str>) -> Result
     // Stop any running sessions for this task (best-effort)
     let _ = stop_sessions_of_task(ctx, &inputs.task);
 
-    cleanup_task_artifacts(&inputs.repo_workdir, &inputs.wt_dir, &inputs.branch, &inputs.file_path)?;
+    cleanup_task_artifacts(
+      &inputs.repo_workdir,
+      &inputs.wt_dir,
+      &inputs.branch,
+      &inputs.file_path,
+    )?;
 
     log_success!("Merge complete");
 

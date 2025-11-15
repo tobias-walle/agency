@@ -15,11 +15,11 @@ use crate::utils::interactive;
 use crate::utils::task::{agent_for_task, branch_name, read_task_content, resolve_id_or_slug};
 use crate::utils::tmux;
 
-/// Start a task's session and attach. Fails if already started.
+/// Start a task's session; optionally attach. Fails if already started.
 ///
 /// Performs the same preparation as `attach` (ensure branch/worktree, compute agent cmd),
-/// then attaches to the daemon sending `OpenSession` with the real terminal size.
-pub fn run(ctx: &AppContext, ident: &str) -> Result<()> {
+/// then optionally attaches to the daemon sending `OpenSession` with the real terminal size.
+pub fn run_with_attach(ctx: &AppContext, ident: &str, attach: bool) -> Result<()> {
   // Resolve task and load its content
   let task = resolve_id_or_slug(&ctx.paths, ident)?;
   let content = read_task_content(&ctx.paths, &task)?;
@@ -93,7 +93,7 @@ pub fn run(ctx: &AppContext, ident: &str) -> Result<()> {
   }
 
   crate::utils::daemon::notify_after_task_change(ctx, || {
-    // Start tmux session and then attach
+    // Start tmux session and then optionally attach
     tmux::start_session(
       &ctx.config,
       &repo_root,
@@ -102,8 +102,17 @@ pub fn run(ctx: &AppContext, ident: &str) -> Result<()> {
       &cmd_local.program,
       &cmd_local.args,
     )?;
-    interactive::scope(|| tmux::attach_session(&ctx.config, &task_meta))
+    if attach {
+      interactive::scope(|| tmux::attach_session(&ctx.config, &task_meta))
+    } else {
+      Ok(())
+    }
   })
+}
+
+/// Backward-compatible entry that starts and attaches.
+pub fn run(ctx: &AppContext, ident: &str) -> Result<()> {
+  run_with_attach(ctx, ident, true)
 }
 
 /// Build the environment map passed to agent processes.

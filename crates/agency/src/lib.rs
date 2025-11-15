@@ -27,15 +27,20 @@ enum Commands {
   /// Create a new task under .agency/tasks
   New {
     slug: String,
+    /// Optional description as a second positional
+    desc: Option<String>,
     /// Select agent to attach to task (writes YAML front matter)
     #[arg(short = 'a', long = "agent")]
     agent: Option<String>,
     /// Do not start/attach after creation (start+attach is default)
     #[arg(long = "draft")]
     draft: bool,
-    /// Skip opening the editor after creating the task file
-    #[arg(long)]
-    no_edit: bool,
+    /// Provide description directly via flag (alias for positional)
+    #[arg(long = "description")]
+    description: Option<String>,
+    /// Start without attaching after creation (conflicts with draft)
+    #[arg(long = "no-attach", conflicts_with = "draft")]
+    no_attach: bool,
   },
   /// Fast-forward merge task back to base and clean up
   Merge {
@@ -71,8 +76,12 @@ enum Commands {
     #[arg(long)]
     session: Option<u64>,
   },
-  /// Start a task session and attach; fails if already started
-  Start { ident: String },
+  /// Start a task session; attach by default
+  Start {
+    ident: String,
+    #[arg(long = "no-attach")]
+    no_attach: bool,
+  },
   /// Prepare branch/worktree and run bootstrap (no PTY)
   Bootstrap { ident: String },
   /// Stop a task's sessions or a specific session
@@ -135,15 +144,18 @@ pub fn run() -> Result<()> {
   match cli.command {
     Some(Commands::New {
       slug,
+      desc,
       agent,
       draft,
-      no_edit,
+      description,
+      no_attach,
     }) => {
-      let created = commands::new::run(&ctx, &slug, no_edit, agent.as_deref())?;
+      let provided_desc = desc.or(description);
+      let created = commands::new::run(&ctx, &slug, agent.as_deref(), provided_desc.as_deref())?;
       if !draft {
         let ident = created.id.to_string();
-        // Start the session and attach; fails if already started
-        commands::start::run(&ctx, &ident)?;
+        // Start the session and optionally attach; fails if already started
+        commands::start::run_with_attach(&ctx, &ident, !no_attach)?;
       }
     }
     Some(Commands::Merge { ident, base }) => {
@@ -187,8 +199,8 @@ pub fn run() -> Result<()> {
     Some(Commands::Bootstrap { ident }) => {
       commands::bootstrap::run(&ctx, &ident)?;
     }
-    Some(Commands::Start { ident }) => {
-      commands::start::run(&ctx, &ident)?;
+    Some(Commands::Start { ident, no_attach }) => {
+      commands::start::run_with_attach(&ctx, &ident, !no_attach)?;
     }
     Some(Commands::Stop { task, session }) => {
       commands::stop::run(&ctx, task.as_deref(), session)?;

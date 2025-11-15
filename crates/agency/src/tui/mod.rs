@@ -294,7 +294,10 @@ fn ui_loop(
       );
 
       // Input overlay
-      if let Mode::InputSlug { start_and_attach: _ } = state.mode {
+      if let Mode::InputSlug {
+        start_and_attach: _,
+      } = state.mode
+      {
         let area = centered_rect(rects[0], 50, 3);
         let left_title = "Task slug (e.g. my-task)";
         let agent_name = state
@@ -565,7 +568,7 @@ fn ui_loop(
                 let ctx = ctx.clone();
                 let slug = slug.clone();
                 let agent = state.selected_agent.clone();
-                move || match crate::commands::new::run(&ctx, &slug, false, agent.as_deref()) {
+                move || match crate::commands::new::run(&ctx, &slug, agent.as_deref(), None) {
                   Ok(created) => {
                     let id_str = created.id.to_string();
                     if let Err(err) = crate::commands::start::run(&ctx, &id_str) {
@@ -583,7 +586,7 @@ fn ui_loop(
                 let ctx = ctx.clone();
                 let agent = state.selected_agent.clone();
                 move || {
-                  let _ = crate::commands::new::run(&ctx, &slug, false, agent.as_deref());
+                  let _ = crate::commands::new::run(&ctx, &slug, agent.as_deref(), None);
                 }
               });
             }

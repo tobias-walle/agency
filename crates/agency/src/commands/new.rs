@@ -14,7 +14,12 @@ use crate::utils::task::{
   normalize_and_validate_slug, write_task_content,
 };
 
-pub fn run(ctx: &AppContext, slug: &str, no_edit: bool, agent: Option<&str>) -> Result<TaskRef> {
+pub fn run(
+  ctx: &AppContext,
+  slug: &str,
+  agent: Option<&str>,
+  desc: Option<&str>,
+) -> Result<TaskRef> {
   notify_after_task_change(ctx, || {
     let base_slug = normalize_and_validate_slug(slug)?;
 
@@ -56,24 +61,31 @@ pub fn run(ctx: &AppContext, slug: &str, no_edit: bool, agent: Option<&str>) -> 
       body: String::new(),
     };
 
-    let interactive = std::io::stdout().is_terminal() && !no_edit;
-    if interactive {
-      // Open editor first; only write if content is non-empty
-      match edit_task_description(&ctx.paths, &task, ctx.paths.cwd(), &content.body)? {
-        Some(updated_body) => {
-          content.body = updated_body;
-          write_task_content(&ctx.paths, &task, &content)?;
-          log_info!("Create task {} (id {})", t::slug(&slug), t::id(id));
-        }
-        None => {
-          // Do not create the task file; cancel
-          bail!("Empty description");
-        }
-      }
-    } else {
-      // Non-interactive or --no-edit: create file immediately
+    // If description provided, write immediately and bypass editor
+    if let Some(raw) = desc {
+      content.body = raw.trim().to_string();
       write_task_content(&ctx.paths, &task, &content)?;
       log_info!("Create task {} (id {})", t::slug(&slug), t::id(id));
+    } else {
+      let interactive = std::io::stdout().is_terminal();
+      if interactive {
+        // Open editor first; only write if content is non-empty
+        match edit_task_description(&ctx.paths, &task, ctx.paths.cwd(), &content.body)? {
+          Some(updated_body) => {
+            content.body = updated_body;
+            write_task_content(&ctx.paths, &task, &content)?;
+            log_info!("Create task {} (id {})", t::slug(&slug), t::id(id));
+          }
+          None => {
+            // Do not create the task file; cancel
+            bail!("Empty description");
+          }
+        }
+      } else {
+        // Non-interactive: create file immediately with empty body
+        write_task_content(&ctx.paths, &task, &content)?;
+        log_info!("Create task {} (id {})", t::slug(&slug), t::id(id));
+      }
     }
 
     // Worktree and bootstrap are now created lazily at attach time
