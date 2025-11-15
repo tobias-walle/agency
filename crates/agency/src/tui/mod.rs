@@ -221,7 +221,7 @@ fn ui_loop(
         "Open: o",
         "Delete: X",
         "Reset: R",
-        "Quit: ^C",
+        "Quit: C-c",
       ];
       let mut help_lines = layout_help_lines(&help_items, f.area().width);
       let help_rows = help_lines.len().try_into().unwrap_or(1_u16).clamp(1, 3);
@@ -334,8 +334,11 @@ fn ui_loop(
         start_and_attach: _,
       } = state.mode
       {
-        let area = centered_rect(rects[0], 50, 3);
-        let left_title = "Task Slug";
+        // Single input block: Slug (single line)
+        let area = centered_rect(rects[0], 70, 5);
+        let chunks = Layout::vertical([Constraint::Length(3)]).split(area);
+
+        // Titles with agent and control hint
         let agent_name = state
           .selected_agent
           .clone()
@@ -343,25 +346,31 @@ fn ui_loop(
         let right_title = Line::from(vec![
           Span::raw(agent_name).fg(Color::Cyan),
           Span::raw(" ("),
-          Span::raw("^A").fg(Color::Cyan),
+          Span::raw("C-a").fg(Color::Cyan),
           Span::raw(" to switch) "),
         ])
         .right_aligned();
-        let block = Block::default()
+
+        // Slug block
+        let slug_block = Block::default()
           .borders(Borders::ALL)
-          .title(Line::from(left_title))
-          .title(right_title);
-        let input_area = inner(area);
-        let prompt = ratatui::widgets::Paragraph::new(Line::from(state.slug_input.clone()));
-        f.render_widget(block, area);
-        f.render_widget(prompt, input_area);
-        // Place the terminal cursor after the input text (left-aligned)
-        let mut cx = input_area.x + u16::try_from(state.slug_input.len()).unwrap_or(0);
-        let max_x = input_area.x + input_area.width.saturating_sub(1);
+          .title(Line::from("Task Slug"))
+          .title(right_title.clone());
+        f.render_widget(slug_block, chunks[0]);
+        let slug_area = inner(chunks[0]);
+        let slug_text = if state.slug_input.is_empty() {
+          Line::from(Span::raw("my-task").fg(Color::Gray))
+        } else {
+          Line::from(state.slug_input.clone())
+        };
+        f.render_widget(Paragraph::new(slug_text), slug_area);
+        // Cursor placement on slug
+        let mut cx = slug_area.x + u16::try_from(state.slug_input.len()).unwrap_or(0);
+        let max_x = slug_area.x + slug_area.width.saturating_sub(1);
         if cx > max_x {
           cx = max_x;
         }
-        f.set_cursor_position((cx, input_area.y));
+        f.set_cursor_position((cx, slug_area.y));
       }
 
       // Select menu overlay (draw on top)
@@ -589,6 +598,7 @@ fn ui_loop(
             state.mode = Mode::SelectMenu(menu);
           }
           KeyCode::Enter => {
+            // Submit new task
             let slug = match crate::utils::task::normalize_and_validate_slug(&state.slug_input) {
               Ok(s) => s,
               Err(err) => {
@@ -598,8 +608,7 @@ fn ui_loop(
               }
             };
             if start_and_attach {
-              // Create and start on a background thread to avoid blocking the TUI
-              // (editor for the new task runs within an interactive scope)
+              // Create and start on a background thread
               state.push_log(LogEvent::Command(format!("agency new {slug} + start")));
               std::thread::spawn({
                 let ctx = ctx.clone();
@@ -618,7 +627,7 @@ fn ui_loop(
                 }
               });
             } else {
-              // Interactive editor open without attach; run on background thread
+              // Create without starting
               std::thread::spawn({
                 let ctx = ctx.clone();
                 let agent = state.selected_agent.clone();
@@ -804,7 +813,7 @@ mod tests {
       "Open: o",
       "Delete: X",
       "Reset: R",
-      "Quit: ^C",
+      "Quit: C-c",
     ];
     // Very narrow should result in many lines but keep pairs intact
     let lines = layout_help_lines(&items, 20);
@@ -817,7 +826,7 @@ mod tests {
       .map(|ln| ln.spans.iter().map(|s| s.content.to_string()).collect())
       .collect();
     assert!(all_line_texts.iter().any(|t| t.contains("Reset: R")));
-    assert!(all_line_texts.iter().any(|t| t.contains("Quit: ^C")));
+    assert!(all_line_texts.iter().any(|t| t.contains("Quit: C-c")));
   }
 
   #[test]

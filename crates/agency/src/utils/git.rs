@@ -243,7 +243,6 @@ pub fn git_workdir(cwd: &Path) -> Result<PathBuf> {
   ))
 }
 
-
 /// Return the current branch name if HEAD points to a branch; otherwise Ok(None) (e.g. detached).
 pub fn current_branch_name_at(cwd: &Path) -> Result<Option<String>> {
   let out = std::process::Command::new("git")
