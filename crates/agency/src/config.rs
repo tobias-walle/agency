@@ -316,10 +316,13 @@ mod tests {
     let cfg_sock = cfg_dir.path().join("cfg.sock");
 
     with_vars(
-      [(
-        "XDG_RUNTIME_DIR",
-        Some(xdg_dir.path().display().to_string()),
-      )],
+      [
+        ("AGENCY_SOCKET_PATH", None),
+        (
+          "XDG_RUNTIME_DIR",
+          Some(xdg_dir.path().display().to_string()),
+        ),
+      ],
       || {
         let cfg = AgencyConfig {
           daemon: Some(DaemonConfig {
@@ -339,10 +342,13 @@ mod tests {
   fn compute_uses_xdg_when_no_env_or_config() {
     let xdg_dir = tempfile::tempdir().expect("temp dir xdg");
     with_vars(
-      [(
-        "XDG_RUNTIME_DIR",
-        Some(xdg_dir.path().display().to_string()),
-      )],
+      [
+        ("AGENCY_SOCKET_PATH", None),
+        (
+          "XDG_RUNTIME_DIR",
+          Some(xdg_dir.path().display().to_string()),
+        ),
+      ],
       || {
         let cfg = AgencyConfig::default();
         let path = compute_socket_path(&cfg);

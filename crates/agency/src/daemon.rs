@@ -201,7 +201,10 @@ impl SlimDaemon {
         }
         // Store subscriber; keep stream open until disconnect
         let cloned = stream.try_clone()?;
-        self.subscribers.lock().push(Subscriber { project, stream: cloned });
+        self.subscribers.lock().push(Subscriber {
+          project,
+          stream: cloned,
+        });
       }
       Ok(C2D::Control(C2DControl::NotifyTasksChanged { project })) => {
         // Recompute and broadcast a fresh snapshot for the project

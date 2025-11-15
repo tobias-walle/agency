@@ -256,3 +256,16 @@ pub fn runtime_dir_create() -> std::path::PathBuf {
 }
 
 // No external agent preparation needed for tests; we use `/bin/sh` via [agents.sh].
+
+impl Drop for TestEnv {
+  fn drop(&mut self) {
+    // Best-effort: stop daemon for this test's runtime dir
+    // Do not panic in Drop; ignore all errors
+    if let Ok(mut cmd) = self.bin_cmd() {
+      cmd.arg("daemon").arg("stop");
+      let _ = cmd.output();
+    }
+    // Best-effort: remove the per-test runtime dir (sockets, etc.)
+    let _ = std::fs::remove_dir_all(&self.runtime_dir);
+  }
+}

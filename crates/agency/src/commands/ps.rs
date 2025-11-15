@@ -68,7 +68,10 @@ pub fn run(ctx: &AppContext) -> Result<()> {
         };
         (unc, commits)
       } else {
-        ("+0-0".to_string().dimmed().to_string(), "-".to_string().dimmed().to_string())
+        (
+          "+0-0".to_string().dimmed().to_string(),
+          "-".to_string().dimmed().to_string(),
+        )
       };
       vec![
         t.id.to_string(),
