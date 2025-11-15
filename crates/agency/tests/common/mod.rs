@@ -259,6 +259,15 @@ pub fn runtime_dir_create() -> std::path::PathBuf {
 
 impl Drop for TestEnv {
   fn drop(&mut self) {
+    // Best-effort: kill the tmux server bound to this test's socket
+    // Use the same logic as when spawning commands: <runtime_dir>/agency-tmux.sock
+    let tmux_sock = self.runtime_dir.join("agency-tmux.sock");
+    let _ = std::process::Command::new("tmux")
+      .arg("-S")
+      .arg(tmux_sock)
+      .arg("kill-server")
+      .status();
+
     // Best-effort: stop daemon for this test's runtime dir
     // Do not panic in Drop; ignore all errors
     if let Ok(mut cmd) = self.bin_cmd() {
