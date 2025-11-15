@@ -139,6 +139,13 @@ impl SlimDaemon {
           &D2C::Control(D2CControl::Sessions { entries }),
         );
       }
+      Ok(C2D::Control(C2DControl::GetVersion)) => {
+        let ver = crate::utils::version::get_version().to_string();
+        let _ = write_frame(
+          &mut *stream,
+          &D2C::Control(D2CControl::Version { version: ver }),
+        );
+      }
       Ok(C2D::Control(C2DControl::SubscribeEvents { project })) => {
         // Send initial snapshot
         let entries = tmux_list(&self.cfg, Path::new(&project.repo_root)).unwrap_or_default();

@@ -12,5 +12,6 @@ pub mod status;
 pub mod task;
 pub mod term;
 pub mod tmux;
+pub mod version;
 pub mod which;
 pub mod wizard;

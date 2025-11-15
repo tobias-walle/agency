@@ -35,6 +35,8 @@ pub enum C2DControl {
   NotifyTasksChanged {
     project: ProjectKey,
   },
+  /// Request the daemon version string
+  GetVersion,
   StopSession {
     session_id: u64,
   },
@@ -51,13 +53,29 @@ pub enum C2DControl {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Encode, Decode)]
 pub enum D2CControl {
-  Sessions { entries: Vec<SessionInfo> },
-  SessionsChanged { entries: Vec<SessionInfo> },
-  TasksChanged { project: ProjectKey },
-  Ack { stopped: usize },
-  Error { message: String },
+  Sessions {
+    entries: Vec<SessionInfo>,
+  },
+  SessionsChanged {
+    entries: Vec<SessionInfo>,
+  },
+  TasksChanged {
+    project: ProjectKey,
+  },
+  Ack {
+    stopped: usize,
+  },
+  Error {
+    message: String,
+  },
   Goodbye,
-  Pong { nonce: u64 },
+  Pong {
+    nonce: u64,
+  },
+  /// Reply with the running daemon version string
+  Version {
+    version: String,
+  },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Encode, Decode)]

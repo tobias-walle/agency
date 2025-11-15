@@ -11,6 +11,7 @@ pub mod tui;
 mod utils;
 
 use crate::config::{AgencyPaths, AppContext, global_config_exists, load_config};
+use crate::utils::daemon::ensure_running_and_latest_version;
 use crate::utils::git::resolve_main_workdir;
 
 /// Agency - An AI agent manager and orchestrator in your command line.
@@ -122,6 +123,15 @@ pub fn run() -> Result<()> {
   let config = load_config(&project_root)?;
   let ctx = AppContext { paths, config };
 
+  // Autostart daemon for all commands except explicit daemon control
+  match &cli.command {
+    Some(Commands::Daemon { .. }) => {}
+    Some(_) => {
+      let _ = ensure_running_and_latest_version(&ctx);
+    }
+    None => {}
+  }
+
   match cli.command {
     Some(Commands::New {
       slug,
@@ -214,6 +224,8 @@ pub fn run() -> Result<()> {
         }
         return Ok(());
       }
+      // Only autostart daemon once we know global config exists to avoid setup
+      let _ = ensure_running_and_latest_version(&ctx);
       if stdout_tty {
         crate::tui::run(&ctx)?;
       } else {

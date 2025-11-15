@@ -210,6 +210,77 @@ fn defaults_prints_embedded_config() -> Result<()> {
 }
 
 #[test]
+fn ps_autostarts_daemon_when_missing() -> Result<()> {
+  let env = common::TestEnv::new();
+  env.init_repo()?;
+  if !env.sockets_available() {
+    eprintln!("Skipping ps_autostarts_daemon_when_missing: Unix sockets not available in sandbox");
+    return Ok(());
+  }
+
+  // Run ps without starting daemon; autostart should kick in
+  let mut cmd = env.bin_cmd()?;
+  cmd.arg("ps");
+  cmd
+    .assert()
+    .success()
+    .stdout(predicates::str::contains("ID SLUG").from_utf8());
+
+  // Stop daemon to clean up
+  let mut daemon_stop = env.bin_cmd()?;
+  daemon_stop.arg("daemon").arg("stop");
+  daemon_stop.assert().success();
+
+  Ok(())
+}
+
+#[test]
+fn daemon_reports_version_via_protocol() -> Result<()> {
+  let env = common::TestEnv::new();
+  env.init_repo()?;
+  if !env.sockets_available() {
+    eprintln!(
+      "Skipping daemon_reports_version_via_protocol: Unix sockets not available in sandbox"
+    );
+    return Ok(());
+  }
+
+  // Ensure daemon is running
+  let mut daemon_start = env.bin_cmd()?;
+  daemon_start.arg("daemon").arg("start");
+  daemon_start.assert().success();
+
+  // Connect and request version
+  let cwd = env.path().to_path_buf();
+  let cfg = agency::config::load_config(&cwd)?;
+  let socket = agency::config::compute_socket_path(&cfg);
+  let mut stream = std::os::unix::net::UnixStream::connect(&socket)?;
+  agency::daemon_protocol::write_frame(
+    &mut stream,
+    &agency::daemon_protocol::C2D::Control(agency::daemon_protocol::C2DControl::GetVersion),
+  )?;
+  let reply: agency::daemon_protocol::D2C = agency::daemon_protocol::read_frame(&mut stream)?;
+  match reply {
+    agency::daemon_protocol::D2C::Control(agency::daemon_protocol::D2CControl::Version {
+      version,
+    }) => {
+      let cli_version = env!("CARGO_PKG_VERSION");
+      assert_eq!(
+        version, cli_version,
+        "daemon version must match CLI version"
+      );
+    }
+    other => panic!("unexpected reply: {:?}", other),
+  }
+
+  let mut daemon_stop = env.bin_cmd()?;
+  daemon_stop.arg("daemon").arg("stop");
+  daemon_stop.assert().success();
+
+  Ok(())
+}
+
+#[test]
 fn init_scaffolds_files_after_confirmation() -> Result<()> {
   let env = common::TestEnv::new();
   let root = env.path().to_path_buf();
@@ -653,12 +724,14 @@ fn ps_bails_when_daemon_not_running() -> Result<()> {
   let env = common::TestEnv::new();
   env.init_repo()?;
 
-  let mut cmd = env.bin_cmd()?;
-  cmd.arg("ps");
-  cmd.assert().failure().stderr(
-    predicates::str::contains("Daemon not running. Please start it with `agency daemon start`")
-      .from_utf8(),
-  );
+  with_vars([("AGENCY_NO_AUTOSTART", Some("1".to_string()))], || {
+    let mut cmd = env.bin_cmd().unwrap();
+    cmd.arg("ps");
+    cmd.assert().failure().stderr(
+      predicates::str::contains("Daemon not running. Please start it with `agency daemon start`")
+        .from_utf8(),
+    );
+  });
 
   Ok(())
 }
@@ -668,12 +741,14 @@ fn sessions_bails_when_daemon_not_running() -> Result<()> {
   let env = common::TestEnv::new();
   env.init_repo()?;
 
-  let mut cmd = env.bin_cmd()?;
-  cmd.arg("sessions");
-  cmd.assert().failure().stderr(
-    predicates::str::contains("Daemon not running. Please start it with `agency daemon start`")
-      .from_utf8(),
-  );
+  with_vars([("AGENCY_NO_AUTOSTART", Some("1".to_string()))], || {
+    let mut cmd = env.bin_cmd().unwrap();
+    cmd.arg("sessions");
+    cmd.assert().failure().stderr(
+      predicates::str::contains("Daemon not running. Please start it with `agency daemon start`")
+        .from_utf8(),
+    );
+  });
 
   Ok(())
 }

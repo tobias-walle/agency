@@ -8,6 +8,7 @@ use crate::utils::task::TaskRef;
 use anyhow::{Context, Result, anyhow, bail};
 use std::os::unix::net::UnixStream;
 use std::path::Path;
+use std::time::Duration;
 
 #[cfg(test)]
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -138,4 +139,41 @@ pub fn list_sessions_for_project(ctx: &AppContext) -> anyhow::Result<Vec<Session
     Ok(_) => bail!("Protocol error: Expected Sessions reply"),
     Err(err) => Err(err),
   }
+}
+
+/// Ensure the daemon is running and matches the current CLI version.
+///
+/// - Skips when `AGENCY_NO_AUTOSTART=1` is set.
+/// - Starts the daemon if the socket connect fails.
+/// - If connect succeeds, queries version and restarts on mismatch or unexpected reply.
+pub fn ensure_running_and_latest_version(ctx: &AppContext) -> anyhow::Result<()> {
+  if std::env::var("AGENCY_NO_AUTOSTART").ok().as_deref() == Some("1") {
+    return Ok(());
+  }
+
+  let socket = compute_socket_path(&ctx.config);
+  match UnixStream::connect(&socket) {
+    Err(_) => {
+      // Not running -> start
+      crate::commands::daemon::start()?;
+      return Ok(());
+    }
+    Ok(mut stream) => {
+      // Connected: query version with a short timeout
+      let _ = stream.set_read_timeout(Some(Duration::from_millis(250)));
+      write_frame(&mut stream, &C2D::Control(C2DControl::GetVersion))
+        .context("failed to write GetVersion frame")?;
+      let reply: Result<D2C> = read_frame(&mut stream);
+      let cli_ver = crate::utils::version::get_version();
+      let matches = match reply {
+        Ok(D2C::Control(D2CControl::Version { version })) => version == cli_ver,
+        _ => false,
+      };
+      if !matches {
+        // Older daemon without version support or mismatched -> restart
+        crate::commands::daemon::restart()?;
+      }
+    }
+  }
+  Ok(())
 }
