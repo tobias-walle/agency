@@ -183,18 +183,32 @@ pub fn start_session(
 pub fn attach_session(cfg: &AgencyConfig, task: &TaskMeta) -> Result<()> {
   let name = session_name(task.id, &task.slug);
   // Attach without reapplying config; overrides already sourced on start
-  let mut tmux_cmd = std::process::Command::new("tmux");
-  tmux_cmd
-    .args(tmux_args_base(cfg))
-    .arg("attach-session")
-    .arg("-t")
-    .arg(&name);
+  let mut tmux_cmd = attach_cmd(cfg, &name);
   let status = tmux_cmd.status().context("failed to exec tmux attach")?;
   if status.success() {
     Ok(())
   } else {
     anyhow::bail!("tmux attach failed")
   }
+}
+
+pub fn spawn_attach_session(
+  cfg: &AgencyConfig,
+  task: &TaskMeta,
+) -> std::io::Result<std::process::Child> {
+  let name = session_name(task.id, &task.slug);
+  let mut cmd = attach_cmd(cfg, &name);
+  cmd.spawn()
+}
+
+fn attach_cmd(cfg: &AgencyConfig, target_name: &str) -> std::process::Command {
+  let mut tmux_cmd = std::process::Command::new("tmux");
+  tmux_cmd
+    .args(tmux_args_base(cfg))
+    .arg("attach-session")
+    .arg("-t")
+    .arg(target_name);
+  tmux_cmd
 }
 
 pub fn kill_session(cfg: &AgencyConfig, task: &TaskMeta) -> Result<()> {

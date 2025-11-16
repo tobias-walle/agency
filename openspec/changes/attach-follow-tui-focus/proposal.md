@@ -5,7 +5,9 @@ Status: Draft
 Change-ID: attach-follow-tui-focus
 
 ## Summary
-Add `--follow [<tui-id>]` to `agency attach` to mirror the focused task in a running Agency TUI. Each TUI instance gets a small numeric ID (starting at 1) displayed in the Tasks frame title on the right side. When `--follow` is used without an ID, and exactly one TUI is open, attach follows that TUI; when multiple are open, it errors with a guided message. While following, the CLI manages a child process that either attaches to the focused task's tmux session or runs a minimal overlay when no session exists. On focus change, the CLI terminates the current child (attach or overlay) and starts the appropriate new child for the new focus.
+Add `--follow [<tui-id>]` to `agency attach` to mirror the focused task in a running Agency TUI. Each TUI instance gets a small numeric ID (starting at 1) displayed in the Tasks frame title on the right side. When `--follow` is used without an ID, and exactly one TUI is open, attach follows that TUI; when multiple are open, it errors with a guided message.
+
+While following, the CLI manages a single attach child for running sessions and renders a minimal inline overlay (no raw mode, no frame) when no session exists. The inline overlay shows a centered prompt, starts the session on `s`, and can be canceled via `C-c`; attach begins automatically once the daemon reports the session. On focus change, the CLI terminates any existing attach child and either spawns a new one or updates the overlay accordingly. If the user detaches the tmux attach child, follow cancels.
 
 ## Motivation
 - Reduce friction moving between TUI navigation and tmux-attached sessions.

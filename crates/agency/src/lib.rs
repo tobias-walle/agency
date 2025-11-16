@@ -76,6 +76,10 @@ enum Commands {
     task: Option<String>,
     #[arg(long)]
     session: Option<u64>,
+    /// Follow the focused task in a running Agency TUI. Optional TUI id.
+    /// Use without an id to auto-pick when exactly one TUI is open.
+    #[arg(long = "follow", num_args(0..=1), conflicts_with = "task", conflicts_with = "session")]
+    follow: Option<Option<u32>>,
   },
   /// Start a task session; attach by default
   Start {
@@ -121,6 +125,8 @@ enum DaemonCmd {
   #[command(hide = true)]
   Run {},
 }
+
+// Inline overlay implemented within attach follow; dedicated Overlay subcommand removed
 
 #[must_use]
 pub fn parse() -> Cli {
@@ -195,11 +201,21 @@ pub fn run() -> Result<()> {
       DaemonCmd::Restart {} => commands::daemon::restart()?,
       DaemonCmd::Run {} => commands::daemon::run_blocking()?,
     },
-    Some(Commands::Attach { task, session }) => match (task, session) {
-      (Some(t), None) => commands::attach::run_with_task(&ctx, &t)?,
-      (None, Some(sid)) => commands::attach::run_join_session(&ctx, sid)?,
-      _ => anyhow::bail!("Attach requires either a task or --session <id>"),
-    },
+    Some(Commands::Attach {
+      task,
+      session,
+      follow,
+    }) => {
+      if let Some(f) = follow {
+        commands::attach::run_follow(&ctx, f)?;
+      } else if let Some(t) = task {
+        commands::attach::run_with_task(&ctx, &t)?;
+      } else if let Some(sid) = session {
+        commands::attach::run_join_session(&ctx, sid)?;
+      } else {
+        anyhow::bail!("Attach requires either a task, --session <id>, or --follow [<tui-id>]");
+      }
+    }
     Some(Commands::Bootstrap { ident }) => {
       commands::bootstrap::run(&ctx, &ident)?;
     }
@@ -230,6 +246,7 @@ pub fn run() -> Result<()> {
     Some(Commands::Tui {}) => {
       crate::tui::run(&ctx)?;
     }
+    // Overlay handled inline in attach follow
     Some(Commands::Gc {}) => {
       commands::gc::run(&ctx)?;
     }

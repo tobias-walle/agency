@@ -494,6 +494,29 @@ fn new_supports_placeholder_root_in_bootstrap_cmd() -> Result<()> {
 }
 
 #[test]
+fn attach_follow_conflicts_with_task_and_session() -> Result<()> {
+  let env = common::TestEnv::new();
+  env.init_repo()?;
+  // Prevent autostart to avoid side effects
+  with_vars([("AGENCY_NO_AUTOSTART", Some("1".to_string()))], || {
+    // Conflicts: task positional with --follow
+    let mut cmd = env.bin_cmd().unwrap();
+    cmd.arg("attach").arg("123").arg("--follow");
+    cmd.assert().failure();
+
+    // Conflicts: --session with --follow
+    let mut cmd2 = env.bin_cmd().unwrap();
+    cmd2
+      .arg("attach")
+      .arg("--session")
+      .arg("99")
+      .arg("--follow");
+    cmd2.assert().failure();
+  });
+  Ok(())
+}
+
+#[test]
 fn new_writes_yaml_header_when_agent_specified() -> Result<()> {
   let env = common::TestEnv::new();
   env.init_repo()?;

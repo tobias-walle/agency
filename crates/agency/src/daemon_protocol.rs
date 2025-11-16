@@ -54,6 +54,30 @@ pub enum C2DControl {
   NotifyTasksChanged {
     project: ProjectKey,
   },
+  /// TUI lifecycle and follow protocol
+  TuiRegister {
+    project: ProjectKey,
+    pid: u32,
+  },
+  TuiUnregister {
+    project: ProjectKey,
+    pid: u32,
+  },
+  /// Focus changes are delivered to subscribers; CLI should subscribe and then follow
+  TuiFocusTaskChange {
+    project: ProjectKey,
+    tui_id: u32,
+    task_id: u32,
+  },
+  /// Request to follow a specific TUI's focus
+  TuiFollow {
+    project: ProjectKey,
+    tui_id: u32,
+  },
+  /// List registered TUIs for a project
+  TuiList {
+    project: ProjectKey,
+  },
   /// Request the daemon version string
   GetVersion,
   StopSession {
@@ -78,6 +102,27 @@ pub enum D2CControl {
     tasks: Vec<TaskInfo>,
     sessions: Vec<SessionInfo>,
     metrics: Vec<TaskMetrics>,
+  },
+  /// Reply acknowledging TUI registration with assigned id
+  TuiRegistered {
+    tui_id: u32,
+  },
+  /// Reply for follow attempts
+  TuiFollowSucceeded {
+    tui_id: u32,
+  },
+  TuiFollowFailed {
+    message: String,
+  },
+  /// Broadcast when a TUI's focused task changes
+  TuiFocusTaskChanged {
+    project: ProjectKey,
+    tui_id: u32,
+    task_id: u32,
+  },
+  /// One-shot list of TUIs for project
+  TuiList {
+    items: Vec<TuiListItem>,
   },
   Ack {
     stopped: usize,
@@ -128,4 +173,42 @@ pub fn read_frame<R: Read, T: Decode<()>>(mut r: R) -> Result<T> {
   let (val, _): (T, usize) =
     bincode::decode_from_slice(&data, bincode::config::standard()).context("decode error")?;
   Ok(val)
+}
+
+/// Item in the TUI list reply
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Encode, Decode)]
+pub struct TuiListItem {
+  pub tui_id: u32,
+  pub pid: u32,
+  pub focused_task_id: Option<u32>,
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn encode_decode_tui_messages_roundtrip() {
+    let pk = ProjectKey {
+      repo_root: "/tmp/repo".to_string(),
+    };
+    let c = C2D::Control(C2DControl::TuiFollow {
+      project: pk.clone(),
+      tui_id: 1,
+    });
+    let bytes = bincode::encode_to_vec(&c, bincode::config::standard()).unwrap();
+    let (decoded, _): (C2D, usize) =
+      bincode::decode_from_slice(&bytes, bincode::config::standard()).unwrap();
+    assert_eq!(c, decoded);
+
+    let d = D2C::Control(D2CControl::TuiFocusTaskChanged {
+      project: pk,
+      tui_id: 2,
+      task_id: 42,
+    });
+    let bytes = bincode::encode_to_vec(&d, bincode::config::standard()).unwrap();
+    let (decoded, _): (D2C, usize) =
+      bincode::decode_from_slice(&bytes, bincode::config::standard()).unwrap();
+    assert_eq!(d, decoded);
+  }
 }

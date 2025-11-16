@@ -36,6 +36,7 @@ Everything available in the TUI is also available via the CLI:
 - `agency edit my-task` - Edit a draft task.
 - `agency start my-task` - Start a task that is a draft or stopped.
 - `agency attach my-task` or `agency attach 1` - Open the agent TUI by slug or ID.
+- `agency attach --follow` - Attach to the focused task in a running Agency TUI.
 - `agency stop my-task` - Stop a running task (keep its worktree and branch).
 - `agency merge my-task` - Merge the task back into the base branch.
 - `agency path my-task` - Get the worktree path for a task.

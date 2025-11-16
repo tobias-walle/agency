@@ -60,6 +60,10 @@ struct AppState {
   pending_delete: HashMap<u32, Instant>,
   // Scroll offset for command log (0 = stick to bottom)
   log_scroll: usize,
+  // Assigned Agency TUI id for this instance
+  tui_id: Option<u32>,
+  // Send initial focus once after registering
+  sent_initial_focus: bool,
 }
 
 impl AppState {
@@ -136,6 +140,8 @@ pub fn run(ctx: &AppContext) -> Result<()> {
   disable_raw_mode().ok();
   // Soft-reset the view (keep scrollback) after leaving the TUI
   crate::utils::term::restore_terminal_state();
+  // Unregister TUI best-effort
+  let _ = crate::utils::daemon::tui_unregister(ctx, std::process::id());
   res
 }
 
@@ -149,6 +155,22 @@ fn ui_loop(
     log_error!("{}", err);
     err
   })?;
+
+  // Register this TUI with the daemon to obtain an id
+  if state.tui_id.is_none() {
+    let pid = std::process::id();
+    match crate::utils::daemon::tui_register(ctx, pid) {
+      Ok(id) => state.tui_id = Some(id),
+      Err(err) => crate::log_warn!("TUI register failed: {}", err),
+    }
+  }
+  // Send initial focus for immediate follow attach
+  if !state.sent_initial_focus
+    && let Some(cur) = state.rows.get(state.selected)
+  {
+    emit_focus_change(ctx, state.tui_id, cur.id);
+    state.sent_initial_focus = true;
+  }
 
   // Subscribe to daemon events
   let events_rx = subscribe_events(ctx).map_err(|err| {
@@ -182,6 +204,8 @@ fn ui_loop(
           reinit_terminal(terminal)?;
           state.paused = false;
           let _ = ack.send(());
+          // Track previous selection before refresh to detect implicit changes
+          let prev_sel_id = state.rows.get(state.selected).map(|r| r.id);
           state.refresh(ctx).map_err(|err| {
             log_error!("{}", err);
             err
@@ -189,6 +213,13 @@ fn ui_loop(
           // Align pending deletes with the current task list
           let visible: std::collections::HashSet<u32> = state.rows.iter().map(|r| r.id).collect();
           state.pending_delete.retain(|id, _| visible.contains(id));
+          // Emit focus change if selection changed due to list updates
+          let cur_sel_id = state.rows.get(state.selected).map(|r| r.id);
+          if let (Some(prev), Some(cur)) = (prev_sel_id, cur_sel_id)
+            && prev != cur
+          {
+            emit_focus_change(ctx, state.tui_id, cur);
+          }
         }
       }
     }
@@ -262,11 +293,22 @@ fn ui_loop(
         ])
       });
 
-      let tasks_title = if state.focus == Focus::Tasks {
+      // Left-aligned title and right-aligned TUI id for better visibility
+      let left_title = if state.focus == Focus::Tasks {
         Line::from("[1] Tasks").fg(Color::Cyan)
       } else {
         Line::from("[1] Tasks")
       };
+      let mut table_block = Block::default().borders(Borders::ALL).title(left_title);
+      if let Some(id) = state.tui_id {
+        // Build right-aligned title: default-colored text + cyan-highlighted id
+        let right_title = Line::from(vec![
+          Span::raw("TUI ID: "),
+          Span::raw(format!("{id}")).fg(Color::Cyan),
+        ])
+        .right_aligned();
+        table_block = table_block.title(right_title);
+      }
       let table = Table::new(
         rows,
         [
@@ -281,7 +323,7 @@ fn ui_loop(
       )
       .header(header)
       .highlight_style(Style::default().bg(Color::DarkGray))
-      .block(Block::default().borders(Borders::ALL).title(tasks_title));
+      .block(table_block);
 
       let mut tstate = ratatui::widgets::TableState::default();
       tstate.select(Some(state.selected));
@@ -386,6 +428,8 @@ fn ui_loop(
     while let Ok(ev) = events_rx.try_recv() {
       match ev {
         UiEvent::ProjectState => {
+          // Track selected task before refresh; list updates (e.g., delete) may change it
+          let prev_sel_id = state.rows.get(state.selected).map(|r| r.id);
           state.refresh(ctx).map_err(|err| {
             log_error!("{}", err);
             err
@@ -393,6 +437,13 @@ fn ui_loop(
           // Remove pending-delete markers for tasks that are no longer visible
           let visible: std::collections::HashSet<u32> = state.rows.iter().map(|r| r.id).collect();
           state.pending_delete.retain(|id, _| visible.contains(id));
+          // Emit focus change if selection implicitly moved to a different task
+          let cur_sel_id = state.rows.get(state.selected).map(|r| r.id);
+          if let (Some(prev), Some(cur)) = (prev_sel_id, cur_sel_id)
+            && prev != cur
+          {
+            emit_focus_change(ctx, state.tui_id, cur);
+          }
         }
         UiEvent::Disconnected(err) => {
           log_error!("{}", err);
@@ -415,6 +466,10 @@ fn ui_loop(
             if state.focus == Focus::Tasks {
               if !state.rows.is_empty() {
                 state.selected = state.selected.saturating_sub(1);
+                // Emit focus change for new selection
+                if let Some(sel) = state.rows.get(state.selected) {
+                  emit_focus_change(ctx, state.tui_id, sel.id);
+                }
               }
             } else {
               state.log_scroll = state.log_scroll.saturating_add(1);
@@ -424,6 +479,9 @@ fn ui_loop(
             if state.focus == Focus::Tasks {
               if !state.rows.is_empty() {
                 state.selected = (state.selected + 1).min(state.rows.len() - 1);
+                if let Some(sel) = state.rows.get(state.selected) {
+                  emit_focus_change(ctx, state.tui_id, sel.id);
+                }
               }
             } else {
               state.log_scroll = state.log_scroll.saturating_sub(1);
@@ -722,12 +780,12 @@ fn uncommitted_cell(text: &str) -> Cell<'_> {
     let b_num = b.parse::<u64>().unwrap_or(0);
     return Cell::from(Line::from(vec![
       if a_num > 0 {
-        Span::styled(format!("+{}", a_num), Style::default().fg(Color::Green))
+        Span::styled(format!("+{a_num}"), Style::default().fg(Color::Green))
       } else {
         Span::styled("+0", Style::default().fg(Color::Gray))
       },
       if b_num > 0 {
-        Span::styled(format!("-{}", b_num), Style::default().fg(Color::Red))
+        Span::styled(format!("-{b_num}"), Style::default().fg(Color::Red))
       } else {
         Span::styled("-0", Style::default().fg(Color::Gray))
       },
@@ -988,6 +1046,28 @@ fn subscribe_events(ctx: &AppContext) -> Result<Receiver<UiEvent>> {
       }
     })?;
   Ok(rx)
+}
+
+fn emit_focus_change(ctx: &AppContext, tui_id: Option<u32>, task_id: u32) {
+  if let Some(tid) = tui_id {
+    let repo = match crate::utils::git::open_main_repo(ctx.paths.cwd()) {
+      Ok(r) => r,
+      Err(_) => return,
+    };
+    let root = crate::utils::git::repo_workdir_or(&repo, ctx.paths.cwd());
+    let project = crate::daemon_protocol::ProjectKey {
+      repo_root: root.display().to_string(),
+    };
+    let socket = crate::config::compute_socket_path(&ctx.config);
+    let _ = crate::utils::daemon::send_message_to_daemon(
+      &socket,
+      crate::daemon_protocol::C2DControl::TuiFocusTaskChange {
+        project,
+        tui_id: tid,
+        task_id,
+      },
+    );
+  }
 }
 
 fn centered_rect(

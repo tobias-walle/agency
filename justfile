@@ -33,7 +33,7 @@ fmt:
 
 # Fix the linting errors and formatting
 fix:
-  cargo clippy -q --allow-dirty --allow-staged --all-targets --fix -- -W clippy::pedantic -A clippy::missing-errors-doc
+  cargo clippy -q --allow-dirty --allow-staged --all-targets --fix -- -F clippy::pedantic -A clippy::missing-errors-doc
   just fmt
 
 tmux *ARGS:

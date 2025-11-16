@@ -28,3 +28,17 @@ Keep this managed block so 'openspec update' can refresh the instructions.
   - `fix: fix ...`
 - You MUST add the files and the create the commit in the same command for easy review e.g.:
   - `git add fileA.rs fileB.rs && git commit -m "feat: ..."`
+
+# Code Style
+
+- You SHALL keep the code linear (avoid nesting) and functions to a managable size.
+- If this is not given, you MUST do the following:
+  - Detect duplicated code and extract it to seperate functions
+  - Detect strong nesting and create functions to reduce it
+  - Use language feature to reduce nesting
+
+# Rules
+
+- You MUST run `just check` regulary to detect compile errors
+- You MUST run `just test && just fix` after every phase and fix all errors and warnings
+- If you remove code, you MUST NEVER replace it with useless comments (Like `// removed ...`, `// deleted ...`, etc.). If you find comments like this always delete them.

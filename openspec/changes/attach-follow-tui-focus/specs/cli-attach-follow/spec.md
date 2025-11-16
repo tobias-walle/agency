@@ -42,10 +42,10 @@ If the followed TUI exits or becomes unreachable per daemon liveness checks, the
 - Then `agency attach --follow` cancels and logs an error
 
 ### Requirement: Visible TUI ID in the UI
-The TUI MUST display the TUI ID in the Tasks frame title, right-aligned, with the numeric ID highlighted in cyan.
+The TUI MUST display the TUI ID in the Tasks frame title, right-aligned. The text `TUI ID:` MUST use the default color, and only the numeric `<id>` MUST be highlighted in cyan.
 #### Scenario: Display TUI ID in Tasks frame title
 - Given the TUI is running
-- Then the Tasks frame title shows `TUI Id: <id>` (with `<id>` cyan)
+- Then the Tasks frame title shows `TUI ID: <id>` (with `<id>` cyan)
 - And IDs start at 1 and increment per project instance
 
 ### Requirement: Resolve single/multiple open TUIs
@@ -55,16 +55,22 @@ The CLI MUST use the daemon-maintained registry to determine open TUIs and their
 - `agency attach --follow` queries `TuiList` to resolve the single/none/multiple state
 - Auto-pick only when exactly one TUI is open; otherwise require an explicit ID
 
-### Requirement: Fallback view when no session
-When the focused task has no running session, the CLI MUST present a minimal fullscreen overlay app that prompts to start, and MUST switch to an attach child once the session exists.
+### Requirement: Fallback inline overlay when no session
+When the focused task has no running session, the CLI MUST present a minimal inline overlay (no raw mode, no frame) that prompts to start, and MUST switch to an attach child once the session exists.
 #### Scenario: No session for focused task
 - Given attach is following a TUI
 - And the focused task has no running session
-- Then show a fullscreen ratatui app with the message:
-  - `No session for Task <slug> (ID: <id>). Press s to start.`
-- And pressing `s` starts the session and the overlay exits
-- And the follower then spawns an attach child for the new session
-- And the overlay closes immediately when focus changes
+- Then print a centered message without a frame:
+  - `No session for Task <slug> (ID: <id>). Press 's' to start, C-c to cancel.`
+- Typing `s` starts the session
+- The follower then spawns an attach child for the new session when the daemon snapshot reflects it
+- The inline overlay re-renders for new focus or clears when a session exists
 
 ### Assumptions
 - The CLI is executed outside tmux. It uses `tmux attach-session` as a child process for active sessions and never uses `switch-client`.
+### Requirement: Cancel on user detach
+If the user manually detaches the tmux attach child, the CLI MUST cancel follow and exit.
+#### Scenario: Follow cancels on manual detach
+- Given attach is following a TUI and attached to a session
+- When the user detaches from tmux (e.g., prefix + d)
+- Then `agency attach --follow` cancels and returns to the shell

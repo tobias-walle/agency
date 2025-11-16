@@ -51,14 +51,14 @@ pub fn run(ctx: &AppContext) -> Result<()> {
         let plus = if *a == 0 {
           "+0".to_string().dimmed().to_string()
         } else {
-          format!("+{}", a).green().to_string()
+          format!("+{a}").green().to_string()
         };
         let minus = if *d == 0 {
           "-0".to_string().dimmed().to_string()
         } else {
-          format!("-{}", d).red().to_string()
+          format!("-{d}").red().to_string()
         };
-        let unc = format!("{}{}", plus, minus);
+        let unc = format!("{plus}{minus}");
         let commits = if *ahead == 0 {
           "-".to_string().dimmed().to_string()
         } else {

@@ -40,6 +40,8 @@ pub struct SlimDaemon {
   // Cache last snapshot per project to avoid redundant broadcasts
   last_snapshot: Arc<Mutex<HashMap<String, ProjectSnapshot>>>,
   socket_path: PathBuf,
+  // Per-project TUI registry: id -> entry
+  tui_registry: Arc<Mutex<HashMap<String, HashMap<u32, TuiEntry>>>>,
 }
 
 struct Subscriber {
@@ -61,6 +63,7 @@ impl SlimDaemon {
       subscribers: Arc::new(Mutex::new(Vec::new())),
       last_snapshot: Arc::new(Mutex::new(HashMap::new())),
       socket_path,
+      tui_registry: Arc::new(Mutex::new(HashMap::new())),
     }
   }
 
@@ -69,36 +72,12 @@ impl SlimDaemon {
     build_project_snapshot(&self.cfg, project, prev.as_ref())
   }
 
-  fn broadcast_state(&self, project: &ProjectKey, snap: &ProjectSnapshot) {
-    let mut remove_idx = Vec::new();
-    let mut subs = self.subscribers.lock();
-    for (i, sub) in subs.iter_mut().enumerate() {
-      if sub.project.repo_root == project.repo_root
-        && write_frame(
-          &mut sub.stream,
-          &D2C::Control(D2CControl::ProjectState {
-            project: project.clone(),
-            tasks: snap.tasks.clone(),
-            sessions: snap.sessions.clone(),
-            metrics: snap.metrics.clone(),
-          }),
-        )
-        .is_err()
-      {
-        remove_idx.push(i);
-      }
-    }
-    for i in remove_idx.into_iter().rev() {
-      subs.remove(i);
-    }
-  }
-
   fn update_cache_and_broadcast(&self, project: &ProjectKey, snap: ProjectSnapshot) {
     self
       .last_snapshot
       .lock()
       .insert(project.repo_root.clone(), snap.clone());
-    self.broadcast_state(project, &snap);
+    broadcast_project_state(&self.subscribers, project, &snap);
   }
 
   pub fn run(&self) -> Result<()> {
@@ -106,27 +85,31 @@ impl SlimDaemon {
     let subs = self.subscribers.clone();
     let cfg = self.cfg.clone();
     let cache = self.last_snapshot.clone();
+    let registry = self.tui_registry.clone();
     std::thread::Builder::new()
       .name("daemon-poller".to_string())
       .spawn(move || {
+        let mut counter: u32 = 0;
         loop {
           std::thread::sleep(Duration::from_millis(1000));
           let targets: Vec<ProjectKey> = subs.lock().iter().map(|s| s.project.clone()).collect();
           for pk in targets {
             let prev = cache.lock().get(&pk.repo_root).cloned();
-            match build_project_snapshot(&cfg, &pk, prev.as_ref()) {
-              Ok(new_snap) => {
-                let mut cache_guard = cache.lock();
-                let changed = cache_guard.get(&pk.repo_root) != Some(&new_snap);
-                if changed {
-                  cache_guard.insert(pk.repo_root.clone(), new_snap.clone());
-                  broadcast_project_state(&subs, &pk, &new_snap);
-                }
+            if let Ok(new_snap) = build_project_snapshot(&cfg, &pk, prev.as_ref()) {
+              let mut cache_guard = cache.lock();
+              let changed = cache_guard.get(&pk.repo_root) != Some(&new_snap);
+              if changed {
+                cache_guard.insert(pk.repo_root.clone(), new_snap.clone());
+                broadcast_project_state(&subs, &pk, &new_snap);
               }
-              Err(_) => {
-                // Ignore snapshot errors in poller; clients may retry
-              }
+            } else {
+              // Ignore snapshot errors in poller; clients may retry
             }
+          }
+          // Liveness: best-effort every ~10s
+          counter = counter.wrapping_add(1);
+          if counter % 10 == 0 {
+            prune_dead_tuis(&registry);
           }
         }
       })?;
@@ -205,6 +188,55 @@ impl SlimDaemon {
           project,
           stream: cloned,
         });
+      }
+      Ok(C2D::Control(C2DControl::TuiRegister { project, pid })) => {
+        let tui_id = assign_tui_id(&self.tui_registry, &project.repo_root, pid);
+        let _ = write_frame(
+          &mut *stream,
+          &D2C::Control(D2CControl::TuiRegistered { tui_id }),
+        );
+      }
+      Ok(C2D::Control(C2DControl::TuiUnregister { project, pid })) => {
+        unregister_tui(&self.tui_registry, &project.repo_root, pid);
+        let _ = write_frame(&mut *stream, &D2C::Control(D2CControl::Ack { stopped: 0 }));
+      }
+      Ok(C2D::Control(C2DControl::TuiList { project })) => {
+        let items = list_tuis(&self.tui_registry, &project.repo_root);
+        let _ = write_frame(&mut *stream, &D2C::Control(D2CControl::TuiList { items }));
+      }
+      Ok(C2D::Control(C2DControl::TuiFollow { project, tui_id })) => {
+        if let Some(entry) = get_tui(&self.tui_registry, &project.repo_root, tui_id) {
+          let _ = write_frame(
+            &mut *stream,
+            &D2C::Control(D2CControl::TuiFollowSucceeded { tui_id }),
+          );
+          if let Some(task_id) = entry.focused_task_id {
+            let _ = write_frame(
+              &mut *stream,
+              &D2C::Control(D2CControl::TuiFocusTaskChanged {
+                project,
+                tui_id,
+                task_id,
+              }),
+            );
+          }
+        } else {
+          let _ = write_frame(
+            &mut *stream,
+            &D2C::Control(D2CControl::TuiFollowFailed {
+              message: format!("No TUI {tui_id} found"),
+            }),
+          );
+        }
+      }
+      Ok(C2D::Control(C2DControl::TuiFocusTaskChange {
+        project,
+        tui_id,
+        task_id,
+      })) => {
+        update_tui_focus(&self.tui_registry, &project.repo_root, tui_id, task_id);
+        broadcast_tui_focus(&self.subscribers, &project, tui_id, task_id);
+        let _ = write_frame(&mut *stream, &D2C::Control(D2CControl::Ack { stopped: 0 }));
       }
       Ok(C2D::Control(C2DControl::NotifyTasksChanged { project })) => {
         // Recompute and broadcast a fresh snapshot for the project
@@ -434,5 +466,240 @@ fn broadcast_project_state(
   }
   for i in remove_idx.into_iter().rev() {
     subs_list.remove(i);
+  }
+}
+
+#[derive(Debug, Clone)]
+struct TuiEntry {
+  pid: u32,
+  last_seen_ms: u64,
+  focused_task_id: Option<u32>,
+}
+
+fn assign_tui_id(
+  registry: &Arc<Mutex<HashMap<String, HashMap<u32, TuiEntry>>>>,
+  project_root: &str,
+  pid: u32,
+) -> u32 {
+  let mut guard = registry.lock();
+  let map = guard.entry(project_root.to_string()).or_default();
+  // If pid already registered, reuse id
+  if let Some((id, _)) = map.iter().find(|(_, e)| e.pid == pid) {
+    return *id;
+  }
+  let mut id: u32 = 1;
+  while map.contains_key(&id) {
+    id += 1;
+  }
+  map.insert(
+    id,
+    TuiEntry {
+      pid,
+      last_seen_ms: now_ms(),
+      focused_task_id: None,
+    },
+  );
+  id
+}
+
+fn unregister_tui(
+  registry: &Arc<Mutex<HashMap<String, HashMap<u32, TuiEntry>>>>,
+  project_root: &str,
+  pid: u32,
+) {
+  let mut guard = registry.lock();
+  if let Some(map) = guard.get_mut(project_root) {
+    let target: Option<u32> = map.iter().find(|(_, e)| e.pid == pid).map(|(id, _)| *id);
+    if let Some(id) = target {
+      map.remove(&id);
+    }
+  }
+}
+
+fn get_tui(
+  registry: &Arc<Mutex<HashMap<String, HashMap<u32, TuiEntry>>>>,
+  project_root: &str,
+  tui_id: u32,
+) -> Option<TuiEntry> {
+  registry
+    .lock()
+    .get(project_root)
+    .and_then(|m| m.get(&tui_id).cloned())
+}
+
+fn update_tui_focus(
+  registry: &Arc<Mutex<HashMap<String, HashMap<u32, TuiEntry>>>>,
+  project_root: &str,
+  tui_id: u32,
+  task_id: u32,
+) {
+  if let Some(map) = registry.lock().get_mut(project_root)
+    && let Some(entry) = map.get_mut(&tui_id)
+  {
+    entry.focused_task_id = Some(task_id);
+    entry.last_seen_ms = now_ms();
+  }
+}
+
+fn list_tuis(
+  registry: &Arc<Mutex<HashMap<String, HashMap<u32, TuiEntry>>>>,
+  project_root: &str,
+) -> Vec<crate::daemon_protocol::TuiListItem> {
+  let mut out = Vec::new();
+  if let Some(map) = registry.lock().get(project_root) {
+    for (id, e) in map {
+      out.push(crate::daemon_protocol::TuiListItem {
+        tui_id: *id,
+        pid: e.pid,
+        focused_task_id: e.focused_task_id,
+      });
+    }
+    out.sort_by(|a, b| a.tui_id.cmp(&b.tui_id));
+  }
+  out
+}
+
+fn prune_dead_tuis(registry: &Arc<Mutex<HashMap<String, HashMap<u32, TuiEntry>>>>) {
+  use std::process::Command;
+  let mut guard = registry.lock();
+  for (_proj, map) in guard.iter_mut() {
+    let ids: Vec<u32> = map
+      .iter()
+      .filter_map(|(id, e)| {
+        let pid_str = e.pid.to_string();
+        match Command::new("kill").arg("-0").arg(&pid_str).status() {
+          Ok(st) if st.success() => None,
+          _ => Some(*id),
+        }
+      })
+      .collect();
+    for id in ids {
+      map.remove(&id);
+    }
+  }
+}
+
+fn broadcast_tui_focus(
+  subs: &Arc<Mutex<Vec<Subscriber>>>,
+  project: &ProjectKey,
+  tui_id: u32,
+  task_id: u32,
+) {
+  let mut remove_idx = Vec::new();
+  let mut subs_list = subs.lock();
+  for (i, sub) in subs_list.iter_mut().enumerate() {
+    if sub.project.repo_root == project.repo_root
+      && write_frame(
+        &mut sub.stream,
+        &D2C::Control(D2CControl::TuiFocusTaskChanged {
+          project: project.clone(),
+          tui_id,
+          task_id,
+        }),
+      )
+      .is_err()
+    {
+      remove_idx.push(i);
+    }
+  }
+  for i in remove_idx.into_iter().rev() {
+    subs_list.remove(i);
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn assign_and_reuse_ids_and_list_sorting() {
+    let reg: Arc<Mutex<HashMap<String, HashMap<u32, TuiEntry>>>> =
+      Arc::new(Mutex::new(HashMap::new()));
+    let proj = "/tmp/proj";
+    // Assign sequential ids for distinct PIDs
+    let id1 = assign_tui_id(&reg, proj, 111);
+    let id2 = assign_tui_id(&reg, proj, 222);
+    assert_eq!(id1, 1);
+    assert_eq!(id2, 2);
+    // Reuse id for same PID
+    let id1b = assign_tui_id(&reg, proj, 111);
+    assert_eq!(id1b, id1);
+
+    // List should contain both, sorted by tui_id
+    let list = list_tuis(&reg, proj);
+    assert_eq!(list.len(), 2);
+    assert_eq!(list[0].tui_id, 1);
+    assert_eq!(list[1].tui_id, 2);
+
+    // Unregister PID 111 and ensure only one remains
+    unregister_tui(&reg, proj, 111);
+    let list2 = list_tuis(&reg, proj);
+    assert_eq!(list2.len(), 1);
+    assert_eq!(list2[0].tui_id, 2);
+  }
+
+  #[test]
+  fn prune_dead_removes_inactive_pids() {
+    let reg: Arc<Mutex<HashMap<String, HashMap<u32, TuiEntry>>>> =
+      Arc::new(Mutex::new(HashMap::new()));
+    let proj = "/tmp/proj";
+    let alive = std::process::id();
+    {
+      let mut g = reg.lock();
+      let m = g.entry(proj.to_string()).or_default();
+      m.insert(
+        1,
+        TuiEntry {
+          pid: alive,
+          last_seen_ms: 0,
+          focused_task_id: None,
+        },
+      );
+      // A likely-nonexistent pid (best-effort)
+      m.insert(
+        2,
+        TuiEntry {
+          pid: 999_987_654,
+          last_seen_ms: 0,
+          focused_task_id: None,
+        },
+      );
+    }
+    prune_dead_tuis(&reg);
+    let list = list_tuis(&reg, proj);
+    assert_eq!(list.len(), 1);
+    assert_eq!(list[0].tui_id, 1);
+  }
+
+  #[test]
+  fn broadcast_focus_writes_frame_to_subscriber() {
+    use std::os::unix::net::UnixStream as US;
+    let subs: Arc<Mutex<Vec<Subscriber>>> = Arc::new(Mutex::new(Vec::new()));
+    let (a, mut b) = US::pair().expect("pair");
+    let pk = ProjectKey {
+      repo_root: "/tmp/proj".to_string(),
+    };
+    subs.lock().push(Subscriber {
+      project: pk.clone(),
+      stream: a.try_clone().unwrap(),
+    });
+
+    // Send a focus change
+    broadcast_tui_focus(&subs, &pk, 3, 42);
+
+    // Read the frame from the other end
+    let msg: D2C = read_frame(&mut b).expect("frame");
+    match msg {
+      D2C::Control(D2CControl::TuiFocusTaskChanged {
+        project,
+        tui_id,
+        task_id,
+      }) => {
+        assert_eq!(project.repo_root, pk.repo_root);
+        assert_eq!(tui_id, 3);
+        assert_eq!(task_id, 42);
+      }
+      other => panic!("unexpected: {other:?}"),
+    }
   }
 }

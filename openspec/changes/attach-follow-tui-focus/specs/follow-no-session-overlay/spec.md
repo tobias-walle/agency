@@ -1,20 +1,22 @@
 ## ADDED Requirements
 
-### Requirement: Minimal overlay app for missing session
-The follow mode MUST provide a small, independent ratatui overlay when no session exists for the focused task, with a clear prompt to start.
+### Requirement: Overlay for missing session (raw mode)
+The follow mode MUST provide a minimal overlay when no session exists for the focused task, using raw mode and the alternate screen to render a centered prompt.
 #### Scenario: Focused task has no session
-- The follow attach mode renders a small ratatui app (independent of the main TUI) that fills the terminal
-- The app shows exactly: `No session for Task <slug> (ID: <id>). Press s to start.`
-- The app exits when:
-  - The user presses `s` (after starting the session)
-  - Or the focused task changes (as reported by the daemon)
+- The follow attach mode renders a centered message:
+  - `No session for Task <slug> (ID: <id>). Press 's' to start, C-c to cancel.`
+- The overlay owns raw mode and the alternate screen during its lifetime
+- The overlay disappears automatically when a session for the focused task is detected or the focus changes
 
 #### Scenario: Starting a session from overlay
-- Pressing `s` invokes the existing session start helpers to create a tmux session for the task
-- On success, the overlay app exits and the attach process switches to the new session
+- Typing `s` invokes the existing session start helpers to create a tmux session for the task
+- After the daemon reports the new session in its snapshot, follow attaches to the session automatically
+
+#### Scenario: Cancel overlay
+- Typing `C-c` cancels follow and returns control to the terminal without starting a session
 
 ### Requirement: Real-time updates from daemon
 The overlay MUST react to daemon focus-change events for the followed TUI, updating or exiting immediately when appropriate.
 #### Scenario: Immediate overlay updates
-- The overlay subscribes to daemon events (e.g., `TuiFocusTaskChanged`) for the followed TUI
-- When focus changes, the overlay immediately reflects the new task or exits if a session is running and attach switches
+- The follower subscribes to daemon events (e.g., `TuiFocusTaskChanged`) for the followed TUI
+- When focus changes, the overlay is re-rendered for the new task or cleared if a session is running and attach switches
