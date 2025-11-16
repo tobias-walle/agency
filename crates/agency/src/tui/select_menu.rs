@@ -38,8 +38,7 @@ impl SelectMenuState {
   /// Draw the overlayed menu centered within `parent`.
   pub fn draw(&self, f: &mut ratatui::Frame, parent: ratatui::layout::Rect) {
     // Compute menu size: width 60%, height = min(items+Cancel, 12) + borders
-    let visible_count: u16 =
-      u16::try_from(self.items.len().saturating_add(1)).unwrap_or(u16::MAX); // + Cancel
+    let visible_count: u16 = u16::try_from(self.items.len().saturating_add(1)).unwrap_or(u16::MAX); // + Cancel
     let height_rows = visible_count.min(12).saturating_add(2); // borders
     let area = centered_rect(parent, 60, height_rows);
 

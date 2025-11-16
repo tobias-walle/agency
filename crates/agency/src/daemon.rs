@@ -174,7 +174,11 @@ impl SlimDaemon {
       Ok(C2D::Control(C2DControl::StopSession { session_id })) => {
         self.handle_stop_session(stream, session_id);
       }
-      Ok(C2D::Control(C2DControl::StopTask { project, task_id, slug })) => {
+      Ok(C2D::Control(C2DControl::StopTask {
+        project,
+        task_id,
+        slug,
+      })) => {
         self.handle_stop_task(stream, &project, task_id, &slug);
       }
       Ok(C2D::Control(C2DControl::Shutdown)) => {
@@ -213,7 +217,10 @@ impl SlimDaemon {
 
   fn write_version(stream: &mut UnixStream) {
     let ver = crate::utils::version::get_version().to_string();
-    let _ = write_frame(&mut *stream, &D2C::Control(D2CControl::Version { version: ver }));
+    let _ = write_frame(
+      &mut *stream,
+      &D2C::Control(D2CControl::Version { version: ver }),
+    );
   }
 
   fn handle_subscribe(&self, stream: &mut UnixStream, project: &ProjectKey) {
@@ -228,30 +235,42 @@ impl SlimDaemon {
       }),
     );
     let cloned = stream.try_clone().unwrap();
-    self
-      .subscribers
-      .lock()
-      .push(Subscriber { project: project.clone(), stream: cloned });
+    self.subscribers.lock().push(Subscriber {
+      project: project.clone(),
+      stream: cloned,
+    });
   }
 
   fn handle_tui_register(&self, stream: &mut UnixStream, project: &ProjectKey, pid: u32) {
     let tui_id = assign_tui_id(&self.tui_registry, &project.repo_root, pid);
-    let _ = write_frame(&mut *stream, &D2C::Control(D2CControl::TuiRegistered { tui_id }));
+    let _ = write_frame(
+      &mut *stream,
+      &D2C::Control(D2CControl::TuiRegistered { tui_id }),
+    );
   }
 
   fn handle_tui_follow(&self, stream: &mut UnixStream, project: &ProjectKey, tui_id: u32) {
     if let Some(entry) = get_tui(&self.tui_registry, &project.repo_root, tui_id) {
-      let _ = write_frame(&mut *stream, &D2C::Control(D2CControl::TuiFollowSucceeded { tui_id }));
+      let _ = write_frame(
+        &mut *stream,
+        &D2C::Control(D2CControl::TuiFollowSucceeded { tui_id }),
+      );
       if let Some(task_id) = entry.focused_task_id {
         let _ = write_frame(
           &mut *stream,
-          &D2C::Control(D2CControl::TuiFocusTaskChanged { project: project.clone(), tui_id, task_id }),
+          &D2C::Control(D2CControl::TuiFocusTaskChanged {
+            project: project.clone(),
+            tui_id,
+            task_id,
+          }),
         );
       }
     } else {
       let _ = write_frame(
         &mut *stream,
-        &D2C::Control(D2CControl::TuiFollowFailed { message: format!("No TUI {tui_id} found") }),
+        &D2C::Control(D2CControl::TuiFollowFailed {
+          message: format!("No TUI {tui_id} found"),
+        }),
       );
     }
   }
@@ -275,7 +294,13 @@ impl SlimDaemon {
     let _ = write_frame(&mut *stream, &D2C::Control(D2CControl::Ack { stopped }));
   }
 
-  fn handle_stop_task(&self, stream: &mut UnixStream, project: &ProjectKey, task_id: u32, slug: &str) {
+  fn handle_stop_task(
+    &self,
+    stream: &mut UnixStream,
+    project: &ProjectKey,
+    task_id: u32,
+    slug: &str,
+  ) {
     let list = tmux_list(&self.cfg, Path::new(&project.repo_root)).unwrap_or_default();
     let mut stopped = 0usize;
     for si in list {

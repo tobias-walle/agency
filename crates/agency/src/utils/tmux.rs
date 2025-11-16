@@ -629,7 +629,9 @@ fn activity_stamp_path(project_root: &Path, session_name: &str) -> PathBuf {
 
 fn is_idle(project_root: &Path, name: &str) -> bool {
   let p = activity_stamp_path(project_root, name);
-  let Ok(meta) = std::fs::metadata(&p) else { return false };
+  let Ok(meta) = std::fs::metadata(&p) else {
+    return false;
+  };
   let mtime = meta.modified().unwrap_or(std::time::SystemTime::now());
   let age = std::time::SystemTime::now()
     .duration_since(mtime)

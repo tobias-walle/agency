@@ -540,9 +540,7 @@ fn ui_loop(
               std::thread::spawn({
                 let ctx = ctx.clone();
                 move || {
-                  if let Err(err) =
-                    crate::commands::start::run_with_attach(&ctx, &id_str, false)
-                  {
+                  if let Err(err) = crate::commands::start::run_with_attach(&ctx, &id_str, false) {
                     crate::log_error!("Start failed: {}", err);
                   }
                 }
@@ -679,8 +677,7 @@ fn ui_loop(
                 move || match crate::commands::new::run(&ctx, &slug, agent.as_deref(), None) {
                   Ok(created) => {
                     let id_str = created.id.to_string();
-                    if let Err(err) =
-                      crate::commands::start::run_with_attach(&ctx, &id_str, false)
+                    if let Err(err) = crate::commands::start::run_with_attach(&ctx, &id_str, false)
                     {
                       crate::log_error!("Start failed: {}", err);
                     }
@@ -1055,7 +1052,9 @@ fn subscribe_events(ctx: &AppContext) -> Result<Receiver<UiEvent>> {
 
 fn emit_focus_change(ctx: &AppContext, tui_id: Option<u32>, task_id: u32) {
   if let Some(tid) = tui_id {
-    let Ok(repo) = crate::utils::git::open_main_repo(ctx.paths.cwd()) else { return };
+    let Ok(repo) = crate::utils::git::open_main_repo(ctx.paths.cwd()) else {
+      return;
+    };
     let root = crate::utils::git::repo_workdir_or(&repo, ctx.paths.cwd());
     let project = crate::daemon_protocol::ProjectKey {
       repo_root: root.display().to_string(),

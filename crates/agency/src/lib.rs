@@ -158,7 +158,14 @@ fn autostart_daemon(ctx: &AppContext, cmd: Option<&Commands>) {
 
 fn run_command(ctx: &AppContext, cli: Cli) -> Result<()> {
   match cli.command {
-    Some(Commands::New { slug, desc, agent, draft, description, no_attach }) => {
+    Some(Commands::New {
+      slug,
+      desc,
+      agent,
+      draft,
+      description,
+      no_attach,
+    }) => {
       let provided_desc = desc.or(description);
       let created = commands::new::run(ctx, &slug, agent.as_deref(), provided_desc.as_deref())?;
       if !draft {
@@ -182,7 +189,11 @@ fn run_command(ctx: &AppContext, cli: Cli) -> Result<()> {
       DaemonCmd::Restart {} => commands::daemon::restart(),
       DaemonCmd::Run {} => commands::daemon::run_blocking(),
     },
-    Some(Commands::Attach { task, session, follow }) => {
+    Some(Commands::Attach {
+      task,
+      session,
+      follow,
+    }) => {
       if let Some(f) = follow {
         commands::attach::run_follow(ctx, f)
       } else if let Some(t) = task {
