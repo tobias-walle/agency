@@ -52,6 +52,7 @@ Agency is a command-line AI agent orchestrator. It helps developers run one or m
 ### Architecture Patterns
 - Daemon + Client: a slim daemon computes session/task status from tmux and broadcasts notifications; CLI/TUI are clients
 - TUI/CLI attach directly to tmux for interactive views; daemon communication via Unix socket
+- IPC is event-driven: clients subscribe to daemon events; avoid polling in steady state. Polling is allowed only as a fallback when events are unavailable or during initial sync.
 - Config layering: defaults → global (`~/.config/agency/agency.toml`) → project (`.agency/agency.toml`)
 - Commands organized under `crates/agency/src/commands/`; shared helpers in `crates/agency/src/utils/`
 - Key files: `crates/agency/src/main.rs`, `crates/agency/src/lib.rs`, `crates/agency/defaults/agency.toml`
