@@ -66,8 +66,6 @@ When the focused task has no running session, the CLI MUST present a minimal inl
 - The follower then spawns an attach child for the new session when the daemon snapshot reflects it
 - The inline overlay re-renders for new focus or clears when a session exists
 
-### Assumptions
-- The CLI is executed outside tmux. It uses `tmux attach-session` as a child process for active sessions and never uses `switch-client`.
 ### Requirement: Cancel on user detach
 If the user manually detaches the tmux attach child, the CLI MUST cancel follow and exit.
 #### Scenario: Follow cancels on manual detach
