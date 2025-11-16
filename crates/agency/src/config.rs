@@ -11,6 +11,10 @@ use toml::Value as TomlValue;
 const DEFAULT_TOML: &str =
   include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/defaults/agency.toml"));
 
+/// Resolve the global config file path.
+///
+/// # Errors
+/// Returns an error if the XDG config home cannot be resolved.
 pub fn global_config_path() -> Result<PathBuf> {
   let xdg = xdg::BaseDirectories::with_prefix("agency");
   let config_home = xdg
@@ -95,7 +99,7 @@ impl AgencyConfig {
     cfg
   }
 
-  /// Resolve the editor argv with precedence: config.editor -> $EDITOR -> ["vi"].
+  /// Resolve the editor argv with precedence: config.editor -> $EDITOR -> [`vi`].
   /// Splits the env var via shell-words to support composite commands.
   #[must_use]
   pub fn editor_argv(&self) -> Vec<String> {
@@ -207,6 +211,11 @@ fn merge_values(base: &mut TomlValue, overlay: TomlValue, path: &str) {
   }
 }
 
+/// Load and merge configuration from defaults, global, and project files.
+///
+/// # Errors
+/// Returns an error if any of the config files cannot be read or parsed
+/// as valid TOML, or if serialization of the merged config fails.
 pub fn load_config(cwd: &Path) -> Result<AgencyConfig> {
   // Start with embedded defaults
   let mut merged: TomlValue =

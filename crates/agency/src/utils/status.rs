@@ -72,10 +72,9 @@ pub fn mark_task_completed(paths: &AgencyPaths, task: &TaskRef) -> Result<()> {
 }
 
 /// Clear the completed marker for a task.
-pub fn clear_task_completed(paths: &AgencyPaths, task: &TaskRef) -> Result<()> {
+pub fn clear_task_completed(paths: &AgencyPaths, task: &TaskRef) {
   let flag = completed_flag_path(paths, task);
   if flag.exists() {
     let _ = fs::remove_file(flag);
   }
-  Ok(())
 }

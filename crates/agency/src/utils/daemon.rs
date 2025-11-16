@@ -174,7 +174,7 @@ pub fn tui_register(ctx: &AppContext, pid: u32) -> anyhow::Result<u32> {
   match read_frame::<_, D2C>(&mut stream)? {
     D2C::Control(D2CControl::TuiRegistered { tui_id }) => Ok(tui_id),
     D2C::Control(D2CControl::Error { message }) => anyhow::bail!(message),
-    _ => anyhow::bail!("Protocol error: expected TuiRegistered reply"),
+    D2C::Control(_) => anyhow::bail!("Protocol error: expected TuiRegistered reply"),
   }
 }
 
@@ -200,65 +200,11 @@ pub fn tui_list(ctx: &AppContext) -> anyhow::Result<Vec<TuiListItem>> {
   match read_frame::<_, D2C>(&mut stream)? {
     D2C::Control(D2CControl::TuiList { items }) => Ok(items),
     D2C::Control(D2CControl::Error { message }) => anyhow::bail!(message),
-    _ => anyhow::bail!("Protocol error: expected TuiList reply"),
+    D2C::Control(_) => anyhow::bail!("Protocol error: expected TuiList reply"),
   }
 }
 
-pub struct FollowHandshake {
-  pub tui_id: u32,
-  pub initial_task_id: Option<u32>,
-}
-
-pub fn tui_follow(ctx: &AppContext, tui_id: u32) -> anyhow::Result<FollowHandshake> {
-  let socket = compute_socket_path(&ctx.config);
-  let repo = open_main_repo(ctx.paths.cwd())?;
-  let repo_root = repo_workdir_or(&repo, ctx.paths.cwd());
-  let project = ProjectKey {
-    repo_root: repo_root.display().to_string(),
-  };
-  let mut stream = connect_daemon_socket(&socket)?;
-  // Important: subscribe first so we receive focus change events
-  write_frame(
-    &mut stream,
-    &C2D::Control(C2DControl::SubscribeEvents {
-      project: project.clone(),
-    }),
-  )?;
-  // Drain initial project state reply (ignore content here)
-  let _ = read_frame::<_, D2C>(&mut stream)?;
-  // Send follow
-  write_frame(
-    &mut stream,
-    &C2D::Control(C2DControl::TuiFollow {
-      project: project.clone(),
-      tui_id,
-    }),
-  )?;
-  // Expect success and optional immediate focus event
-  let mut initial_task: Option<u32> = None;
-  // Read up to two frames: success + optional focus
-  for _ in 0..2 {
-    match read_frame::<_, D2C>(&mut stream) {
-      Ok(D2C::Control(D2CControl::TuiFollowSucceeded { .. })) => {}
-      Ok(D2C::Control(D2CControl::TuiFocusTaskChanged {
-        project: _,
-        tui_id: _,
-        task_id,
-      })) => {
-        initial_task = Some(task_id);
-      }
-      Ok(D2C::Control(D2CControl::TuiFollowFailed { message })) => anyhow::bail!(message),
-      Ok(_) => {}
-      Err(_) => break,
-    }
-  }
-  // Return the open stream to the caller for continuous events
-  // Note: Caller should continue reading events using this stream
-  Ok(FollowHandshake {
-    tui_id,
-    initial_task_id: initial_task,
-  })
-}
+// removed unused follow helpers; Attach::run_follow performs this logic directly
 
 /// Ensure the daemon is running and matches the current CLI version.
 ///

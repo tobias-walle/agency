@@ -147,9 +147,9 @@ pub fn start_session(
   // After sourcing configs, compute the actual detach binding and prefix
   let prefix = read_tmux_prefix(cfg).unwrap_or_else(|_| "C-b".to_string());
   let right = match find_detach_binding(cfg) {
-    Ok(DetachBinding::WithPrefix { key }) => format!(" Press {prefix}+{key} to detach "),
-    Ok(DetachBinding::Prefixless { key }) => format!(" Press {key} to detach "),
-    _ => format!(" Press {prefix}+d to detach "),
+    DetachBinding::WithPrefix { key } => format!(" Press {prefix}+{key} to detach "),
+    DetachBinding::Prefixless { key } => format!(" Press {key} to detach "),
+    DetachBinding::None => format!(" Press {prefix}+d to detach "),
   };
   tmux_set_option(cfg, &name, "status-right", &right)?;
 
@@ -509,10 +509,10 @@ fn read_tmux_prefix(cfg: &AgencyConfig) -> Result<String> {
   Ok("C-b".to_string())
 }
 
-fn find_detach_binding(cfg: &AgencyConfig) -> Result<DetachBinding> {
+fn find_detach_binding(cfg: &AgencyConfig) -> DetachBinding {
   let pref = tmux_list_keys(cfg, Some("prefix")).unwrap_or_default();
   let glob = tmux_list_keys(cfg, None).unwrap_or_default();
-  Ok(parse_detach_binding(&pref, &glob))
+  parse_detach_binding(&pref, &glob)
 }
 
 pub fn list_sessions_for_project(
@@ -558,7 +558,7 @@ pub fn list_sessions_for_project(
     let dead = pane_dead(cfg, name)?;
     let status = if dead {
       "Exited".to_string()
-    } else if is_idle(project_root, name)? {
+    } else if is_idle(project_root, name) {
       "Idle".to_string()
     } else {
       "Running".to_string()
@@ -627,17 +627,14 @@ fn activity_stamp_path(project_root: &Path, session_name: &str) -> PathBuf {
     .join(format!("{session_name}.stamp"))
 }
 
-fn is_idle(project_root: &Path, name: &str) -> Result<bool> {
+fn is_idle(project_root: &Path, name: &str) -> bool {
   let p = activity_stamp_path(project_root, name);
-  let meta = match std::fs::metadata(&p) {
-    Ok(m) => m,
-    Err(_) => return Ok(false),
-  };
+  let Ok(meta) = std::fs::metadata(&p) else { return false };
   let mtime = meta.modified().unwrap_or(std::time::SystemTime::now());
   let age = std::time::SystemTime::now()
     .duration_since(mtime)
     .unwrap_or_default();
-  Ok(age >= std::time::Duration::from_secs(1))
+  age >= std::time::Duration::from_secs(1)
 }
 
 #[cfg(test)]

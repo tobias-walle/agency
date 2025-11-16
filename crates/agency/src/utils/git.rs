@@ -359,9 +359,9 @@ pub fn delete_branch_if_exists_at(cwd: &Path, name: &str) -> Result<bool> {
 // Tests moved to end of file to avoid items-after-test-module lint
 
 /// Remove a linked worktree directory if it exists; returns whether it existed beforehand.
-pub fn prune_worktree_if_exists_at(cwd: &Path, wt_path: &Path) -> Result<bool> {
+pub fn prune_worktree_if_exists_at(cwd: &Path, wt_path: &Path) -> bool {
   if !wt_path.exists() {
-    return Ok(false);
+    return false;
   }
   if let Err(_e) = git(
     &[
@@ -373,9 +373,9 @@ pub fn prune_worktree_if_exists_at(cwd: &Path, wt_path: &Path) -> Result<bool> {
     cwd,
   ) {
     let _ = git(&["worktree", "prune"], cwd);
-    return Ok(wt_path.exists());
+    return wt_path.exists();
   }
-  Ok(true)
+  true
 }
 
 /// Compute unstaged diffstat additions/deletions for the working tree at `workdir`.

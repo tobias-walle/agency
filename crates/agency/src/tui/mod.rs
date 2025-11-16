@@ -754,10 +754,9 @@ fn reinit_terminal(terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>) -
 
 fn status_style(status: &str) -> Style {
   match status {
-    "Running" => Style::default().fg(Color::Green),
+    "Running" | "Completed" => Style::default().fg(Color::Green),
     "Idle" => Style::default().fg(Color::Blue),
     "Exited" | "Stopped" => Style::default().fg(Color::Red),
-    "Completed" => Style::default().fg(Color::Green),
     "Draft" => Style::default().fg(Color::Yellow),
     _ => Style::default(),
   }
@@ -1037,7 +1036,7 @@ fn subscribe_events(ctx: &AppContext) -> Result<Receiver<UiEvent>> {
           Ok(D2C::Control(D2CControl::ProjectState { .. })) => {
             let _ = tx_events.send(UiEvent::ProjectState);
           }
-          Ok(_) => {}
+          Ok(D2C::Control(_)) => {}
           Err(err) => {
             let _ = tx_events.send(UiEvent::Disconnected(err));
             break;
@@ -1050,10 +1049,7 @@ fn subscribe_events(ctx: &AppContext) -> Result<Receiver<UiEvent>> {
 
 fn emit_focus_change(ctx: &AppContext, tui_id: Option<u32>, task_id: u32) {
   if let Some(tid) = tui_id {
-    let repo = match crate::utils::git::open_main_repo(ctx.paths.cwd()) {
-      Ok(r) => r,
-      Err(_) => return,
-    };
+    let Ok(repo) = crate::utils::git::open_main_repo(ctx.paths.cwd()) else { return };
     let root = crate::utils::git::repo_workdir_or(&repo, ctx.paths.cwd());
     let project = crate::daemon_protocol::ProjectKey {
       repo_root: root.display().to_string(),

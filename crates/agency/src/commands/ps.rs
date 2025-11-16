@@ -155,21 +155,21 @@ mod tests {
 
   #[test]
   fn status_text_labels_and_colors() {
-    let d = get_status_text(None);
-    let r = get_status_text(Some("Running"));
-    let e = get_status_text(Some("Exited"));
-    let s = get_status_text(Some("Stopped"));
-    let i = get_status_text(Some("Idle"));
-    assert_eq!(strip_ansi_control_codes(&d), "Draft");
-    assert_eq!(strip_ansi_control_codes(&r), "Running");
-    assert_eq!(strip_ansi_control_codes(&e), "Exited");
-    assert_eq!(strip_ansi_control_codes(&s), "Stopped");
-    assert_eq!(strip_ansi_control_codes(&i), "Idle");
+    let draft_text = get_status_text(None);
+    let running_text = get_status_text(Some("Running"));
+    let exited_text = get_status_text(Some("Exited"));
+    let stopped_text = get_status_text(Some("Stopped"));
+    let idle_text = get_status_text(Some("Idle"));
+    assert_eq!(strip_ansi_control_codes(&draft_text), "Draft");
+    assert_eq!(strip_ansi_control_codes(&running_text), "Running");
+    assert_eq!(strip_ansi_control_codes(&exited_text), "Exited");
+    assert_eq!(strip_ansi_control_codes(&stopped_text), "Stopped");
+    assert_eq!(strip_ansi_control_codes(&idle_text), "Idle");
     // Ensure ANSI color codes are present in colored output
-    assert!(d.contains("\x1B["));
-    assert!(r.contains("\x1B["));
-    assert!(e.contains("\x1B["));
-    assert!(s.contains("\x1B["));
-    assert!(i.contains("\x1B["));
+    assert!(draft_text.contains("\x1B["));
+    assert!(running_text.contains("\x1B["));
+    assert!(exited_text.contains("\x1B["));
+    assert!(stopped_text.contains("\x1B["));
+    assert!(idle_text.contains("\x1B["));
   }
 }

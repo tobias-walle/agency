@@ -84,13 +84,8 @@ pub fn run_follow(ctx: &AppContext, tui_id_opt: Option<u32>) -> Result<()> {
       {
         // Drain initial
         let _ = read_frame::<_, D2C>(&mut s);
-        loop {
-          match read_frame::<_, D2C>(&mut s) {
-            Ok(msg) => {
-              let _ = tx.send(msg);
-            }
-            Err(_) => break,
-          }
+        while let Ok(msg) = read_frame::<_, D2C>(&mut s) {
+          let _ = tx.send(msg);
         }
       }
     })?;
@@ -108,12 +103,11 @@ pub fn run_follow(ctx: &AppContext, tui_id_opt: Option<u32>) -> Result<()> {
   let mut initial_focus: Option<u32> = None;
   for _ in 0..2 {
     match read_frame::<_, D2C>(&mut follow_stream) {
-      Ok(D2C::Control(D2CControl::TuiFollowSucceeded { .. })) => {}
       Ok(D2C::Control(D2CControl::TuiFocusTaskChanged { task_id, .. })) => {
         initial_focus = Some(task_id);
       }
       Ok(D2C::Control(D2CControl::TuiFollowFailed { message })) => anyhow::bail!(message),
-      Ok(_) => {}
+      Ok(D2C::Control(_)) => {}
       Err(_) => break,
     }
   }
@@ -148,65 +142,41 @@ pub fn run_follow(ctx: &AppContext, tui_id_opt: Option<u32>) -> Result<()> {
   }
 
   // Overlay UI (ratatui) lifecycle
-  let mut overlay_ui: Option<OverlayUI> = None;
+  let overlay_ui: Option<OverlayUI> = None;
 
-  // Event loop: receive focus changes and check overlay exits
+  run_follow_loop(
+    ctx,
+    target_id,
+    &rx,
+    current_child,
+    child_gen,
+    overlay_active,
+    overlay_task_id,
+    current_task_id,
+    overlay_ui,
+  )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn run_follow_loop(
+  ctx: &AppContext,
+  target_id: u32,
+  rx: &crossbeam_channel::Receiver<D2C>,
+  mut current_child: Option<(Child, u64)>,
+  mut child_gen: u64,
+  mut overlay_active: bool,
+  mut overlay_task_id: Option<u32>,
+  mut current_task_id: Option<u32>,
+  mut overlay_ui: Option<OverlayUI>,
+) -> Result<()> {
   loop {
     // Draw overlay when active and poll for key events
-    if overlay_active {
-      if overlay_ui.is_none() {
-        overlay_ui = Some(OverlayUI::init()?);
-      }
-      if let Some(ui) = overlay_ui.as_mut() {
-        // Recompute slug for display each frame from daemon state
-        if let Ok(state) = dutil::get_project_state(ctx)
-          && let Some(tid) = overlay_task_id
-        {
-          let slug = state
-            .tasks
-            .iter()
-            .find(|t| t.id == tid)
-            .map_or_else(|| format!("task-{tid}"), |t| t.slug.clone());
-          ui.draw(&slug, tid)?;
-        }
-      }
-      // Handle key 's' to start the session or C-c to cancel follow (drain any pending key events)
-      while event::poll(std::time::Duration::from_millis(0))? {
-        if let Event::Key(k) = event::read()?
-          && k.kind != KeyEventKind::Repeat
-        {
-          if k.modifiers.contains(KeyModifiers::CONTROL) && matches!(k.code, KeyCode::Char('c')) {
-            if let Some(ui) = overlay_ui.take() {
-              ui.restore();
-            }
-            return Ok(());
-          }
-          if let KeyCode::Char('s') = k.code
-            && let Some(task_id) = overlay_task_id
-          {
-            let state = dutil::get_project_state(ctx)?;
-            let slug = state
-              .tasks
-              .iter()
-              .find(|t| t.id == task_id)
-              .map_or_else(|| format!("task-{task_id}"), |t| t.slug.clone());
-            let tref = crate::utils::task::TaskRef { id: task_id, slug };
-            let plan = build_session_plan(ctx, &tref)?;
-            let _ = start_session_for_task(ctx, &plan, false);
-          }
-        }
-      }
+    if overlay_active && handle_overlay(ctx, &mut overlay_ui, &mut overlay_task_id)? {
+      return Ok(());
     }
 
     // Periodically ensure the followed TUI still exists; cancel if it disappeared
-    if let Ok(items) = dutil::tui_list(ctx)
-      && !items.iter().any(|i| i.tui_id == target_id)
-    {
-      if let Some(ui) = overlay_ui.take() {
-        ui.restore();
-      }
-      anyhow::bail!("Follow canceled: TUI {target_id} disappeared (closed or died)");
-    }
+    check_tui_still_exists(ctx, target_id, &mut overlay_ui)?;
 
     match rx.recv_timeout(std::time::Duration::from_millis(200)) {
       Ok(D2C::Control(D2CControl::TuiFocusTaskChanged {
@@ -276,6 +246,69 @@ pub fn run_follow(ctx: &AppContext, tui_id_opt: Option<u32>) -> Result<()> {
       overlay_task_id = None;
     }
   }
+}
+
+fn handle_overlay(
+  ctx: &AppContext,
+  overlay_ui: &mut Option<OverlayUI>,
+  overlay_task_id: &mut Option<u32>,
+) -> Result<bool> {
+  if overlay_ui.is_none() {
+    *overlay_ui = Some(OverlayUI::init()?);
+  }
+  if let Some(ui) = overlay_ui.as_mut()
+    && let Ok(state) = dutil::get_project_state(ctx)
+    && let Some(tid) = *overlay_task_id
+  {
+    let slug = state
+      .tasks
+      .iter()
+      .find(|t| t.id == tid)
+      .map_or_else(|| format!("task-{tid}"), |t| t.slug.clone());
+    ui.draw(&slug, tid)?;
+  }
+  while event::poll(std::time::Duration::from_millis(0))? {
+    if let Event::Key(k) = event::read()?
+      && k.kind != KeyEventKind::Repeat
+    {
+      if k.modifiers.contains(KeyModifiers::CONTROL) && matches!(k.code, KeyCode::Char('c')) {
+        if let Some(ui) = overlay_ui.take() {
+          ui.restore();
+        }
+        return Ok(true);
+      }
+      if let KeyCode::Char('s') = k.code
+        && let Some(task_id) = *overlay_task_id
+      {
+        let state = dutil::get_project_state(ctx)?;
+        let slug = state
+          .tasks
+          .iter()
+          .find(|t| t.id == task_id)
+          .map_or_else(|| format!("task-{task_id}"), |t| t.slug.clone());
+        let tref = crate::utils::task::TaskRef { id: task_id, slug };
+        let plan = build_session_plan(ctx, &tref)?;
+        let _ = start_session_for_task(ctx, &plan, false);
+      }
+    }
+  }
+  Ok(false)
+}
+
+fn check_tui_still_exists(
+  ctx: &AppContext,
+  target_id: u32,
+  overlay_ui: &mut Option<OverlayUI>,
+) -> Result<()> {
+  if let Ok(items) = dutil::tui_list(ctx)
+    && !items.iter().any(|i| i.tui_id == target_id)
+  {
+    if let Some(ui) = overlay_ui.take() {
+      ui.restore();
+    }
+    anyhow::bail!("Follow canceled: TUI {target_id} disappeared (closed or died)");
+  }
+  Ok(())
 }
 
 fn pick_tui_id(explicit: Option<u32>, items: &[TuiListItem]) -> anyhow::Result<u32> {

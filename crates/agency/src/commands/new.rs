@@ -31,11 +31,8 @@ pub fn run(
     let slug = compute_unique_slug(&tasks, &base_slug)?;
 
     // Determine base branch from current repo HEAD
-    let repo = match open_main_repo(ctx.paths.cwd()) {
-      Ok(r) => r,
-      Err(_) => {
-        bail!("Not in a git repository. Please run `git init` or cd to a repo.");
-      }
+    let Ok(repo) = open_main_repo(ctx.paths.cwd()) else {
+      bail!("Not in a git repository. Please run `git init` or cd to a repo.");
     };
     let base_branch = match current_branch_name(&repo) {
       Ok(name) => name,

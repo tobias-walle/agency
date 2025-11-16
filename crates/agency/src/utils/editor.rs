@@ -19,16 +19,16 @@ pub fn open_path(cfg: &AgencyConfig, path: &Path, cwd: &Path) -> Result<()> {
     .display()
     .to_string();
 
-  let argv = cfg.editor_argv();
-  let (program, rest) = argv
+  let editor_argv = cfg.editor_argv();
+  let (program, rest) = editor_argv
     .split_first()
     .ok_or_else(|| anyhow::anyhow!("invalid editor argv: empty"))?;
-  let mut args: Vec<String> = rest.to_vec();
-  args.push(target);
+  let mut launch_args: Vec<String> = rest.to_vec();
+  launch_args.push(target);
 
   interactive::scope(|| {
     let status = Command::new(program)
-      .args(&args)
+      .args(&launch_args)
       .current_dir(cwd)
       .status()
       .with_context(|| format!("failed to spawn editor program: {program}"))?;

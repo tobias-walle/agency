@@ -31,7 +31,32 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 
 # Code Style
 
-- You SHALL keep the code linear (avoid nesting) and functions to a managable size.
+- Naming
+  - Avoid single-letter variable names except trivial indices; use descriptive names (e.g., `draft_text`, `editor_args`).
+  - Avoid similar names in the same scope (e.g., `argv` vs `args`); choose clearly distinct identifiers.
+  - Avoid underscore-prefixed bindings in production and tests; use descriptive names.
+- Function Size & Structure
+  - Keep functions under ~100 lines; extract helpers to satisfy `clippy::too_many_lines`.
+  - Reduce nesting: early-returns, guard clauses, and splitting logic into small functions.
+  - Prefer `let...else` over manual `match` for input validation and early exits.
+  - Do not place item declarations after statements in a scope; declare items before executable code.
+  - Prefer `while let` loops for stream/frame reads or "read-until-end" patterns instead of `loop { match ... }`.
+- Match Hygiene
+  - Merge identical match arms; avoid wildcard `_` on enums where future variants are possible.
+  - Use explicit variants or a catch-all with clear handling.
+- Documentation
+  - For any function returning `Result`, include a `# Errors` section describing failure cases.
+- Conversions
+  - Avoid lossy numeric casts; use `TryFrom`, checked conversions, or explicit bounds handling.
+  - Do not wrap return values in `Result` without actual error paths.
+- Parameter Passing
+  - Prefer passing by reference when the value is not consumed.
+  - Prefer `Option<&T>` over `&Option<T>` for optional borrows.
+- Error Handling
+  - Do not panic in library code; return errors instead. In tests, prefer `assert!`/`assert_eq!` over `panic!`.
+- Lint Hygiene
+  - Prefer fixing code over broad `#[allow(...)]`; when needed, keep allows local and narrowly scoped.
+- You MUST keep the code linear (avoid nesting)
 - If this is not given, you MUST do the following:
   - Detect duplicated code and extract it to seperate functions
   - Detect strong nesting and create functions to reduce it
@@ -40,5 +65,5 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 # Rules
 
 - You MUST run `just check` regulary to detect compile errors
-- You MUST run `just test && just fix` after every phase and fix all errors and warnings
+- You MUST run `just test` `just check-strict` after every phase. You MUST fix all warnings and errors. If the sandbox permits these commands, ask for approval.
 - If you remove code, you MUST NEVER replace it with useless comments (Like `// removed ...`, `// deleted ...`, etc.). If you find comments like this always delete them.

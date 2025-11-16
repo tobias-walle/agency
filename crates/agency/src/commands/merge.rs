@@ -214,7 +214,7 @@ fn cleanup_task_artifacts(
   file_path: &Path,
 ) -> Result<()> {
   use crate::utils::git::{delete_branch_if_exists_at, prune_worktree_if_exists_at};
-  let _ = prune_worktree_if_exists_at(repo_workdir, wt_dir)?;
+  let _ = prune_worktree_if_exists_at(repo_workdir, wt_dir);
   let _ = delete_branch_if_exists_at(repo_workdir, branch)?;
   if file_path.exists() {
     fs::remove_file(file_path)

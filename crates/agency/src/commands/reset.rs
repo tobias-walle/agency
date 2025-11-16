@@ -34,7 +34,7 @@ pub fn run(ctx: &AppContext, ident: &str) -> Result<()> {
       log_success!("Deleted branch {}", branch);
     }
     // Clear completed marker so future status derives from runtime state
-    let _ = clear_task_completed(&ctx.paths, &tref);
+    clear_task_completed(&ctx.paths, &tref);
 
     Ok(())
   })

@@ -24,8 +24,8 @@ check:
   cargo clippy -q --all-targets -- -A warnings
 
 # Check for compiler or linting errors (Verbose)
-check-verbose:
-  cargo clippy --all-targets
+check-strict *ARGS:
+  cargo clippy --offline --all-targets {{ARGS}} -- -W clippy::pedantic -A clippy::missing-errors-doc -A clippy::doc_link_with_quotes -A clippy::option_option
 
 # Format the code
 fmt:
@@ -33,7 +33,7 @@ fmt:
 
 # Fix the linting errors and formatting
 fix:
-  cargo clippy -q --allow-dirty --allow-staged --all-targets --fix -- -F clippy::pedantic -A clippy::missing-errors-doc
+  just check-strict --allow-dirty --allow-staged --fix
   just fmt
 
 tmux *ARGS:

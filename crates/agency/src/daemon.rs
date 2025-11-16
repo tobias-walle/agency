@@ -67,17 +67,17 @@ impl SlimDaemon {
     }
   }
 
-  fn snapshot_for(&self, project: &ProjectKey) -> anyhow::Result<ProjectSnapshot> {
+  fn snapshot_for(&self, project: &ProjectKey) -> ProjectSnapshot {
     let prev = self.last_snapshot.lock().get(&project.repo_root).cloned();
     build_project_snapshot(&self.cfg, project, prev.as_ref())
   }
 
-  fn update_cache_and_broadcast(&self, project: &ProjectKey, snap: ProjectSnapshot) {
+  fn update_cache_and_broadcast(&self, project: &ProjectKey, snap: &ProjectSnapshot) {
     self
       .last_snapshot
       .lock()
       .insert(project.repo_root.clone(), snap.clone());
-    broadcast_project_state(&self.subscribers, project, &snap);
+    broadcast_project_state(&self.subscribers, project, snap);
   }
 
   pub fn run(&self) -> Result<()> {
@@ -95,15 +95,12 @@ impl SlimDaemon {
           let targets: Vec<ProjectKey> = subs.lock().iter().map(|s| s.project.clone()).collect();
           for pk in targets {
             let prev = cache.lock().get(&pk.repo_root).cloned();
-            if let Ok(new_snap) = build_project_snapshot(&cfg, &pk, prev.as_ref()) {
-              let mut cache_guard = cache.lock();
-              let changed = cache_guard.get(&pk.repo_root) != Some(&new_snap);
-              if changed {
-                cache_guard.insert(pk.repo_root.clone(), new_snap.clone());
-                broadcast_project_state(&subs, &pk, &new_snap);
-              }
-            } else {
-              // Ignore snapshot errors in poller; clients may retry
+            let new_snap = build_project_snapshot(&cfg, &pk, prev.as_ref());
+            let mut cache_guard = cache.lock();
+            let changed = cache_guard.get(&pk.repo_root) != Some(&new_snap);
+            if changed {
+              cache_guard.insert(pk.repo_root.clone(), new_snap.clone());
+              broadcast_project_state(&subs, &pk, &new_snap);
             }
           }
           // Liveness: best-effort every ~10s
@@ -117,9 +114,7 @@ impl SlimDaemon {
     while !self.shutdown.load(std::sync::atomic::Ordering::Relaxed) {
       match self.listener.accept() {
         Ok((mut stream, _)) => {
-          if let Err(err) = self.handle_connection(&mut stream) {
-            error!("Connection error: {err}");
-          }
+          self.handle_connection(&mut stream);
         }
         Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
           std::thread::sleep(Duration::from_millis(50));
@@ -136,65 +131,20 @@ impl SlimDaemon {
     Ok(())
   }
 
-  fn handle_connection(&self, stream: &mut UnixStream) -> Result<()> {
+  fn handle_connection(&self, stream: &mut UnixStream) {
     let first = read_frame::<_, C2D>(&mut *stream);
     match first {
       Ok(C2D::Control(C2DControl::ListProjectState { project })) => {
-        match self.snapshot_for(&project) {
-          Ok(new_snap) => {
-            let _ = write_frame(
-              &mut *stream,
-              &D2C::Control(D2CControl::ProjectState {
-                project,
-                tasks: new_snap.tasks,
-                sessions: new_snap.sessions,
-                metrics: new_snap.metrics,
-              }),
-            );
-          }
-          Err(err) => {
-            let _ = write_frame(
-              &mut *stream,
-              &D2C::Control(D2CControl::Error {
-                message: format!("Snapshot error: {err}"),
-              }),
-            );
-          }
-        }
+        self.write_project_state(stream, &project);
       }
       Ok(C2D::Control(C2DControl::GetVersion)) => {
-        let ver = crate::utils::version::get_version().to_string();
-        let _ = write_frame(
-          &mut *stream,
-          &D2C::Control(D2CControl::Version { version: ver }),
-        );
+        Self::write_version(stream);
       }
       Ok(C2D::Control(C2DControl::SubscribeEvents { project })) => {
-        // Send initial snapshot
-        if let Ok(snap) = self.snapshot_for(&project) {
-          let _ = write_frame(
-            &mut *stream,
-            &D2C::Control(D2CControl::ProjectState {
-              project: project.clone(),
-              tasks: snap.tasks.clone(),
-              sessions: snap.sessions.clone(),
-              metrics: snap.metrics.clone(),
-            }),
-          );
-        }
-        // Store subscriber; keep stream open until disconnect
-        let cloned = stream.try_clone()?;
-        self.subscribers.lock().push(Subscriber {
-          project,
-          stream: cloned,
-        });
+        self.handle_subscribe(stream, &project);
       }
       Ok(C2D::Control(C2DControl::TuiRegister { project, pid })) => {
-        let tui_id = assign_tui_id(&self.tui_registry, &project.repo_root, pid);
-        let _ = write_frame(
-          &mut *stream,
-          &D2C::Control(D2CControl::TuiRegistered { tui_id }),
-        );
+        self.handle_tui_register(stream, &project, pid);
       }
       Ok(C2D::Control(C2DControl::TuiUnregister { project, pid })) => {
         unregister_tui(&self.tui_registry, &project.repo_root, pid);
@@ -205,29 +155,7 @@ impl SlimDaemon {
         let _ = write_frame(&mut *stream, &D2C::Control(D2CControl::TuiList { items }));
       }
       Ok(C2D::Control(C2DControl::TuiFollow { project, tui_id })) => {
-        if let Some(entry) = get_tui(&self.tui_registry, &project.repo_root, tui_id) {
-          let _ = write_frame(
-            &mut *stream,
-            &D2C::Control(D2CControl::TuiFollowSucceeded { tui_id }),
-          );
-          if let Some(task_id) = entry.focused_task_id {
-            let _ = write_frame(
-              &mut *stream,
-              &D2C::Control(D2CControl::TuiFocusTaskChanged {
-                project,
-                tui_id,
-                task_id,
-              }),
-            );
-          }
-        } else {
-          let _ = write_frame(
-            &mut *stream,
-            &D2C::Control(D2CControl::TuiFollowFailed {
-              message: format!("No TUI {tui_id} found"),
-            }),
-          );
-        }
+        self.handle_tui_follow(stream, &project, tui_id);
       }
       Ok(C2D::Control(C2DControl::TuiFocusTaskChange {
         project,
@@ -239,45 +167,15 @@ impl SlimDaemon {
         let _ = write_frame(&mut *stream, &D2C::Control(D2CControl::Ack { stopped: 0 }));
       }
       Ok(C2D::Control(C2DControl::NotifyTasksChanged { project })) => {
-        // Recompute and broadcast a fresh snapshot for the project
-        if let Ok(snap) = self.snapshot_for(&project) {
-          self.update_cache_and_broadcast(&project, snap);
-        }
+        let snap = self.snapshot_for(&project);
+        self.update_cache_and_broadcast(&project, &snap);
         let _ = write_frame(&mut *stream, &D2C::Control(D2CControl::Ack { stopped: 0 }));
       }
       Ok(C2D::Control(C2DControl::StopSession { session_id })) => {
-        // Find session by id in all projects with subscribers first; fallback to best-effort kill
-        let all_projects: Vec<ProjectKey> = self
-          .subscribers
-          .lock()
-          .iter()
-          .map(|s| s.project.clone())
-          .collect();
-        let mut stopped = 0usize;
-        for pk in all_projects {
-          let list = tmux_list(&self.cfg, Path::new(&pk.repo_root)).unwrap_or_default();
-          if let Some(si) = list.iter().find(|s| s.session_id == session_id) {
-            let _ = crate::utils::tmux::kill_session(&self.cfg, &si.task);
-            stopped = 1;
-            break;
-          }
-        }
-        let _ = write_frame(&mut *stream, &D2C::Control(D2CControl::Ack { stopped }));
+        self.handle_stop_session(stream, session_id);
       }
-      Ok(C2D::Control(C2DControl::StopTask {
-        project,
-        task_id,
-        slug,
-      })) => {
-        let list = tmux_list(&self.cfg, Path::new(&project.repo_root)).unwrap_or_default();
-        let mut stopped = 0usize;
-        for si in list {
-          if si.task.id == task_id && si.task.slug == slug {
-            let _ = crate::utils::tmux::kill_session(&self.cfg, &si.task);
-            stopped += 1;
-          }
-        }
-        let _ = write_frame(&mut *stream, &D2C::Control(D2CControl::Ack { stopped }));
+      Ok(C2D::Control(C2DControl::StopTask { project, task_id, slug })) => {
+        self.handle_stop_task(stream, &project, task_id, &slug);
       }
       Ok(C2D::Control(C2DControl::Shutdown)) => {
         self
@@ -291,14 +189,102 @@ impl SlimDaemon {
 
       Err(err) => {
         let _ = write_frame(
-          &mut *stream,
+          stream,
           &D2C::Control(D2CControl::Error {
             message: format!("Read error: {err}"),
           }),
         );
       }
     }
-    Ok(())
+  }
+
+  fn write_project_state(&self, stream: &mut UnixStream, project: &ProjectKey) {
+    let new_snap = self.snapshot_for(project);
+    let _ = write_frame(
+      &mut *stream,
+      &D2C::Control(D2CControl::ProjectState {
+        project: project.clone(),
+        tasks: new_snap.tasks,
+        sessions: new_snap.sessions,
+        metrics: new_snap.metrics,
+      }),
+    );
+  }
+
+  fn write_version(stream: &mut UnixStream) {
+    let ver = crate::utils::version::get_version().to_string();
+    let _ = write_frame(&mut *stream, &D2C::Control(D2CControl::Version { version: ver }));
+  }
+
+  fn handle_subscribe(&self, stream: &mut UnixStream, project: &ProjectKey) {
+    let snap = self.snapshot_for(project);
+    let _ = write_frame(
+      &mut *stream,
+      &D2C::Control(D2CControl::ProjectState {
+        project: project.clone(),
+        tasks: snap.tasks.clone(),
+        sessions: snap.sessions.clone(),
+        metrics: snap.metrics.clone(),
+      }),
+    );
+    let cloned = stream.try_clone().unwrap();
+    self
+      .subscribers
+      .lock()
+      .push(Subscriber { project: project.clone(), stream: cloned });
+  }
+
+  fn handle_tui_register(&self, stream: &mut UnixStream, project: &ProjectKey, pid: u32) {
+    let tui_id = assign_tui_id(&self.tui_registry, &project.repo_root, pid);
+    let _ = write_frame(&mut *stream, &D2C::Control(D2CControl::TuiRegistered { tui_id }));
+  }
+
+  fn handle_tui_follow(&self, stream: &mut UnixStream, project: &ProjectKey, tui_id: u32) {
+    if let Some(entry) = get_tui(&self.tui_registry, &project.repo_root, tui_id) {
+      let _ = write_frame(&mut *stream, &D2C::Control(D2CControl::TuiFollowSucceeded { tui_id }));
+      if let Some(task_id) = entry.focused_task_id {
+        let _ = write_frame(
+          &mut *stream,
+          &D2C::Control(D2CControl::TuiFocusTaskChanged { project: project.clone(), tui_id, task_id }),
+        );
+      }
+    } else {
+      let _ = write_frame(
+        &mut *stream,
+        &D2C::Control(D2CControl::TuiFollowFailed { message: format!("No TUI {tui_id} found") }),
+      );
+    }
+  }
+
+  fn handle_stop_session(&self, stream: &mut UnixStream, session_id: u64) {
+    let all_projects: Vec<ProjectKey> = self
+      .subscribers
+      .lock()
+      .iter()
+      .map(|s| s.project.clone())
+      .collect();
+    let mut stopped = 0usize;
+    for pk in all_projects {
+      let list = tmux_list(&self.cfg, Path::new(&pk.repo_root)).unwrap_or_default();
+      if let Some(si) = list.iter().find(|s| s.session_id == session_id) {
+        let _ = crate::utils::tmux::kill_session(&self.cfg, &si.task);
+        stopped = 1;
+        break;
+      }
+    }
+    let _ = write_frame(&mut *stream, &D2C::Control(D2CControl::Ack { stopped }));
+  }
+
+  fn handle_stop_task(&self, stream: &mut UnixStream, project: &ProjectKey, task_id: u32, slug: &str) {
+    let list = tmux_list(&self.cfg, Path::new(&project.repo_root)).unwrap_or_default();
+    let mut stopped = 0usize;
+    for si in list {
+      if si.task.id == task_id && si.task.slug == slug {
+        let _ = crate::utils::tmux::kill_session(&self.cfg, &si.task);
+        stopped += 1;
+      }
+    }
+    let _ = write_frame(&mut *stream, &D2C::Control(D2CControl::Ack { stopped }));
   }
 }
 
@@ -327,14 +313,14 @@ fn now_ms() -> u64 {
   let dur = SystemTime::now()
     .duration_since(UNIX_EPOCH)
     .unwrap_or_else(|_| Duration::from_secs(0));
-  dur.as_millis() as u64
+  u64::try_from(dur.as_millis()).unwrap_or(u64::MAX)
 }
 
 fn build_project_snapshot(
   cfg: &crate::config::AgencyConfig,
   project: &ProjectKey,
   prev: Option<&ProjectSnapshot>,
-) -> anyhow::Result<ProjectSnapshot> {
+) -> ProjectSnapshot {
   let root = Path::new(&project.repo_root);
   // Sessions from tmux
   let sessions = tmux_list(cfg, root).unwrap_or_default();
@@ -363,14 +349,13 @@ fn build_project_snapshot(
   }
 
   // Determine candidate tasks: Running from sessions or Completed via flags
-  use std::collections::HashSet;
-  let running: HashSet<(u32, String)> = sessions
+  let running: std::collections::HashSet<(u32, String)> = sessions
     .iter()
     .filter(|s| s.status == "Running" || s.status == "Idle" || s.status == "Exited")
     .map(|s| (s.task.id, s.task.slug.clone()))
     .collect();
 
-  let mut candidates: HashSet<(u32, String)> = running.clone();
+  let mut candidates: std::collections::HashSet<(u32, String)> = running.clone();
   for t in &task_refs {
     if is_task_completed(&paths, t) {
       candidates.insert((t.id, t.slug.clone()));
@@ -433,11 +418,11 @@ fn build_project_snapshot(
       .then_with(|| a.task.slug.cmp(&b.task.slug))
   });
 
-  Ok(ProjectSnapshot {
+  ProjectSnapshot {
     tasks: tasks_info,
     sessions: sessions_sorted,
     metrics,
-  })
+  }
 }
 
 // Helper for the poller: broadcast snapshot to all subscribers of a project.
@@ -699,7 +684,7 @@ mod tests {
         assert_eq!(tui_id, 3);
         assert_eq!(task_id, 42);
       }
-      other => panic!("unexpected: {other:?}"),
+      other @ D2C::Control(_) => panic!("unexpected: {other:?}"),
     }
   }
 }

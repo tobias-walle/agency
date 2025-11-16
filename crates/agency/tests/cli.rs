@@ -276,7 +276,7 @@ fn daemon_reports_version_via_protocol() -> Result<()> {
             "daemon version must match CLI version",
           );
         }
-        other => panic!("unexpected reply: {other:?}"),
+        other @ agency::daemon_protocol::D2C::Control(_) => panic!("unexpected reply: {other:?}"),
       }
       Ok(())
     },
@@ -926,7 +926,7 @@ fn complete_marks_status_completed_and_uses_env() -> Result<()> {
   env.init_repo()?;
 
   // Create a task
-  let (id, _slug) = env.new_task("complete-a", &["--draft"])?;
+  let (id, slug) = env.new_task("complete-a", &["--draft"])?;
 
   // Mark complete by explicit id
   {
@@ -942,7 +942,7 @@ fn complete_marks_status_completed_and_uses_env() -> Result<()> {
       .join(".agency")
       .join("state")
       .join("completed")
-      .join(format!("{id}-{_slug}"));
+      .join(format!("{id}-{slug}"));
     assert!(
       flag.is_file(),
       "completed flag should exist at {}",
@@ -951,7 +951,7 @@ fn complete_marks_status_completed_and_uses_env() -> Result<()> {
   }
 
   // Create another task and mark complete via env var
-  let (id2, _slug2) = env.new_task("complete-b", &["--draft"])?;
+  let (id2, slug2) = env.new_task("complete-b", &["--draft"])?;
   {
     let mut cmd = env.bin_cmd()?;
     cmd.arg("complete");
@@ -965,7 +965,7 @@ fn complete_marks_status_completed_and_uses_env() -> Result<()> {
       .join(".agency")
       .join("state")
       .join("completed")
-      .join(format!("{id2}-{_slug2}"));
+      .join(format!("{id2}-{slug2}"));
     assert!(
       flag2.is_file(),
       "completed flag should exist at {}",

@@ -135,141 +135,97 @@ pub fn parse() -> Cli {
 
 pub fn run() -> Result<()> {
   let cli = parse();
+  let ctx = build_context()?;
+  autostart_daemon(&ctx, cli.command.as_ref());
+  run_command(&ctx, cli)
+}
+
+fn build_context() -> Result<AppContext> {
   let cwd = std::env::current_dir()?;
   let project_root = resolve_main_workdir(&cwd);
   let paths = AgencyPaths::new(project_root.clone());
   let config = load_config(&project_root)?;
-  let ctx = AppContext { paths, config };
+  Ok(AppContext { paths, config })
+}
 
-  // Autostart daemon for all commands except explicit daemon control
-  match &cli.command {
-    Some(Commands::Daemon { .. }) => {}
-    Some(_) => {
-      let _ = ensure_running_and_latest_version(&ctx);
-      let _ = ensure_tmux_server(&ctx.config);
-    }
-    None => {}
+fn autostart_daemon(ctx: &AppContext, cmd: Option<&Commands>) {
+  if matches!(cmd, Some(Commands::Daemon { .. }) | None) {
+    return;
   }
+  let _ = ensure_running_and_latest_version(ctx);
+  let _ = ensure_tmux_server(&ctx.config);
+}
 
+fn run_command(ctx: &AppContext, cli: Cli) -> Result<()> {
   match cli.command {
-    Some(Commands::New {
-      slug,
-      desc,
-      agent,
-      draft,
-      description,
-      no_attach,
-    }) => {
+    Some(Commands::New { slug, desc, agent, draft, description, no_attach }) => {
       let provided_desc = desc.or(description);
-      let created = commands::new::run(&ctx, &slug, agent.as_deref(), provided_desc.as_deref())?;
+      let created = commands::new::run(ctx, &slug, agent.as_deref(), provided_desc.as_deref())?;
       if !draft {
         let ident = created.id.to_string();
-        // Start the session and optionally attach; fails if already started
-        commands::start::run_with_attach(&ctx, &ident, !no_attach)?;
+        commands::start::run_with_attach(ctx, &ident, !no_attach)?;
       }
+      Ok(())
     }
-    Some(Commands::Merge { ident, base }) => {
-      commands::merge::run(&ctx, &ident, base.as_deref())?;
-    }
-    Some(Commands::Open { ident }) => {
-      commands::open::run(&ctx, &ident)?;
-    }
-    Some(Commands::Edit { ident }) => {
-      commands::edit::run(&ctx, &ident)?;
-    }
-    Some(Commands::Shell { ident }) => {
-      commands::shell::run(&ctx, &ident)?;
-    }
-    Some(Commands::Path { ident }) => {
-      commands::path::run(&ctx, &ident)?;
-    }
-    Some(Commands::Branch { ident }) => {
-      commands::branch::run(&ctx, &ident)?;
-    }
-    Some(Commands::Rm { ident }) => {
-      commands::rm::run(&ctx, &ident)?;
-    }
-    Some(Commands::Reset { ident }) => {
-      commands::reset::run(&ctx, &ident)?;
-    }
-    Some(Commands::Tasks {}) => {
-      commands::ps::run(&ctx)?;
-    }
+    Some(Commands::Merge { ident, base }) => commands::merge::run(ctx, &ident, base.as_deref()),
+    Some(Commands::Open { ident }) => commands::open::run(ctx, &ident),
+    Some(Commands::Edit { ident }) => commands::edit::run(ctx, &ident),
+    Some(Commands::Shell { ident }) => commands::shell::run(ctx, &ident),
+    Some(Commands::Path { ident }) => commands::path::run(ctx, &ident),
+    Some(Commands::Branch { ident }) => commands::branch::run(ctx, &ident),
+    Some(Commands::Rm { ident }) => commands::rm::run(ctx, &ident),
+    Some(Commands::Reset { ident }) => commands::reset::run(ctx, &ident),
+    Some(Commands::Tasks {}) => commands::ps::run(ctx),
     Some(Commands::Daemon { cmd }) => match cmd {
-      DaemonCmd::Start {} => commands::daemon::start()?,
-      DaemonCmd::Stop {} => commands::daemon::stop()?,
-      DaemonCmd::Restart {} => commands::daemon::restart()?,
-      DaemonCmd::Run {} => commands::daemon::run_blocking()?,
+      DaemonCmd::Start {} => commands::daemon::start(),
+      DaemonCmd::Stop {} => commands::daemon::stop(),
+      DaemonCmd::Restart {} => commands::daemon::restart(),
+      DaemonCmd::Run {} => commands::daemon::run_blocking(),
     },
-    Some(Commands::Attach {
-      task,
-      session,
-      follow,
-    }) => {
+    Some(Commands::Attach { task, session, follow }) => {
       if let Some(f) = follow {
-        commands::attach::run_follow(&ctx, f)?;
+        commands::attach::run_follow(ctx, f)
       } else if let Some(t) = task {
-        commands::attach::run_with_task(&ctx, &t)?;
+        commands::attach::run_with_task(ctx, &t)
       } else if let Some(sid) = session {
-        commands::attach::run_join_session(&ctx, sid)?;
+        commands::attach::run_join_session(ctx, sid)
       } else {
-        anyhow::bail!("Attach requires either a task, --session <id>, or --follow [<tui-id>]");
+        anyhow::bail!("Attach requires either a task, --session <id>, or --follow [<tui-id>]")
       }
     }
-    Some(Commands::Bootstrap { ident }) => {
-      commands::bootstrap::run(&ctx, &ident)?;
-    }
+    Some(Commands::Bootstrap { ident }) => commands::bootstrap::run(ctx, &ident),
     Some(Commands::Start { ident, no_attach }) => {
-      commands::start::run_with_attach(&ctx, &ident, !no_attach)?;
+      commands::start::run_with_attach(ctx, &ident, !no_attach)
     }
-    Some(Commands::Stop { task, session }) => {
-      commands::stop::run(&ctx, task.as_deref(), session)?;
-    }
-    Some(Commands::Sessions {}) => {
-      commands::sessions::run(&ctx)?;
-    }
-    Some(Commands::Complete { ident }) => {
-      commands::complete::run(&ctx, ident.as_deref())?;
-    }
-    Some(Commands::Setup {}) => {
-      commands::setup::run(&ctx)?;
-    }
-    Some(Commands::Config {}) => {
-      commands::config::run(&ctx)?;
-    }
-    Some(Commands::Defaults {}) => {
-      commands::defaults::run()?;
-    }
-    Some(Commands::Init {}) => {
-      commands::init::run(&ctx)?;
-    }
-    Some(Commands::Tui {}) => {
-      crate::tui::run(&ctx)?;
-    }
-    // Overlay handled inline in attach follow
-    Some(Commands::Gc {}) => {
-      commands::gc::run(&ctx)?;
-    }
-    None => {
-      let stdout_tty = std::io::stdout().is_terminal();
-      if !global_config_exists() {
-        if stdout_tty {
-          commands::setup::run(&ctx)?;
-        } else {
-          crate::log_warn!("Global config missing: run `agency setup` in a terminal");
-        }
-        return Ok(());
-      }
-      // Only autostart daemon once we know global config exists to avoid setup
-      let _ = ensure_running_and_latest_version(&ctx);
-      let _ = ensure_tmux_server(&ctx.config);
-      if stdout_tty {
-        crate::tui::run(&ctx)?;
-      } else {
-        crate::log_info!("Usage: agency <SUBCOMMAND>. Try 'agency --help'");
-      }
-    }
+    Some(Commands::Stop { task, session }) => commands::stop::run(ctx, task.as_deref(), session),
+    Some(Commands::Sessions {}) => commands::sessions::run(ctx),
+    Some(Commands::Complete { ident }) => commands::complete::run(ctx, ident.as_deref()),
+    Some(Commands::Setup {}) => commands::setup::run(ctx),
+    Some(Commands::Config {}) => commands::config::run(ctx),
+    Some(Commands::Defaults {}) => commands::defaults::run(),
+    Some(Commands::Init {}) => commands::init::run(ctx),
+    Some(Commands::Tui {}) => crate::tui::run(ctx),
+    Some(Commands::Gc {}) => commands::gc::run(ctx),
+    None => run_default(ctx),
   }
+}
 
-  Ok(())
+fn run_default(ctx: &AppContext) -> Result<()> {
+  let stdout_tty = std::io::stdout().is_terminal();
+  if !global_config_exists() {
+    if stdout_tty {
+      commands::setup::run(ctx)?;
+    } else {
+      crate::log_warn!("Global config missing: run `agency setup` in a terminal");
+    }
+    return Ok(());
+  }
+  let _ = ensure_running_and_latest_version(ctx);
+  let _ = ensure_tmux_server(&ctx.config);
+  if stdout_tty {
+    crate::tui::run(ctx)
+  } else {
+    crate::log_info!("Usage: agency <SUBCOMMAND>. Try 'agency --help'");
+    Ok(())
+  }
 }
