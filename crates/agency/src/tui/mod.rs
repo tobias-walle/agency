@@ -534,11 +534,15 @@ fn ui_loop(
             if let Some(cur) = state.rows.get(state.selected).cloned() {
               // Background start (no attach)
               let id_str = cur.id.to_string();
-              state.push_log(LogEvent::Command(format!("agency start {id_str}")));
+              state.push_log(LogEvent::Command(format!(
+                "agency start --no-attach {id_str}"
+              )));
               std::thread::spawn({
                 let ctx = ctx.clone();
                 move || {
-                  if let Err(err) = crate::commands::start::run(&ctx, &id_str) {
+                  if let Err(err) =
+                    crate::commands::start::run_with_attach(&ctx, &id_str, false)
+                  {
                     crate::log_error!("Start failed: {}", err);
                   }
                 }
@@ -675,7 +679,9 @@ fn ui_loop(
                 move || match crate::commands::new::run(&ctx, &slug, agent.as_deref(), None) {
                   Ok(created) => {
                     let id_str = created.id.to_string();
-                    if let Err(err) = crate::commands::start::run(&ctx, &id_str) {
+                    if let Err(err) =
+                      crate::commands::start::run_with_attach(&ctx, &id_str, false)
+                    {
                       crate::log_error!("Start failed: {}", err);
                     }
                   }

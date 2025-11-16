@@ -2,14 +2,12 @@
 
 ## Ordered Checklist
 
-- [ ] 1.1 Update `s` Start action to call `start::run_with_attach(ctx, ident, false)`
-- [ ] 1.2 Update `New + Start` (`N`) to call `start::run_with_attach(ctx, id, false)`
-- [ ] 1.3 Refresh help text to indicate background start
-- [ ] 1.4 Run `openspec validate update-tui-start-new-no-attach --strict`
-- [ ] 1.5 Run `just check` and `just test` to ensure no regressions
-- [ ] 1.6 Document behavior in `README.md` TUI section
+- [x] 1.1 Update `s` Start action to call `start::run_with_attach(ctx, ident, false)`
+- [x] 1.2 Update `New + Start` (`N`) to call `start::run_with_attach(ctx, id, false)`
+- [x] 1.3 Revert helper text changes (no help updates)
+- [x] 1.4 Run `openspec validate update-tui-start-new-no-attach --strict`
+- [x] 1.5 Run `just check-strict` and `just test` to ensure no regressions
 
 ## Notes
 - Ensure log pane shows feedback for background starts.
 - Keep changes minimal and isolated to TUI module.
-

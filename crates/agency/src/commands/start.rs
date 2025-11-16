@@ -22,8 +22,3 @@ pub fn run_with_attach(ctx: &AppContext, ident: &str, attach: bool) -> Result<()
   let plan = build_session_plan(ctx, &task)?;
   crate::utils::daemon::notify_after_task_change(ctx, || start_session_for_task(ctx, &plan, attach))
 }
-
-/// Backward-compatible entry that starts and attaches.
-pub fn run(ctx: &AppContext, ident: &str) -> Result<()> {
-  run_with_attach(ctx, ident, true)
-}
