@@ -1,3 +1,11 @@
+# [1.5.0](https://github.com/tobias-walle/agency/compare/v1.4.0...v1.5.0) (2025-11-16)
+
+
+### Features
+
+* add --follow option to attach that follows the tasks in the TUI ([825d5ed](https://github.com/tobias-walle/agency/commit/825d5ed447eab6d195ea09fabad03b6e7ad11612))
+* **tui:** improve ux for task creation and add description box ([d5c34a7](https://github.com/tobias-walle/agency/commit/d5c34a7823f999296aea68a61bebded4888ec858))
+
 # [1.4.0](https://github.com/tobias-walle/agency/compare/v1.3.0...v1.4.0) (2025-11-15)
 
 
