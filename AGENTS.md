@@ -20,6 +20,12 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 
 <!-- OPENSPEC:END -->
 
+# OpenSpec additional instructions
+
+- In the openspec design, you MUST explain the architecture
+  - Mention all files and symbols you want to add, edit, or delete at a high level
+  - Explicitly highlight the trade-offs and how you considered readability and maintainability
+
 # Committing
 
 - Use conventional commits e.g.:
@@ -28,6 +34,8 @@ Keep this managed block so 'openspec update' can refresh the instructions.
   - `fix: fix ...`
 - You MUST add the files and the create the commit in the same command for easy review e.g.:
   - `git add fileA.rs fileB.rs && git commit -m "feat: ..."`
+- Keep commit messages short. Never add semicolons in them.
+- If you are committing a spec change always start with `docs: add spec change for ...`
 
 # Code Style
 
