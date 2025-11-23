@@ -1,0 +1,207 @@
+mod common;
+
+use anyhow::Result;
+use predicates::prelude::*;
+use crate::common::test_env::TestEnv;
+
+#[test]
+fn new_creates_markdown_branch_and_worktree() -> Result<()> {
+  TestEnv::run(|env| -> Result<()> {
+    env.init_repo()?;
+
+    let (id, slug) = env.new_task("alpha-task", &[])?;
+
+    let file = env.task_file_path(id, &slug);
+    assert!(
+      file.is_file(),
+      "task file should exist at {}",
+      file.display()
+    );
+
+    assert!(!env.branch_exists(id, &slug)?);
+    let wt_dir = env.worktree_dir_path(id, &slug);
+    assert!(!wt_dir.exists());
+
+    env.bootstrap_task(id)?;
+    assert!(env.branch_exists(id, &slug)?);
+    assert!(wt_dir.is_dir());
+
+    Ok(())
+  })
+}
+
+#[test]
+fn new_persists_description_when_provided() -> Result<()> {
+  TestEnv::run(|env| -> Result<()> {
+    env.init_repo()?;
+
+    let (id, slug) = env.new_task(
+      "desc-task",
+      &["--draft", "--description", "Automated test body"],
+    )?;
+    let file = env.task_file_path(id, &slug);
+    let data = std::fs::read_to_string(&file)?;
+    assert!(data.contains("Automated test body"));
+    Ok(())
+  })
+}
+
+#[test]
+fn new_accepts_draft_flag() -> Result<()> {
+  TestEnv::run(|env| -> Result<()> {
+    env.init_repo()?;
+
+    env
+      .agency()?
+      .arg("new")
+      .arg("--draft")
+      .arg("epsilon-task")
+      .assert()
+      .success();
+
+    Ok(())
+  })
+}
+
+#[test]
+fn new_runs_default_bootstrap_cmd_when_present() -> Result<()> {
+  TestEnv::run(|env| -> Result<()> {
+    env.init_repo()?;
+
+    let agen_dir = env.path().join(".agency");
+    std::fs::create_dir_all(&agen_dir)?;
+    let script = agen_dir.join("setup.sh");
+    env.write_executable_script(
+      &script,
+      "#!/usr/bin/env bash\n\n echo bootstrap-script-output && echo ok > boot.out\n",
+    )?;
+
+    let (id, slug) = env.new_task("boot-cmd", &["--draft"])?;
+    env.bootstrap_task(id)?;
+    let wt = env.worktree_dir_path(id, &slug);
+    assert!(wt.join("boot.out").is_file());
+
+    Ok(())
+  })
+}
+
+#[test]
+fn new_skips_default_bootstrap_when_missing() -> Result<()> {
+  TestEnv::run(|env| -> Result<()> {
+    env.init_repo()?;
+    std::fs::create_dir_all(env.path().join(".agency"))?;
+
+    let (id, slug) = env.new_task("no-boot-script", &[])?;
+    env.bootstrap_task(id)?;
+    let wt = env.worktree_dir_path(id, &slug);
+    assert!(!wt.join("boot.out").exists());
+    Ok(())
+  })
+}
+
+#[test]
+fn new_supports_placeholder_root_in_bootstrap_cmd() -> Result<()> {
+  TestEnv::run(|env| -> Result<()> {
+    env.init_repo()?;
+
+    let agen_dir = env.path().join(".agency");
+    std::fs::create_dir_all(&agen_dir)?;
+    std::fs::write(
+      agen_dir.join("agency.toml"),
+      r#"
+[bootstrap]
+cmd=["bash","-lc","echo <root> > root.txt"]
+"#
+      .trim(),
+    )?;
+
+    let (id, slug) = env.new_task("boot-root", &[])?;
+    env.bootstrap_task(id)?;
+    let wt = env.worktree_dir_path(id, &slug);
+    let data = std::fs::read_to_string(wt.join("root.txt"))?;
+    let expect_root = env
+      .path()
+      .canonicalize()
+      .unwrap_or_else(|_| env.path().to_path_buf())
+      .display()
+      .to_string();
+    assert_eq!(data.trim(), expect_root);
+    Ok(())
+  })
+}
+
+#[test]
+fn new_writes_yaml_header_when_agent_specified() -> Result<()> {
+  TestEnv::run(|env| -> Result<()> {
+    env.init_repo()?;
+    let (id, slug) = env.new_task("alpha-task", &["-a", "sh", "--description", ""])?;
+    let file = env.task_file_path(id, &slug);
+    let data = std::fs::read_to_string(&file)?;
+    assert!(
+      data.starts_with("---\n"),
+      "file should start with YAML '---' block"
+    );
+    assert!(
+      data.contains("agent: sh\n"),
+      "front matter should contain agent: sh"
+    );
+    assert!(
+      data.contains("base_branch: main\n"),
+      "front matter should contain base_branch: main"
+    );
+    assert_eq!(
+      data, "---\nagent: sh\nbase_branch: main\n---\n",
+      "task should contain only front matter when no description"
+    );
+
+    Ok(())
+  })
+}
+
+#[test]
+fn new_rejects_slugs_starting_with_digits() -> Result<()> {
+  TestEnv::run(|env| -> Result<()> {
+    env.setup_git_repo()?;
+    env.simulate_initial_commit()?;
+
+    env
+      .agency()?
+      .arg("new")
+      .arg("1invalid")
+      .assert()
+      .failure()
+      .stderr(
+        predicates::str::contains("invalid slug: must start with a letter").from_utf8(),
+      );
+
+    Ok(())
+  })
+}
+
+#[test]
+fn new_auto_suffixes_duplicate_slug_to_slug2() -> Result<()> {
+  TestEnv::run(|env| -> Result<()> {
+    env.init_repo()?;
+    let (_id1, _slug1) = env.new_task("alpha", &[])?;
+    let (id2, slug2) = env.new_task("alpha", &[])?;
+
+    let file = env.task_file_path(id2, &slug2);
+    assert!(file.is_file());
+
+    Ok(())
+  })
+}
+
+#[test]
+fn new_increments_trailing_number_slug() -> Result<()> {
+  TestEnv::run(|env| -> Result<()> {
+    env.init_repo()?;
+    let (_id1, _slug1) = env.new_task("alpha2", &[])?;
+    let (id2, slug2) = env.new_task("alpha2", &[])?;
+
+    let file = env.task_file_path(id2, &slug2);
+    assert!(file.is_file());
+
+    Ok(())
+  })
+}

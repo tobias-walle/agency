@@ -70,6 +70,13 @@ Keep this managed block so 'openspec update' can refresh the instructions.
   - Detect strong nesting and create functions to reduce it
   - Use language feature to reduce nesting
 
+# Tests
+
+- Integration tests are living in `./crates/agency/tests/`
+- You MUST use the TestEnv in `./crates/agency/tests/common/mod.rs` for all tests
+- Every integration test needs to be wrapped into `TestEnv::run`
+- Readability is extremly important. Tests must be linear. Add new helpers to the TestEnv if it helps readability and avoids complex method chains inside the tests.
+
 # Rules
 
 - You MUST run `just check` regulary to detect compile errors
