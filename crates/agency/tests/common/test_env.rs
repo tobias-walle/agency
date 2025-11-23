@@ -24,6 +24,17 @@ impl TestEnv {
     env
       .add_xdg_home_bin("agency", &agency_shim)
       .expect("create agency shim in XDG bin");
+    let vi_shim = "#!/usr/bin/env bash
+set -e
+file=\"$1\"
+if [ -z \"$file\" ]; then
+  exit 1
+fi
+printf '%s\n' 'Automated test' >\"$file\"
+";
+    env
+      .add_xdg_home_bin("vi", vi_shim)
+      .expect("create vi shim in XDG bin");
     let current_path = std::env::var("PATH").ok();
     let bin_dir = env.xdg_home_bin_dir();
     let path_value = match current_path {
