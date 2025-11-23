@@ -73,5 +73,5 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 # Rules
 
 - You MUST run `just check` regulary to detect compile errors
-- You MUST run `just test` `just check-strict` after every phase. You MUST fix all warnings and errors. If the sandbox permits these commands, ask for approval.
+- You MUST run `just test` `just check-strict` after finishing your. You MUST fix all warnings and errors.
 - If you remove code, you MUST NEVER replace it with useless comments (Like `// removed ...`, `// deleted ...`, etc.). If you find comments like this always delete them.
