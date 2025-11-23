@@ -81,4 +81,6 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 
 - You MUST run `just check` regulary to detect compile errors
 - You MUST run `just test` `just check-strict` after finishing your. You MUST fix all warnings and errors.
+- You MUST use `cargo add` to add dependencies
 - If you remove code, you MUST NEVER replace it with useless comments (Like `// removed ...`, `// deleted ...`, etc.). If you find comments like this always delete them.
+- TTY-dependent tests (e.g. interactive TUI tests) are marked with `#[ignore = "needs-tty"]` and MUST be run via `just test-tty` on a real terminal outside the sandbox.

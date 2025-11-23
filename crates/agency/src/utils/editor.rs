@@ -9,10 +9,6 @@ use crate::config::AgencyConfig;
 /// Open a file or directory path using the configured editor.
 /// Falls back to $EDITOR or `vi` when not configured.
 pub fn open_path(cfg: &AgencyConfig, path: &Path, cwd: &Path) -> Result<()> {
-  // In test environments, skip actually launching an editor to avoid hangs
-  if std::env::var("AGENCY_TEST").is_ok() {
-    return Ok(());
-  }
   let target = path
     .canonicalize()
     .unwrap_or_else(|_| path.to_path_buf())

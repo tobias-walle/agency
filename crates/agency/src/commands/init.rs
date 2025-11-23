@@ -22,9 +22,9 @@ pub fn run(ctx: &AppContext) -> Result<()> {
     "Generate project specific configuration files in {}?",
     t::path(root.display())
   );
-  // Auto-confirm in tests or non-interactive environments (no TTY)
+  // Auto-confirm in non-interactive environments (no TTY)
   let noninteractive = !std::io::stdin().is_terminal() || !std::io::stdout().is_terminal();
-  let auto_confirm = std::env::var("AGENCY_TEST").is_ok() || noninteractive;
+  let auto_confirm = noninteractive;
   if !auto_confirm && !wizard.confirm(&prompt, false)? {
     return Ok(());
   }

@@ -1,5 +1,6 @@
-use anyhow::Result;
-use assert_cmd::Command;
+use anyhow::{Context, Result};
+use assert_cmd::{cargo, Command};
+use expectrl::session::OsSession;
 use std::path::{Path, PathBuf};
 use temp_env::with_vars;
 use tempfile::{Builder, TempDir};
@@ -12,7 +13,7 @@ pub struct TestEnv {
 }
 
 impl TestEnv {
-  pub fn run<F, R>(f: F) -> R
+  fn run_with_editor<F, R>(editor_cmd: &str, f: F) -> R
   where
     F: FnOnce(&TestEnv) -> R,
   {
@@ -26,6 +27,8 @@ impl TestEnv {
       _ => bin_dir.display().to_string(),
     };
     let runtime_dir = env.runtime_dir().to_path_buf();
+    let uds_path = runtime_dir.join("agency.sock");
+    let tmux_sock_path = runtime_dir.join("agency-tmux.sock");
     with_vars(
       [
         (
@@ -34,11 +37,33 @@ impl TestEnv {
         ),
         ("PATH", Some(path_value)),
         ("XDG_RUNTIME_DIR", Some(runtime_dir.display().to_string())),
-        ("EDITOR", Some("bash -lc true".to_string())),
+        ("EDITOR", Some(editor_cmd.to_string())),
         ("AGENCY_NO_AUTOSTART", Some("1".to_string())),
+        (
+          "AGENCY_SOCKET_PATH",
+          Some(uds_path.display().to_string()),
+        ),
+        (
+          "AGENCY_TMUX_SOCKET_PATH",
+          Some(tmux_sock_path.display().to_string()),
+        ),
       ],
       || f(&env),
     )
+  }
+
+  pub fn run<F, R>(f: F) -> R
+  where
+    F: FnOnce(&TestEnv) -> R,
+  {
+    Self::run_with_editor("bash -lc true", f)
+  }
+
+  pub fn run_tty<F, R>(f: F) -> R
+  where
+    F: FnOnce(&TestEnv) -> R,
+  {
+    Self::run_with_editor("vi", f)
   }
 
   pub fn new() -> Self {
@@ -121,13 +146,20 @@ impl TestEnv {
   pub fn agency(&self) -> Result<Command> {
     let mut cmd = Command::cargo_bin("agency")?;
     cmd.current_dir(self.path());
-    cmd.env("XDG_RUNTIME_DIR", &self.runtime_dir);
-    let uds_path = self.runtime_dir.join("agency.sock");
-    let tmux_sock_path = self.runtime_dir.join("agency-tmux.sock");
-    cmd.env("AGENCY_SOCKET_PATH", &uds_path);
-    cmd.env("AGENCY_TMUX_SOCKET_PATH", &tmux_sock_path);
-    cmd.env("AGENCY_TEST", "1");
     Ok(cmd)
+  }
+
+  pub fn agency_tty(&self) -> std::process::Command {
+    let bin_path = cargo::cargo_bin("agency");
+    let mut cmd = std::process::Command::new(bin_path);
+    cmd.current_dir(self.path());
+    cmd
+  }
+
+  pub fn agency_tui(&self) -> Result<OsSession> {
+    let mut cmd = self.agency_tty();
+    cmd.arg("tui");
+    expectrl::Session::spawn(cmd).context("spawn agency tui session")
   }
 
   pub fn write_executable_script(&self, path: &Path, body: &str) -> Result<()> {

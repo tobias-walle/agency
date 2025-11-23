@@ -19,6 +19,10 @@ install-globally:
 test *ARGS:
   RUSTFLAGS="${RUSTFLAGS:-} -Awarnings" cargo nextest run --no-fail-fast --cargo-quiet --status-level leak {{ARGS}}
 
+# Run TTY-dependent tests (ignored by default)
+test-tty *ARGS:
+  RUSTFLAGS="${RUSTFLAGS:-} -Awarnings" cargo nextest run --no-fail-fast --cargo-quiet --status-level leak --run-ignored ignored-only {{ARGS}}
+
 # Check for compiler or linting errors
 check:
   cargo clippy -q --all-targets -- -A warnings
