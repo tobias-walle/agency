@@ -1,7 +1,8 @@
-use anyhow::{Context, Result};
-use assert_cmd::{cargo, Command};
-use expectrl::session::OsSession;
+use crate::common::tmux::TMUX_SESSION_NAME;
+use anyhow::Result;
+use assert_cmd::{Command, cargo};
 use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
 use temp_env::with_vars;
 use tempfile::{Builder, TempDir};
 
@@ -18,6 +19,11 @@ impl TestEnv {
     F: FnOnce(&TestEnv) -> R,
   {
     let env = TestEnv::new();
+    let agency_bin = cargo::cargo_bin("agency");
+    let agency_shim = format!("#!/usr/bin/env bash\n\"{}\" \"$@\"\n", agency_bin.display());
+    env
+      .add_xdg_home_bin("agency", &agency_shim)
+      .expect("create agency shim in XDG bin");
     let current_path = std::env::var("PATH").ok();
     let bin_dir = env.xdg_home_bin_dir();
     let path_value = match current_path {
@@ -39,10 +45,7 @@ impl TestEnv {
         ("XDG_RUNTIME_DIR", Some(runtime_dir.display().to_string())),
         ("EDITOR", Some(editor_cmd.to_string())),
         ("AGENCY_NO_AUTOSTART", Some("1".to_string())),
-        (
-          "AGENCY_SOCKET_PATH",
-          Some(uds_path.display().to_string()),
-        ),
+        ("AGENCY_SOCKET_PATH", Some(uds_path.display().to_string())),
         (
           "AGENCY_TMUX_SOCKET_PATH",
           Some(tmux_sock_path.display().to_string()),
@@ -64,6 +67,25 @@ impl TestEnv {
     F: FnOnce(&TestEnv) -> R,
   {
     Self::run_with_editor("vi", f)
+  }
+
+  #[allow(clippy::unused_self)]
+  pub fn wait_for<F>(&self, mut assert_fn: F) -> Result<()>
+  where
+    F: FnMut() -> Result<bool>,
+  {
+    let timeout = Duration::from_secs(1);
+    let deadline = Instant::now() + timeout;
+    loop {
+      if assert_fn()? {
+        return Ok(());
+      }
+      assert!(
+        Instant::now() < deadline,
+        "condition not met within timeout"
+      );
+      std::thread::sleep(Duration::from_millis(200));
+    }
   }
 
   pub fn new() -> Self {
@@ -156,12 +178,6 @@ impl TestEnv {
     cmd
   }
 
-  pub fn agency_tui(&self) -> Result<OsSession> {
-    let mut cmd = self.agency_tty();
-    cmd.arg("tui");
-    expectrl::Session::spawn(cmd).context("spawn agency tui session")
-  }
-
   pub fn write_executable_script(&self, path: &Path, body: &str) -> Result<()> {
     if let Some(parent) = path.parent() {
       std::fs::create_dir_all(parent).map_err(|err| {
@@ -181,14 +197,12 @@ impl TestEnv {
     #[cfg(unix)]
     {
       use std::os::unix::fs::PermissionsExt as _;
-      let metadata = std::fs::metadata(path).map_err(|err| {
-        anyhow::anyhow!("read script metadata at {}: {err}", path.display())
-      })?;
+      let metadata = std::fs::metadata(path)
+        .map_err(|err| anyhow::anyhow!("read script metadata at {}: {err}", path.display()))?;
       let mut perms = metadata.permissions();
       perms.set_mode(0o755);
-      std::fs::set_permissions(path, perms).map_err(|err| {
-        anyhow::anyhow!("set script executable at {}: {err}", path.display())
-      })?;
+      std::fs::set_permissions(path, perms)
+        .map_err(|err| anyhow::anyhow!("set script executable at {}: {err}", path.display()))?;
     }
     Ok(())
   }
@@ -281,10 +295,17 @@ pub fn runtime_dir_create() -> std::path::PathBuf {
 
 impl Drop for TestEnv {
   fn drop(&mut self) {
+    let _ = std::process::Command::new("tmux")
+      .arg("-S")
+      .arg(self.tmux_tests_socket_path())
+      .arg("kill-session")
+      .arg("-t")
+      .arg(TMUX_SESSION_NAME)
+      .status();
     let tmux_sock = self.runtime_dir.join("agency-tmux.sock");
     let _ = std::process::Command::new("tmux")
       .arg("-S")
-      .arg(tmux_sock)
+      .arg(&tmux_sock)
       .arg("kill-server")
       .status();
 
