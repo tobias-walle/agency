@@ -1,20 +1,52 @@
 #![allow(dead_code)]
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, anyhow};
 use assert_cmd::Command;
 
 use gix as git;
 #[cfg(unix)]
 use std::os::unix::net::UnixListener;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use temp_env::with_vars;
 use tempfile::{Builder, TempDir};
 
 #[derive(Debug)]
 pub struct TestEnv {
   temp: TempDir,
   runtime_dir: PathBuf,
+  xdg_home: PathBuf,
 }
 
 impl TestEnv {
+  /// Run a test closure inside a fresh `TestEnv`.
+  pub fn run<F, R>(f: F) -> R
+  where
+    F: FnOnce(&TestEnv) -> R,
+  {
+    let env = TestEnv::new();
+    let current_path = std::env::var("PATH").ok();
+    let bin_dir = env.xdg_home_bin_dir();
+    let path_value = match current_path {
+      Some(existing) if !existing.is_empty() => {
+        format!("{}:{existing}", bin_dir.display())
+      }
+      _ => bin_dir.display().to_string(),
+    };
+    let runtime_dir = env.runtime_dir().to_path_buf();
+    with_vars(
+      [
+        (
+          "XDG_CONFIG_HOME",
+          Some(env.xdg_home_dir().display().to_string()),
+        ),
+        ("PATH", Some(path_value)),
+        ("XDG_RUNTIME_DIR", Some(runtime_dir.display().to_string())),
+        ("EDITOR", Some("bash -lc true".to_string())),
+        ("AGENCY_NO_AUTOSTART", Some("1".to_string())),
+      ],
+      || f(&env),
+    )
+  }
+
   pub fn new() -> Self {
     let root = tmp_root();
     let temp = Builder::new()
@@ -35,14 +67,59 @@ impl TestEnv {
     // Create a unique, short runtime dir per test to isolate daemon sockets
     let runtime_dir = runtime_dir_create();
 
-    Self { temp, runtime_dir }
+    // Create a per-test XDG config home under the sandbox root
+    let nanos = std::time::SystemTime::now()
+      .duration_since(std::time::UNIX_EPOCH)
+      .map(|d| d.as_nanos())
+      .unwrap_or(0);
+    let xdg_home = tmp_root().join(format!("xdg-{nanos}"));
+    let _ = std::fs::create_dir_all(&xdg_home);
+
+    Self {
+      temp,
+      runtime_dir,
+      xdg_home,
+    }
+  }
+
+  /// Temporarily set environment variables for the duration of `f`.
+  ///
+  /// Restores previous values after the closure returns or panics.
+  pub fn with_env_vars<F, R>(&self, vars: &[(&str, Option<String>)], f: F) -> R
+  where
+    F: FnOnce(&TestEnv) -> R,
+  {
+    with_vars(vars, || f(self))
   }
 
   /// Prepare a task's branch/worktree and run bootstrap (no PTY attach).
   pub fn bootstrap_task(&self, id: u32) -> Result<()> {
-    let mut cmd = self.bin_cmd()?;
-    cmd.arg("bootstrap").arg(id.to_string());
-    cmd.assert().success();
+    self
+      .agency()?
+      .arg("bootstrap")
+      .arg(id.to_string())
+      .assert()
+      .success();
+    Ok(())
+  }
+
+  /// Start the agency daemon for this test environment.
+  ///
+  /// # Errors
+  ///
+  /// Returns an error if the command cannot be spawned.
+  pub fn agency_daemon_start(&self) -> Result<()> {
+    self.agency()?.arg("daemon").arg("start").assert().success();
+    Ok(())
+  }
+
+  /// Stop the agency daemon for this test environment.
+  ///
+  /// # Errors
+  ///
+  /// Returns an error if the command cannot be spawned.
+  pub fn agency_daemon_stop(&self) -> Result<()> {
+    self.agency()?.arg("daemon").arg("stop").assert().success();
     Ok(())
   }
 
@@ -52,6 +129,16 @@ impl TestEnv {
 
   pub fn runtime_dir(&self) -> &std::path::Path {
     &self.runtime_dir
+  }
+
+  /// XDG config home directory for this test environment.
+  pub fn xdg_home_dir(&self) -> &std::path::Path {
+    &self.xdg_home
+  }
+
+  /// `bin` directory inside the XDG config home.
+  pub fn xdg_home_bin_dir(&self) -> std::path::PathBuf {
+    self.xdg_home_dir().join("bin")
   }
 
   /// Best-effort check whether Unix sockets can be created in this environment.
@@ -78,7 +165,12 @@ impl TestEnv {
     }
   }
 
-  pub fn bin_cmd(&self) -> anyhow::Result<Command> {
+  /// Construct a command for invoking the `agency` binary in this test env.
+  ///
+  /// # Errors
+  ///
+  /// Returns an error if the binary cannot be located.
+  pub fn agency(&self) -> Result<Command> {
     let mut cmd = Command::cargo_bin("agency")?;
     // Ensure all test-launched binaries use a per-test XDG runtime dir
     // so the daemon socket is created inside the sandbox workspace.
@@ -92,6 +184,193 @@ impl TestEnv {
     // Hint CLI to treat STDIN/STDOUT as non-TTY for wizard fallbacks
     cmd.env("AGENCY_TEST", "1");
     Ok(cmd)
+  }
+
+  fn git(&self) -> std::process::Command {
+    // Use the standard `git` CLI for repository operations in tests.
+    let mut cmd = std::process::Command::new("git");
+    cmd.current_dir(self.path());
+    cmd
+  }
+
+  /// Run `git` with the given arguments and return trimmed UTF-8 stdout.
+  ///
+  /// # Errors
+  ///
+  /// Returns an error if the process cannot be spawned, exits unsuccessfully,
+  /// or stdout is not valid UTF-8.
+  pub fn git_stdout(&self, args: &[&str]) -> Result<String> {
+    let output = self
+      .git()
+      .args(args)
+      .stdout(std::process::Stdio::piped())
+      .stderr(std::process::Stdio::inherit())
+      .output()
+      .context("run git command")?;
+    if !output.status.success() {
+      return Err(anyhow!(
+        "git {:?} failed with status {status} and stderr: {stderr}",
+        args,
+        status = output.status,
+        stderr = String::from_utf8_lossy(&output.stderr)
+      ));
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+  }
+
+  /// Return the current `HEAD` commit id as a hex string.
+  ///
+  /// # Errors
+  ///
+  /// Returns an error if `git rev-parse HEAD` fails.
+  pub fn git_head_hex(&self) -> Result<String> {
+    self.git_stdout(&["rev-parse", "HEAD"])
+  }
+
+  /// Create a new `agency/<id>-<slug>` branch at `HEAD`.
+  ///
+  /// # Errors
+  ///
+  /// Returns an error if `git branch` fails.
+  pub fn git_new_branch(&self, id: u32, slug: &str) -> Result<()> {
+    let branch = self.branch_name(id, slug);
+    let status = self
+      .git()
+      .arg("branch")
+      .arg(&branch)
+      .arg("HEAD")
+      .status()
+      .context("run git branch")?;
+    if !status.success() {
+      return Err(anyhow!(
+        "git branch {branch} HEAD failed with status {status}"
+      ));
+    }
+    Ok(())
+  }
+
+  /// Create a new worktree for `agency/<id>-<slug>` at `HEAD`.
+  ///
+  /// This creates the branch and its worktree in a single command.
+  ///
+  /// # Errors
+  ///
+  /// Returns an error if `git worktree add` fails.
+  pub fn git_add_worktree(&self, id: u32, slug: &str) -> Result<()> {
+    let branch = self.branch_name(id, slug);
+    let dir = self.worktree_dir_path(id, slug);
+    let status = self
+      .git()
+      .arg("worktree")
+      .arg("add")
+      .arg("--quiet")
+      .arg(&dir)
+      .arg("-b")
+      .arg(&branch)
+      .arg("HEAD")
+      .status()
+      .context("run git worktree add")?;
+    if !status.success() {
+      return Err(anyhow!(
+        "git worktree add for {branch} at {} failed with status {status}",
+        dir.display(),
+        status = status
+      ));
+    }
+    Ok(())
+  }
+
+  /// Return the head commit id for the given branch.
+  ///
+  /// # Errors
+  ///
+  /// Returns an error if the repository cannot be opened or the reference
+  /// cannot be resolved to an object id.
+  pub fn git_branch_head_id(&self, branch: &str) -> Result<git::ObjectId> {
+    let repo = git::discover(self.path()).context("open git repo in TestEnv")?;
+    let full_ref = format!("refs/heads/{branch}");
+    let reference = repo
+      .find_reference(&full_ref)
+      .with_context(|| format!("find reference {full_ref}"))?;
+    let target = reference.target();
+    let id = target.try_id().context("reference target is not an id")?;
+    Ok(id.into())
+  }
+
+  /// Create an empty-tree commit on the task branch `agency/<id>-<slug>`.
+  ///
+  /// This uses `gix` to write directly to the task branch without modifying
+  /// the working tree.
+  ///
+  /// # Errors
+  ///
+  /// Returns an error if the repository cannot be opened or the commit fails.
+  pub fn git_commit_empty_tree_to_task_branch(
+    &self,
+    id: u32,
+    slug: &str,
+    message: &str,
+  ) -> Result<git::ObjectId> {
+    let repo = git::discover(self.path()).context("open git repo in TestEnv")?;
+    let empty_tree = git::ObjectId::empty_tree(repo.object_hash());
+    let head = repo.head_commit().context("resolve HEAD commit")?;
+    let parent_id = head.id();
+    let task_ref = format!("refs/heads/{}", self.branch_name(id, slug));
+    let new_id = repo
+      .commit(task_ref.as_str(), message, empty_tree, [parent_id])
+      .context("create empty-tree commit on task branch")?;
+    Ok(new_id.into())
+  }
+
+  /// Return the porcelain status (without untracked files) of the repo.
+  ///
+  /// # Errors
+  ///
+  /// Returns an error if `git status` fails.
+  pub fn git_status_porcelain(&self) -> Result<String> {
+    self.git_stdout(&["status", "--porcelain", "--untracked-files=no"])
+  }
+
+  /// Add all changes and create a commit with the given message.
+  ///
+  /// # Errors
+  ///
+  /// Returns an error if either `git add -A` or `git commit` fails.
+  pub fn git_add_all_and_commit(&self, message: &str) -> Result<()> {
+    let _ = self.git_stdout(&["add", "-A"])?;
+    let _ = self.git_stdout(&["commit", "-m", message])?;
+    Ok(())
+  }
+
+  /// Return the `git stash list` output.
+  ///
+  /// # Errors
+  ///
+  /// Returns an error if `git stash list` fails.
+  pub fn git_stash_list(&self) -> Result<String> {
+    self.git_stdout(&["stash", "list"])
+  }
+
+  /// Check whether the worktree directory for the given task exists.
+  pub fn git_worktree_exists(&self, id: u32, slug: &str) -> bool {
+    self.worktree_dir_path(id, slug).is_dir()
+  }
+
+  /// Run `agency gc` and return the captured output.
+  ///
+  /// # Errors
+  ///
+  /// Returns an error if the command fails to spawn or exits unsuccessfully.
+  pub fn agency_gc(&self) -> Result<std::process::Output> {
+    let output = self.agency()?.arg("gc").output().context("run agency gc")?;
+    if !output.status.success() {
+      return Err(anyhow!(
+        "agency gc failed with status {status} and stderr: {stderr}",
+        status = output.status,
+        stderr = String::from_utf8_lossy(&output.stderr)
+      ));
+    }
+    Ok(output)
   }
 
   pub fn setup_git_repo(&self) -> anyhow::Result<()> {
@@ -135,7 +414,7 @@ impl TestEnv {
       std::fs::write(&cfg_path, cfg).context("write test agent config")?;
     }
 
-    let mut cmd = self.bin_cmd()?;
+    let mut cmd = self.agency()?;
     cmd.arg("new");
     // Default to draft mode in tests unless explicitly overridden
     let mut has_draft = false;
@@ -168,13 +447,21 @@ impl TestEnv {
 
     // Parse only the new log format: "Create task <slug> (id <id>)"
     let stdout = String::from_utf8_lossy(&out.stdout);
-    let re_new = regex::Regex::new(r"(?i)Create task ([A-Za-z][A-Za-z0-9-]*) \(id (\d+)\)")
-      .expect("regex new");
+    let re_new = regex::Regex::new(r"(?i)Create task ([A-Za-z][A-Za-z0-9-]*) \(id (\d+)\)")?;
     let caps = re_new
       .captures(&stdout)
       .with_context(|| format!("unexpected stdout: {stdout}"))?;
-    let final_slug = caps.get(1).unwrap().as_str().to_string();
-    let id: u32 = caps.get(2).unwrap().as_str().parse().context("id parse")?;
+    let final_slug = caps
+      .get(1)
+      .context("missing slug capture")?
+      .as_str()
+      .to_string();
+    let id: u32 = caps
+      .get(2)
+      .context("missing id capture")?
+      .as_str()
+      .parse()
+      .context("id parse")?;
     Ok((id, final_slug))
   }
 
@@ -208,6 +495,105 @@ impl TestEnv {
     let repo = git::discover(self.path())?;
     let full = format!("refs/heads/{}", self.branch_name(id, slug));
     Ok(repo.find_reference(&full).is_ok())
+  }
+
+  /// Write an executable script with the given body.
+  ///
+  /// # Errors
+  ///
+  /// Returns an error if the parent directory cannot be created, the file
+  /// cannot be written, or its permissions cannot be updated.
+  pub fn write_executable_script(&self, path: &Path, body: &str) -> Result<()> {
+    if let Some(parent) = path.parent() {
+      std::fs::create_dir_all(parent).with_context(|| {
+        format!(
+          "create parent dir for script under {}",
+          self.path().display()
+        )
+      })?;
+    }
+    std::fs::write(path, body).with_context(|| {
+      format!(
+        "write script body at {} relative to {}",
+        path.display(),
+        self.path().display()
+      )
+    })?;
+    #[cfg(unix)]
+    {
+      use std::os::unix::fs::PermissionsExt as _;
+      let mut perms = std::fs::metadata(path)
+        .with_context(|| format!("read script metadata at {}", path.display()))?
+        .permissions();
+      perms.set_mode(0o755);
+      std::fs::set_permissions(path, perms)
+        .with_context(|| format!("set script executable at {}", path.display()))?;
+    }
+    Ok(())
+  }
+
+  /// Write a UTF-8 file at a path relative to the test root.
+  ///
+  /// Returns the absolute path to the written file.
+  ///
+  /// # Errors
+  ///
+  /// Returns an error if the parent directory cannot be created or the file
+  /// cannot be written.
+  pub fn write_file(&self, relative: &str, body: &str) -> Result<std::path::PathBuf> {
+    let path = self.path().join(relative);
+    if let Some(parent) = path.parent() {
+      std::fs::create_dir_all(parent)
+        .with_context(|| format!("create parent dir for file under {}", self.path().display()))?;
+    }
+    std::fs::write(&path, body).with_context(|| {
+      format!(
+        "write file body at {} relative to {}",
+        path.display(),
+        self.path().display()
+      )
+    })?;
+    Ok(path)
+  }
+
+  /// Add an executable script under the XDG home `bin` directory.
+  ///
+  /// # Errors
+  ///
+  /// Returns an error if the script cannot be created or made executable.
+  pub fn add_xdg_home_bin(&self, name: &str, body: &str) -> Result<std::path::PathBuf> {
+    let bin_dir = self.xdg_home_bin_dir();
+    let script_path = bin_dir.join(name);
+    self.write_executable_script(&script_path, body)?;
+    Ok(script_path)
+  }
+
+  /// Write a UTF-8 file under the XDG config home.
+  ///
+  /// Returns the absolute path to the written file.
+  ///
+  /// # Errors
+  ///
+  /// Returns an error if the parent directory cannot be created or the file
+  /// cannot be written.
+  pub fn write_xdg_config(&self, relative: &str, body: &str) -> Result<std::path::PathBuf> {
+    let path = self.xdg_home_dir().join(relative);
+    if let Some(parent) = path.parent() {
+      std::fs::create_dir_all(parent).with_context(|| {
+        format!(
+          "create parent dir for XDG config under {}",
+          self.xdg_home_dir().display()
+        )
+      })?;
+    }
+    std::fs::write(&path, body).with_context(|| {
+      format!(
+        "write XDG config at {} under {}",
+        path.display(),
+        self.xdg_home_dir().display()
+      )
+    })?;
+    Ok(path)
   }
 }
 
@@ -270,9 +656,12 @@ impl Drop for TestEnv {
 
     // Best-effort: stop daemon for this test's runtime dir
     // Do not panic in Drop; ignore all errors
-    if let Ok(mut cmd) = self.bin_cmd() {
-      cmd.arg("daemon").arg("stop");
-      let _ = cmd.output();
+    if let Ok(mut cmd) = Command::cargo_bin("agency") {
+      let _ = cmd
+        .current_dir(self.path())
+        .arg("daemon")
+        .arg("stop")
+        .output();
     }
     // Best-effort: remove the per-test runtime dir (sockets, etc.)
     let _ = std::fs::remove_dir_all(&self.runtime_dir);
