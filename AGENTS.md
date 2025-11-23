@@ -77,6 +77,29 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - Every integration test needs to be wrapped into `TestEnv::run`
 - Readability is extremly important. Tests must be linear. Add new helpers to the TestEnv if it helps readability and avoids complex method chains inside the tests.
 
+# Planning
+
+When creating plans, always use the format below.
+
+- `# PLAN: [title]`
+- `[short sentence what this plan is about]`
+- `## Goals`
+- `[goals (as a bullet point list)]`
+- `## Out of scope`
+- `[non-goals (as a bullet point list)]`
+- `## Current Behavior`
+- `[how does the system currently work (based on your research). Make sure to directly reference relevant files and code snippets.]`
+- `## Solution`
+- `[how will the behavior be changed to solve the problem (in bullet points). Stay high level and focus on architecture and avoid verbose implementation details.]`
+- `## Architecture`
+- `[overview of the new, modified and deleted files and symbols in a tree of bullet points. Should be more detailed than solution for a quick review of a Tech Lead.]`
+- `## Testing`
+- `[Bullet point list with the test cases you want to create or modify. Mark each test with "Unit", "Integration" or "E2E".]`
+- `## Detailed Plan`
+- `[Numbered, step-by-step plan on how to implement the solution. Mention relevant files and code changes in relatively high detail. Make sure the order makes sense. Keep Testing and TDD in mind and always start with tests. Add empty markdown checkboxes '[ ]' before each step for later update.]`
+- `## Questions`
+- `[Numbered questions and the assumed answers that went into this plan. The user might want to modify the assumptions.]`
+
 # Rules
 
 - You MUST run `just check` regulary to detect compile errors
