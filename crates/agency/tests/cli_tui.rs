@@ -22,8 +22,7 @@ fn tui_interactive_creates_and_deletes_task() -> Result<()> {
     })?;
 
     // Open the New + Start overlay, enter a slug via the TUI,
-    // and submit it. The editor and session startup are handled
-    // by the agency binary using the configured EDITOR.
+    // and submit it. The task is created without opening the editor.
     eprintln!("cli_tui: sending N for New+Start");
     env.tmux_send_keys("N")?;
 
@@ -41,7 +40,7 @@ fn tui_interactive_creates_and_deletes_task() -> Result<()> {
     // Exit the TUI cleanly.
     env.tmux_send_keys("C-c")?;
 
-    // Verify via the CLI that the task exists, then delete it.
+    // Verify via the CLI that the task exists.
     env
       .agency()?
       .arg("tasks")
@@ -49,6 +48,15 @@ fn tui_interactive_creates_and_deletes_task() -> Result<()> {
       .success()
       .stdout(predicates::str::contains("tui-task").from_utf8());
 
+    // Verify that the task markdown was created without using the editor.
+    let file = env.task_file_path(1, "tui-task");
+    let data = std::fs::read_to_string(&file)?;
+    assert!(
+      !data.contains("Automated test"),
+      "TUI New+Start should not use editor-provided description"
+    );
+
+    // Delete the task again.
     env.agency()?.arg("rm").arg("1").assert().success();
 
     env.agency_daemon_stop()?;

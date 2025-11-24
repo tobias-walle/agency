@@ -674,16 +674,19 @@ fn ui_loop(
                 let ctx = ctx.clone();
                 let slug = slug.clone();
                 let agent = state.selected_agent.clone();
-                move || match crate::commands::new::run(&ctx, &slug, agent.as_deref(), None) {
-                  Ok(created) => {
-                    let id_str = created.id.to_string();
-                    if let Err(err) = crate::commands::start::run_with_attach(&ctx, &id_str, false)
-                    {
-                      crate::log_error!("Start failed: {}", err);
+                move || {
+                  match crate::commands::new::run(&ctx, &slug, agent.as_deref(), Some("")) {
+                    Ok(created) => {
+                      let id_str = created.id.to_string();
+                      if let Err(err) =
+                        crate::commands::start::run_with_attach(&ctx, &id_str, true)
+                      {
+                        crate::log_error!("Start+attach failed: {}", err);
+                      }
                     }
-                  }
-                  Err(err) => {
-                    crate::log_error!("New failed: {}", err);
+                    Err(err) => {
+                      crate::log_error!("New failed: {}", err);
+                    }
                   }
                 }
               });

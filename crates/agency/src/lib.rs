@@ -166,8 +166,9 @@ fn run_command(ctx: &AppContext, cli: Cli) -> Result<()> {
       description,
       no_attach,
     }) => {
-      let provided_desc = desc.or(description);
-      let created = commands::new::run(ctx, &slug, agent.as_deref(), provided_desc.as_deref())?;
+      let desc = desc.or(description);
+      let desc = if draft { desc } else { Some(desc.unwrap_or_default()) };
+      let created = commands::new::run(ctx, &slug, agent.as_deref(), desc.as_deref())?;
       if !draft {
         let ident = created.id.to_string();
         commands::start::run_with_attach(ctx, &ident, !no_attach)?;

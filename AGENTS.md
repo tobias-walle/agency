@@ -79,26 +79,25 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 
 # Planning
 
-When creating plans, always use the format below.
+Before creating plans, you MUST check your assumptions:
 
-- `# PLAN: [title]`
-- `[short sentence what this plan is about]`
 - `## Goals`
 - `[goals (as a bullet point list)]`
 - `## Out of scope`
 - `[non-goals (as a bullet point list)]`
 - `## Current Behavior`
 - `[how does the system currently work (based on your research). Make sure to directly reference relevant files and code snippets.]`
+- `## Questions`
+- `[Numbered questions and the assumed answers that went into this plan. The user might want to modify the assumptions.]`
+
+Afterwards present your full plan in the format below
+
 - `## Solution`
 - `[how will the behavior be changed to solve the problem (in bullet points). Stay high level and focus on architecture and avoid verbose implementation details.]`
 - `## Architecture`
 - `[overview of the new, modified and deleted files and symbols in a tree of bullet points. Should be more detailed than solution for a quick review of a Tech Lead.]`
 - `## Testing`
-- `[Bullet point list with the test cases you want to create or modify. Mark each test with "Unit", "Integration" or "E2E".]`
-- `## Detailed Plan`
-- `[Numbered, step-by-step plan on how to implement the solution. Mention relevant files and code changes in relatively high detail. Make sure the order makes sense. Keep Testing and TDD in mind and always start with tests. Add empty markdown checkboxes '[ ]' before each step for later update.]`
-- `## Questions`
-- `[Numbered questions and the assumed answers that went into this plan. The user might want to modify the assumptions.]`
+- `[Bullet point list with the test cases you want to create or modify. Mark each test with "Unit" or "TTY". Take into account that the unit tests cannot start the daemon or tmux.]`
 
 # Rules
 

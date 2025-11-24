@@ -31,8 +31,8 @@ The easiest option is to use the TUI; run `agency tui` or just `agency`.
 Everything available in the TUI is also available via the CLI:
 
 - `agency --help` - See all available commands
-- `agency new my-task` - Start a new task with slug `my-task`; opens your configured editor to describe what the agent should do.
-- `agency new --draft my-task` - Create a new task as a draft (doesn't start it yet).
+- `agency new my-task` - Create a new task with slug `my-task`, start a session for it, and attach immediately (no editor by default).
+- `agency new --draft my-task` - Create a new task as a draft (doesn't start or attach; in interactive TTY mode without a description, this opens your editor to write the initial instructions).
 - `agency edit my-task` - Edit a draft task.
 - `agency start my-task` - Start a task that is a draft or stopped.
 - `agency attach my-task` or `agency attach 1` - Open the agent TUI by slug or ID.
