@@ -25,6 +25,12 @@ pub struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Commands {
+  /// Run the setup wizard to configure Agency
+  Setup {},
+  /// Scaffold a .agency/ directory with starter files
+  Init {},
+  /// Interactive terminal UI
+  Tui {},
   /// Create a new task under .agency/tasks
   New {
     slug: String,
@@ -43,33 +49,13 @@ enum Commands {
     #[arg(long = "no-attach", conflicts_with = "draft")]
     no_attach: bool,
   },
-  /// Fast-forward merge task back to base and clean up
-  Merge {
-    ident: String,
-    /// Override base branch
-    #[arg(short = 'b', long = "branch")]
-    base: Option<String>,
-  },
-  /// Open the task's worktree directory in $EDITOR
-  Open { ident: String },
   /// Open the task's markdown in $EDITOR
   Edit { ident: String },
-  /// Open a shell with the worktree as cwd
-  Shell { ident: String },
-  /// Print the absolute worktree path
-  Path { ident: String },
-  /// Print the branch name
-  Branch { ident: String },
-  /// Remove task file, worktree, and branch
-  Rm { ident: String },
-  /// Reset a task's worktree and branch (keep markdown)
-  Reset { ident: String },
-  /// List tasks (ID and SLUG)
-  Tasks {},
-  /// Daemon control commands
-  Daemon {
-    #[command(subcommand)]
-    cmd: DaemonCmd,
+  /// Start a task session; attach by default
+  Start {
+    ident: String,
+    #[arg(long = "no-attach")]
+    no_attach: bool,
   },
   /// Attach to an already running task session via PTY daemon
   Attach {
@@ -81,36 +67,50 @@ enum Commands {
     #[arg(long = "follow", num_args(0..=1), conflicts_with = "task", conflicts_with = "session")]
     follow: Option<Option<u32>>,
   },
-  /// Start a task session; attach by default
-  Start {
-    ident: String,
-    #[arg(long = "no-attach")]
-    no_attach: bool,
-  },
-  /// Prepare branch/worktree and run bootstrap (no PTY)
-  Bootstrap { ident: String },
   /// Stop a task's sessions or a specific session
   Stop {
     task: Option<String>,
     #[arg(long)]
     session: Option<u64>,
   },
-  /// List running sessions in this project
-  Sessions {},
+  /// Fast-forward merge task back to base and clean up
+  Merge {
+    ident: String,
+    /// Override base branch
+    #[arg(short = 'b', long = "branch")]
+    base: Option<String>,
+  },
   /// Mark a task as Completed (uses $`AGENCY_TASK_ID` when omitted)
   Complete { ident: Option<String> },
-  /// Run the setup wizard to configure Agency
-  Setup {},
+  /// List tasks (ID and SLUG)
+  Tasks {},
+  /// List running sessions in this project
+  Sessions {},
+  /// Open the task's worktree directory in $EDITOR
+  Open { ident: String },
+  /// Open a shell with the worktree as cwd
+  Shell { ident: String },
+  /// Print the absolute worktree path
+  Path { ident: String },
+  /// Print the branch name
+  Branch { ident: String },
+  /// Remove task file, worktree, and branch
+  Rm { ident: String },
+  /// Reset a task's worktree and branch (keep markdown)
+  Reset { ident: String },
+  /// Prepare branch/worktree and run bootstrap (no PTY)
+  Bootstrap { ident: String },
   /// Open the global config in the configured editor
   Config {},
   /// Print embedded defaults for inspection
   Defaults {},
-  /// Scaffold a .agency/ directory with starter files
-  Init {},
-  /// Interactive terminal UI
-  Tui {},
   /// Garbage-collect orphaned branches/worktrees (no task)
   Gc {},
+  /// Daemon control commands
+  Daemon {
+    #[command(subcommand)]
+    cmd: DaemonCmd,
+  },
 }
 
 #[derive(Debug, Subcommand)]
@@ -158,6 +158,9 @@ fn autostart_daemon(ctx: &AppContext, cmd: Option<&Commands>) {
 
 fn run_command(ctx: &AppContext, cli: Cli) -> Result<()> {
   match cli.command {
+    Some(Commands::Setup {}) => commands::setup::run(ctx),
+    Some(Commands::Init {}) => commands::init::run(ctx),
+    Some(Commands::Tui {}) => crate::tui::run(ctx),
     Some(Commands::New {
       slug,
       desc,
@@ -175,21 +178,10 @@ fn run_command(ctx: &AppContext, cli: Cli) -> Result<()> {
       }
       Ok(())
     }
-    Some(Commands::Merge { ident, base }) => commands::merge::run(ctx, &ident, base.as_deref()),
-    Some(Commands::Open { ident }) => commands::open::run(ctx, &ident),
     Some(Commands::Edit { ident }) => commands::edit::run(ctx, &ident),
-    Some(Commands::Shell { ident }) => commands::shell::run(ctx, &ident),
-    Some(Commands::Path { ident }) => commands::path::run(ctx, &ident),
-    Some(Commands::Branch { ident }) => commands::branch::run(ctx, &ident),
-    Some(Commands::Rm { ident }) => commands::rm::run(ctx, &ident),
-    Some(Commands::Reset { ident }) => commands::reset::run(ctx, &ident),
-    Some(Commands::Tasks {}) => commands::ps::run(ctx),
-    Some(Commands::Daemon { cmd }) => match cmd {
-      DaemonCmd::Start {} => commands::daemon::start(),
-      DaemonCmd::Stop {} => commands::daemon::stop(),
-      DaemonCmd::Restart {} => commands::daemon::restart(),
-      DaemonCmd::Run {} => commands::daemon::run_blocking(),
-    },
+    Some(Commands::Start { ident, no_attach }) => {
+      commands::start::run_with_attach(ctx, &ident, !no_attach)
+    }
     Some(Commands::Attach {
       task,
       session,
@@ -205,19 +197,27 @@ fn run_command(ctx: &AppContext, cli: Cli) -> Result<()> {
         anyhow::bail!("Attach requires either a task, --session <id>, or --follow [<tui-id>]")
       }
     }
-    Some(Commands::Bootstrap { ident }) => commands::bootstrap::run(ctx, &ident),
-    Some(Commands::Start { ident, no_attach }) => {
-      commands::start::run_with_attach(ctx, &ident, !no_attach)
-    }
     Some(Commands::Stop { task, session }) => commands::stop::run(ctx, task.as_deref(), session),
-    Some(Commands::Sessions {}) => commands::sessions::run(ctx),
+    Some(Commands::Merge { ident, base }) => commands::merge::run(ctx, &ident, base.as_deref()),
     Some(Commands::Complete { ident }) => commands::complete::run(ctx, ident.as_deref()),
-    Some(Commands::Setup {}) => commands::setup::run(ctx),
+    Some(Commands::Tasks {}) => commands::ps::run(ctx),
+    Some(Commands::Sessions {}) => commands::sessions::run(ctx),
+    Some(Commands::Open { ident }) => commands::open::run(ctx, &ident),
+    Some(Commands::Shell { ident }) => commands::shell::run(ctx, &ident),
+    Some(Commands::Path { ident }) => commands::path::run(ctx, &ident),
+    Some(Commands::Branch { ident }) => commands::branch::run(ctx, &ident),
+    Some(Commands::Rm { ident }) => commands::rm::run(ctx, &ident),
+    Some(Commands::Reset { ident }) => commands::reset::run(ctx, &ident),
+    Some(Commands::Bootstrap { ident }) => commands::bootstrap::run(ctx, &ident),
     Some(Commands::Config {}) => commands::config::run(ctx),
     Some(Commands::Defaults {}) => commands::defaults::run(),
-    Some(Commands::Init {}) => commands::init::run(ctx),
-    Some(Commands::Tui {}) => crate::tui::run(ctx),
     Some(Commands::Gc {}) => commands::gc::run(ctx),
+    Some(Commands::Daemon { cmd }) => match cmd {
+      DaemonCmd::Start {} => commands::daemon::start(),
+      DaemonCmd::Stop {} => commands::daemon::stop(),
+      DaemonCmd::Restart {} => commands::daemon::restart(),
+      DaemonCmd::Run {} => commands::daemon::run_blocking(),
+    },
     None => run_default(ctx),
   }
 }
