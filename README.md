@@ -130,6 +130,7 @@ flowchart LR
   C <--> S[Unix Socket]
   S <--> D[Agency Daemon]
   C <--> T[tmux Server]
+  D <--> T
   T --> A[CLI Agents]
 
   subgraph Project
