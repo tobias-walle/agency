@@ -1,3 +1,11 @@
+# [1.6.0](https://github.com/tobias-walle/agency/compare/v1.5.0...v1.6.0) (2025-11-24)
+
+
+### Features
+
+* start agent directly on "new" with --draft and don't open the editor ([a2f43a6](https://github.com/tobias-walle/agency/commit/a2f43a6431be109d382f2ecae22172a5f814cf1b))
+* TUI Start and New+Start run sessions without attach ([316fcd3](https://github.com/tobias-walle/agency/commit/316fcd34450af54ff0e3de8446ca17eb8c8b762a))
+
 # [1.5.0](https://github.com/tobias-walle/agency/compare/v1.4.0...v1.5.0) (2025-11-16)
 
 
