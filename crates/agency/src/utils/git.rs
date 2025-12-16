@@ -15,17 +15,25 @@ use crate::utils::child::run_child_process;
 #[must_use]
 pub fn resolve_main_workdir(cwd: &Path) -> PathBuf {
   match git::discover(cwd) {
-    Ok(repo) => match repo.kind() {
-      git::repository::Kind::WorkTree { is_linked } if is_linked => {
-        // Only redirect to the main repo when inside a linked worktree.
-        repo
-          .main_repo()
-          .ok()
-          .and_then(|r| r.workdir().map(std::path::Path::to_path_buf))
-          .unwrap_or_else(|| cwd.to_path_buf())
+    Ok(repo) => {
+      // Get the workdir for the discovered repo
+      let workdir = match repo.workdir() {
+        Some(dir) => dir.to_path_buf(),
+        None => return cwd.to_path_buf(), // Bare repo fallback
+      };
+
+      // If in a linked worktree, navigate to main repo
+      match repo.kind() {
+        git::repository::Kind::WorkTree { is_linked } if is_linked => {
+          repo
+            .main_repo()
+            .ok()
+            .and_then(|r| r.workdir().map(std::path::Path::to_path_buf))
+            .unwrap_or(workdir)
+        }
+        _ => workdir, // Return repo workdir (not cwd!)
       }
-      _ => cwd.to_path_buf(),
-    },
+    }
     Err(_) => cwd.to_path_buf(),
   }
 }
@@ -483,6 +491,59 @@ mod tests {
 
     // cleanup best-effort
     let _ = fs::remove_dir_all(&wt_dir);
+  }
+
+  #[test]
+  fn resolves_main_root_from_external_worktree() {
+    let main_repo = tempfile::tempdir().expect("main");
+    let wt_location = tempfile::tempdir().expect("wt");
+
+    // Setup main repo with initial commit
+    run_git(main_repo.path(), &["init"]);
+    run_git(main_repo.path(), &["config", "user.email", "test@example.com"]);
+    run_git(main_repo.path(), &["config", "user.name", "Tester"]);
+    fs::write(main_repo.path().join("README.md"), "ok\n").expect("write");
+    run_git(main_repo.path(), &["add", "."]);
+    run_git(main_repo.path(), &["commit", "-m", "init"]);
+
+    // Create worktree in SEPARATE directory (external)
+    let wt_path = wt_location.path().join("external-wt");
+    run_git(
+      main_repo.path(),
+      &["worktree", "add", wt_path.to_str().unwrap(), "-b", "feat"],
+    );
+
+    let got = resolve_main_workdir(&wt_path);
+    let got = got.canonicalize().unwrap_or(got);
+    let want = main_repo
+      .path()
+      .canonicalize()
+      .unwrap_or_else(|_| PathBuf::from(main_repo.path()));
+    assert_eq!(got, want);
+  }
+
+  #[test]
+  fn resolves_repo_root_from_subdirectory() {
+    let dir = tempfile::tempdir().expect("tmp");
+    let root = dir.path();
+
+    run_git(root, &["init"]);
+    run_git(root, &["config", "user.email", "test@example.com"]);
+    run_git(root, &["config", "user.name", "Tester"]);
+    fs::write(root.join("README.md"), "ok\n").expect("write");
+    run_git(root, &["add", "."]);
+    run_git(root, &["commit", "-m", "init"]);
+
+    // Create and test from subdirectory
+    let subdir = root.join("src").join("nested");
+    fs::create_dir_all(&subdir).expect("mkdir");
+
+    let got = resolve_main_workdir(&subdir);
+    let got = got.canonicalize().unwrap_or(got);
+    let want = root
+      .canonicalize()
+      .unwrap_or_else(|_| PathBuf::from(root));
+    assert_eq!(got, want);
   }
 
   #[test]
