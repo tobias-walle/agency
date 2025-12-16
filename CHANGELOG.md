@@ -1,3 +1,10 @@
+## [1.6.1](https://github.com/tobias-walle/agency/compare/v1.6.0...v1.6.1) (2025-12-16)
+
+
+### Bug Fixes
+
+* resolve to git repo root instead of cwd in worktrees ([4dfbc18](https://github.com/tobias-walle/agency/commit/4dfbc18e5264b40319e9b39adaf12d3cc6070233))
+
 # [1.6.0](https://github.com/tobias-walle/agency/compare/v1.5.0...v1.6.0) (2025-11-24)
 
 
