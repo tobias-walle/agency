@@ -4,6 +4,7 @@ use anyhow::{Context, Result, bail};
 
 use crate::config::AppContext;
 use crate::utils::git::{open_main_repo, repo_workdir_or};
+use crate::utils::session::build_task_env;
 use crate::utils::task::{read_task_content, resolve_id_or_slug, worktree_dir};
 
 pub fn run(ctx: &AppContext, ident: &str, cmd: &[String]) -> Result<i32> {
@@ -32,19 +33,13 @@ pub fn run(ctx: &AppContext, ident: &str, cmd: &[String]) -> Result<i32> {
   let description = content.body.trim();
   let repo = open_main_repo(ctx.paths.cwd())?;
   let repo_root = repo_workdir_or(&repo, ctx.paths.cwd());
-  let root_abs = repo_root
-    .canonicalize()
-    .unwrap_or(repo_root)
-    .display()
-    .to_string();
+  let env_map = build_task_env(tref.id, description, &repo_root);
 
   // Execute command (no log output from agency)
   let status = ProcCommand::new(program)
     .args(args)
     .current_dir(&wt_dir)
-    .env("AGENCY_TASK", description)
-    .env("AGENCY_ROOT", root_abs)
-    .env("AGENCY_TASK_ID", tref.id.to_string())
+    .envs(&env_map)
     .status()
     .with_context(|| format!("failed to execute: {program}"))?;
 

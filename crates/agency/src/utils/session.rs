@@ -1,6 +1,6 @@
 use anyhow::Result;
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::commands::shell::resolve_shell_argv;
 use crate::config::AppContext;
@@ -12,6 +12,21 @@ use crate::utils::git::{ensure_branch_at, open_main_repo, repo_workdir_or, rev_p
 use crate::utils::interactive;
 use crate::utils::task::{TaskRef, agent_for_task, branch_name, read_task_content};
 use crate::utils::tmux;
+
+/// Build the standard Agency environment variables for a task.
+/// Returns a HashMap with inherited env vars plus AGENCY_TASK, AGENCY_ROOT, and AGENCY_TASK_ID.
+pub fn build_task_env(task_id: u32, task_description: &str, repo_root: &Path) -> HashMap<String, String> {
+  let mut env_map: HashMap<String, String> = std::env::vars().collect();
+  env_map.insert("AGENCY_TASK".to_string(), task_description.to_string());
+  let root_abs = repo_root
+    .canonicalize()
+    .unwrap_or_else(|_| repo_root.to_path_buf())
+    .display()
+    .to_string();
+  env_map.insert("AGENCY_ROOT".to_string(), root_abs);
+  env_map.insert("AGENCY_TASK_ID".to_string(), task_id.to_string());
+  env_map
+}
 
 pub struct SessionPlan {
   pub task_meta: TaskMeta,
@@ -47,15 +62,7 @@ pub fn build_session_plan(ctx: &AppContext, task: &TaskRef) -> Result<SessionPla
   let worktree_dir = prepare_worktree_for_task(ctx, &repo, task, &branch)?;
 
   // Build env map
-  let mut env_map: HashMap<String, String> = std::env::vars().collect();
-  env_map.insert("AGENCY_TASK".to_string(), description);
-  let root_abs = repo_root
-    .canonicalize()
-    .unwrap_or(repo_root.clone())
-    .display()
-    .to_string();
-  env_map.insert("AGENCY_ROOT".to_string(), root_abs);
-  env_map.insert("AGENCY_TASK_ID".to_string(), task.id.to_string());
+  let env_map = build_task_env(task.id, &description, &repo_root);
 
   // Select agent and expand argv
   let agent_name = agent_for_task(&ctx.config, frontmatter.as_ref()).ok_or_else(|| {

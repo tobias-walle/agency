@@ -4,9 +4,11 @@ use anyhow::{Context, Result, bail};
 
 use crate::config::{AgencyConfig, AppContext};
 use crate::log_info;
+use crate::utils::git::{open_main_repo, repo_workdir_or};
 use crate::utils::interactive;
 use crate::utils::log::t;
-use crate::utils::task::{resolve_id_or_slug, worktree_dir};
+use crate::utils::session::build_task_env;
+use crate::utils::task::{read_task_content, resolve_id_or_slug, worktree_dir};
 
 pub(crate) fn resolve_shell_argv(cfg: &AgencyConfig) -> Vec<String> {
   if let Some(v) = &cfg.shell
@@ -45,12 +47,20 @@ pub fn run(ctx: &AppContext, ident: &str) -> Result<()> {
     .map(std::string::String::as_str)
     .collect();
 
+  // Build environment variables
+  let content = read_task_content(&ctx.paths, &tref)?;
+  let description = content.body.trim();
+  let repo = open_main_repo(ctx.paths.cwd())?;
+  let repo_root = repo_workdir_or(&repo, ctx.paths.cwd());
+  let env_map = build_task_env(tref.id, description, &repo_root);
+
   log_info!("Open shell {}", t::path(wt_dir.display()));
 
   interactive::scope(|| {
     let status = ProcCommand::new(program)
       .args(&argv_tail)
       .current_dir(&wt_dir)
+      .envs(&env_map)
       .status()
       .with_context(|| format!("failed to spawn shell program: {program}"))?;
     if !status.success() {
