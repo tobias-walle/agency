@@ -10,7 +10,7 @@ Agency is a command-line AI agent orchestrator. It helps developers run one or m
   - `fix: fix ...`
 - You MUST add the files and the create the commit in the same command for easy review e.g.:
   - `git add fileA.rs fileB.rs && git commit -m "feat: ..."`
-- Keep commit messages short. Never add semicolons in them.
+- Keep commit messages short. Never add semicolons in them. Omit the description. Don't leave an agent signature.
 - If you are committing a spec change always start with `docs: add spec change for ...`
 
 # Code Style

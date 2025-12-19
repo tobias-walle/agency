@@ -192,8 +192,8 @@ fn exec_no_agency_logs_in_output() -> Result<()> {
 fn exec_works_with_slug() -> Result<()> {
   TestEnv::run(|env| -> Result<()> {
     env.init_repo()?;
-    let (_id, slug) = env.new_task("slug-test", &[])?;
-    env.bootstrap_task(_id)?;
+    let (id, slug) = env.new_task("slug-test", &[])?;
+    env.bootstrap_task(id)?;
 
     // Should work with slug instead of id
     env

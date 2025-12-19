@@ -16,7 +16,7 @@ use crate::utils::task::{
 use crate::utils::tmux;
 
 /// Build the standard Agency environment variables for a task.
-/// Returns a HashMap with inherited env vars plus AGENCY_TASK, AGENCY_ROOT, and AGENCY_TASK_ID.
+/// Returns a `HashMap` with inherited env vars plus `AGENCY_TASK`, `AGENCY_ROOT`, and `AGENCY_TASK_ID`.
 pub fn build_task_env(task_id: u32, task_description: &str, repo_root: &Path) -> HashMap<String, String> {
   let mut env_map: HashMap<String, String> = std::env::vars().collect();
   env_map.insert("AGENCY_TASK".to_string(), task_description.to_string());
