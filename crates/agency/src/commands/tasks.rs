@@ -2,10 +2,11 @@ use anyhow::Result;
 
 use crate::config::AppContext;
 use crate::utils::daemon::get_project_state;
-use crate::utils::git::head_branch;
 use crate::utils::sessions::latest_sessions_by_task;
 use crate::utils::status::{TaskStatus, derive_status, is_task_completed, status_label};
-use crate::utils::task::{agent_for_task, list_tasks, read_task_frontmatter, worktree_dir};
+use crate::utils::task::{
+  TaskFrontmatterExt, agent_for_task, list_tasks, read_task_frontmatter, worktree_dir,
+};
 use crate::utils::term::print_table;
 use owo_colors::OwoColorize;
 
@@ -31,7 +32,6 @@ pub fn run(ctx: &AppContext) -> Result<()> {
     Err(_) => (Vec::new(), std::collections::HashMap::new()),
   };
   let latest = latest_sessions_by_task(&sessions);
-  let base = head_branch(ctx);
   let rows: Vec<Vec<String>> = tasks
     .iter()
     .map(|t| {
@@ -47,6 +47,7 @@ pub fn run(ctx: &AppContext) -> Result<()> {
       let status_text = status_label(&effective_status);
       let fm = read_task_frontmatter(&ctx.paths, t);
       let agent = agent_for_task(&ctx.config, fm.as_ref());
+      let base = fm.base_branch(ctx);
       let (unc_text, commits_text) = if let Some((a, d, ahead)) = metrics_map.get(&key) {
         let plus = if *a == 0 {
           "+0".to_string().dimmed().to_string()
@@ -77,7 +78,7 @@ pub fn run(ctx: &AppContext) -> Result<()> {
         status_text,
         unc_text,
         commits_text,
-        base.clone(),
+        base,
         agent.unwrap_or_else(|| "-".to_string()),
       ]
     })

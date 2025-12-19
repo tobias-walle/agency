@@ -20,7 +20,7 @@ use crate::daemon_protocol::{
 };
 use crate::utils::daemon::{connect_daemon, get_project_state};
 use crate::utils::git::{open_main_repo, repo_workdir_or};
-use crate::utils::task::{TaskRef, list_tasks};
+use crate::utils::task::{TaskFrontmatterExt, TaskRef, list_tasks};
 use crate::{log_error, log_info};
 use crossbeam_channel::{Receiver, unbounded};
 mod colors;
@@ -815,7 +815,6 @@ fn build_task_rows(
   prev_selected: usize,
 ) -> (Vec<TaskRow>, usize) {
   let latest = crate::utils::sessions::latest_sessions_by_task(sessions);
-  let base = crate::utils::git::head_branch(ctx);
 
   let mut out = Vec::with_capacity(tasks.len());
   for t in tasks {
@@ -839,13 +838,14 @@ fn build_task_rows(
     let fm = crate::utils::task::read_task_frontmatter(&ctx.paths, t);
     let agent = crate::utils::task::agent_for_task(&ctx.config, fm.as_ref())
       .unwrap_or_else(|| "-".to_string());
+    let base = fm.base_branch(ctx);
 
     out.push(TaskRow {
       id: t.id,
       slug: t.slug.clone(),
       status: status_str,
       session: latest_sess.map(|s| s.session_id),
-      base: base.clone(),
+      base,
       agent,
       uncommitted_display: "-".to_string(),
       commits_display: "-".to_string(),

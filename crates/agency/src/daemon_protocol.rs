@@ -19,7 +19,7 @@ pub struct TaskMeta {
 pub struct TaskInfo {
   pub id: u32,
   pub slug: String,
-  pub base_branch: String,
+  pub base_branch: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default, Encode, Decode)]

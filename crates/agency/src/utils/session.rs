@@ -10,7 +10,9 @@ use crate::utils::cmd::{CmdCtx, expand_argv};
 use crate::utils::command::as_shell_command;
 use crate::utils::git::{ensure_branch_at, open_main_repo, repo_workdir_or, rev_parse};
 use crate::utils::interactive;
-use crate::utils::task::{TaskRef, agent_for_task, branch_name, read_task_content};
+use crate::utils::task::{
+  TaskFrontmatterExt, TaskRef, agent_for_task, branch_name, read_task_content,
+};
 use crate::utils::tmux;
 
 /// Build the standard Agency environment variables for a task.
@@ -47,10 +49,7 @@ pub fn build_session_plan(ctx: &AppContext, task: &TaskRef) -> Result<SessionPla
   // Compute repo root and ensure branch/worktree
   let repo = open_main_repo(ctx.paths.cwd())?;
   let repo_root = repo_workdir_or(&repo, ctx.paths.cwd());
-  let base_branch = frontmatter
-    .as_ref()
-    .and_then(|fm| fm.base_branch.clone())
-    .unwrap_or_else(|| crate::utils::git::head_branch(ctx));
+  let base_branch = frontmatter.base_branch(ctx);
   // Ensure base branch resolves
   if rev_parse(&repo_root, &base_branch).is_err() {
     anyhow::bail!(

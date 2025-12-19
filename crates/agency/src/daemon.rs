@@ -363,13 +363,10 @@ fn build_project_snapshot(
   let mut tasks_info: Vec<TaskInfo> = Vec::new();
   for tref in &task_refs {
     let fm = read_task_frontmatter(&paths, tref);
-    let base = fm
-      .and_then(|f| f.base_branch)
-      .unwrap_or_else(|| head.clone());
     tasks_info.push(TaskInfo {
       id: tref.id,
       slug: tref.slug.clone(),
-      base_branch: base,
+      base_branch: fm.and_then(|f| f.base_branch),
     });
   }
 
@@ -408,7 +405,8 @@ fn build_project_snapshot(
     let base = tasks_info
       .iter()
       .find(|ti| ti.id == id && ti.slug == slug)
-      .map_or_else(|| head.clone(), |ti| ti.base_branch.clone());
+      .and_then(|ti| ti.base_branch.clone())
+      .unwrap_or_else(|| head.clone());
     let branch = branch_name(&tref);
     let ahead = commits_ahead_at(&repo_root, &base, &branch).unwrap_or(0);
     let mut updated_at_ms = now_ms();

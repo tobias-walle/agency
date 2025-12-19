@@ -207,7 +207,7 @@ fn run_command(ctx: &AppContext, cli: Cli) -> Result<()> {
     Some(Commands::Stop { task, session }) => commands::stop::run(ctx, task.as_deref(), session),
     Some(Commands::Merge { ident, base }) => commands::merge::run(ctx, &ident, base.as_deref()),
     Some(Commands::Complete { ident }) => commands::complete::run(ctx, ident.as_deref()),
-    Some(Commands::Tasks {}) => commands::ps::run(ctx),
+    Some(Commands::Tasks {}) => commands::tasks::run(ctx),
     Some(Commands::Sessions {}) => commands::sessions::run(ctx),
     Some(Commands::Open { ident }) => commands::open::run(ctx, &ident),
     Some(Commands::Shell { ident }) => commands::shell::run(ctx, &ident),

@@ -210,6 +210,34 @@ pub struct TaskFrontmatter {
   pub base_branch: Option<String>,
 }
 
+/// Extension trait for `Option<TaskFrontmatter>` to extract base branch with fallback.
+pub trait TaskFrontmatterExt {
+  /// Returns the stored `base_branch` or falls back to the current HEAD branch.
+  fn base_branch(&self, ctx: &crate::config::AppContext) -> String;
+
+  /// Returns the stored `base_branch` or computes a fallback using the provided function.
+  /// Use this when `AppContext` is not available (e.g., in the daemon).
+  fn base_branch_or<F>(&self, fallback: F) -> String
+  where
+    F: FnOnce() -> String;
+}
+
+impl TaskFrontmatterExt for Option<TaskFrontmatter> {
+  fn base_branch(&self, ctx: &crate::config::AppContext) -> String {
+    self.base_branch_or(|| crate::utils::git::head_branch(ctx))
+  }
+
+  fn base_branch_or<F>(&self, fallback: F) -> String
+  where
+    F: FnOnce() -> String,
+  {
+    self
+      .as_ref()
+      .and_then(|f| f.base_branch.clone())
+      .unwrap_or_else(fallback)
+  }
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct TaskContent {
   pub frontmatter: Option<TaskFrontmatter>,
@@ -485,5 +513,32 @@ mod tests {
       stored.ends_with('\n'),
       "stored body should end with newline, got: {stored:?}"
     );
+  }
+
+  #[test]
+  fn base_branch_or_returns_stored_value() {
+    let fm: Option<TaskFrontmatter> = Some(TaskFrontmatter {
+      agent: None,
+      base_branch: Some("feature-branch".to_string()),
+    });
+    let result = fm.base_branch_or(|| "fallback".to_string());
+    assert_eq!(result, "feature-branch");
+  }
+
+  #[test]
+  fn base_branch_or_uses_fallback_when_none() {
+    let fm: Option<TaskFrontmatter> = Some(TaskFrontmatter {
+      agent: None,
+      base_branch: None,
+    });
+    let result = fm.base_branch_or(|| "fallback".to_string());
+    assert_eq!(result, "fallback");
+  }
+
+  #[test]
+  fn base_branch_or_uses_fallback_when_no_frontmatter() {
+    let fm: Option<TaskFrontmatter> = None;
+    let result = fm.base_branch_or(|| "fallback".to_string());
+    assert_eq!(result, "fallback");
   }
 }

@@ -13,7 +13,7 @@ pub mod merge;
 pub mod new;
 pub mod open;
 pub mod path;
-pub mod ps;
+pub mod tasks;
 pub mod reset;
 pub mod rm;
 pub mod sessions;

@@ -143,5 +143,15 @@ impl TestEnv {
     self.setup_git_repo()?;
     self.simulate_initial_commit()
   }
+
+  pub fn git_create_branch(&self, branch: &str) -> Result<()> {
+    self.git_stdout(&["branch", branch])?;
+    Ok(())
+  }
+
+  pub fn git_checkout(&self, branch: &str) -> Result<()> {
+    self.git_stdout(&["checkout", branch])?;
+    Ok(())
+  }
 }
 
