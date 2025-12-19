@@ -1,3 +1,15 @@
+# [1.8.0](https://github.com/tobias-walle/agency/compare/v1.7.1...v1.8.0) (2025-12-19)
+
+
+### Bug Fixes
+
+* prune stale worktrees before adding new worktree ([accfe4d](https://github.com/tobias-walle/agency/commit/accfe4d7b906dd4e4f7a84ed504b766cb48e57e7))
+
+
+### Features
+
+* add --edit flag to new command ([b547103](https://github.com/tobias-walle/agency/commit/b547103281bd355202dd689042969a2feb1f16f8))
+
 ## [1.7.1](https://github.com/tobias-walle/agency/compare/v1.7.0...v1.7.1) (2025-12-19)
 
 
