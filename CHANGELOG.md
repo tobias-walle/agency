@@ -1,3 +1,10 @@
+# [1.7.0](https://github.com/tobias-walle/agency/compare/v1.6.1...v1.7.0) (2025-12-19)
+
+
+### Features
+
+* add `agency exec <task> -- <cmd>` ([0737ffe](https://github.com/tobias-walle/agency/commit/0737ffee6c58fadae82950503b4c1139c193b460))
+
 ## [1.6.1](https://github.com/tobias-walle/agency/compare/v1.6.0...v1.6.1) (2025-12-16)
 
 
