@@ -90,6 +90,13 @@ enum Commands {
   Open { ident: String },
   /// Open a shell with the worktree as cwd
   Shell { ident: String },
+  /// Execute a command in a task's worktree
+  Exec {
+    ident: String,
+    /// Command and arguments to execute
+    #[arg(trailing_var_arg = true, allow_hyphen_values = true, required = true)]
+    cmd: Vec<String>,
+  },
   /// Print the absolute worktree path
   Path { ident: String },
   /// Print the branch name
@@ -204,6 +211,10 @@ fn run_command(ctx: &AppContext, cli: Cli) -> Result<()> {
     Some(Commands::Sessions {}) => commands::sessions::run(ctx),
     Some(Commands::Open { ident }) => commands::open::run(ctx, &ident),
     Some(Commands::Shell { ident }) => commands::shell::run(ctx, &ident),
+    Some(Commands::Exec { ident, cmd }) => {
+      let code = commands::exec::run(ctx, &ident, &cmd)?;
+      std::process::exit(code);
+    }
     Some(Commands::Path { ident }) => commands::path::run(ctx, &ident),
     Some(Commands::Branch { ident }) => commands::branch::run(ctx, &ident),
     Some(Commands::Rm { ident }) => commands::rm::run(ctx, &ident),
