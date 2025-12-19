@@ -4,6 +4,8 @@ use ratatui::style::{Color, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, List, ListItem};
 
+use super::layout::centered_rect;
+
 /// Outcome of handling a key while the menu is open
 pub enum MenuOutcome {
   Continue,
@@ -154,23 +156,6 @@ fn match_homerow_index(c: char) -> Option<usize> {
     'f' => Some(3),
     'l' => Some(4),
     _ => None,
-  }
-}
-
-fn centered_rect(
-  area: ratatui::layout::Rect,
-  width_pct: u16,
-  height_rows: u16,
-) -> ratatui::layout::Rect {
-  let w = area.width * width_pct / 100;
-  let h = height_rows;
-  let x = area.x + (area.width.saturating_sub(w)) / 2;
-  let y = area.y + (area.height.saturating_sub(h)) / 2;
-  ratatui::layout::Rect {
-    x,
-    y,
-    width: w,
-    height: h,
   }
 }
 
