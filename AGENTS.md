@@ -1,30 +1,6 @@
-<!-- OPENSPEC:START -->
+# Project
 
-# OpenSpec Instructions
-
-These instructions are for AI assistants working in this project.
-
-Always open `@/openspec/AGENTS.md` when the request:
-
-- Mentions planning or proposals (words like proposal, spec, change, plan)
-- Introduces new capabilities, breaking changes, architecture shifts, or big performance/security work
-- Sounds ambiguous and you need the authoritative spec before coding
-
-Use `@/openspec/AGENTS.md` to learn:
-
-- How to create and apply change proposals
-- Spec format and conventions
-- Project structure and guidelines
-
-Keep this managed block so 'openspec update' can refresh the instructions.
-
-<!-- OPENSPEC:END -->
-
-# OpenSpec additional instructions
-
-- In the openspec design, you MUST explain the architecture
-  - Mention all files and symbols you want to add, edit, or delete at a high level
-  - Explicitly highlight the trade-offs and how you considered readability and maintainability
+Agency is a command-line AI agent orchestrator. It helps developers run one or more coding agents (e.g. Claude Code, Codex CLI, Gemini CLI, OpenCode) in isolated Git worktrees with tmux-managed sessions, while providing both a friendly TUI and a full-featured CLI. The daemon tracks sessions and notifies clients; the CLI/TUI attach to tmux for interactive work.
 
 # Committing
 
