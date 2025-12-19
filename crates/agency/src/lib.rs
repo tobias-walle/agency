@@ -48,6 +48,9 @@ enum Commands {
     /// Start without attaching after creation (conflicts with draft)
     #[arg(long = "no-attach", conflicts_with = "draft")]
     no_attach: bool,
+    /// Open editor for description (even without --draft)
+    #[arg(short = 'e', long = "edit")]
+    edit: bool,
   },
   /// Open the task's markdown in $EDITOR
   Edit { ident: String },
@@ -175,10 +178,11 @@ fn run_command(ctx: &AppContext, cli: Cli) -> Result<()> {
       draft,
       description,
       no_attach,
+      edit,
     }) => {
       let desc = desc.or(description);
-      let desc = if draft { desc } else { Some(desc.unwrap_or_default()) };
-      let created = commands::new::run(ctx, &slug, agent.as_deref(), desc.as_deref())?;
+      let desc = if draft || edit { desc } else { Some(desc.unwrap_or_default()) };
+      let created = commands::new::run(ctx, &slug, agent.as_deref(), desc.as_deref(), edit)?;
       if !draft {
         let ident = created.id.to_string();
         commands::start::run_with_attach(ctx, &ident, !no_attach)?;

@@ -19,6 +19,7 @@ pub fn run(
   slug: &str,
   agent: Option<&str>,
   desc: Option<&str>,
+  edit: bool,
 ) -> Result<TaskRef> {
   notify_after_task_change(ctx, || {
     let base_slug = normalize_and_validate_slug(slug)?;
@@ -63,15 +64,12 @@ pub fn run(
       body: String::new(),
     };
 
-    // If description provided, write immediately and bypass editor
-    if let Some(raw) = desc {
-      content.body = raw.trim().to_string();
-      write_task_content(&ctx.paths, &task, &content)?;
-      log_info!("Create task {} (id {})", t::slug(&slug), t::id(id));
-    } else {
+    let should_open_editor = edit || desc.is_none();
+    if should_open_editor {
       let interactive = std::io::stdout().is_terminal();
       if interactive {
-        // Open editor first; only write if content is non-empty
+        let initial = desc.map(str::trim).unwrap_or_default();
+        content.body = initial.to_string();
         match edit_task_description(
           &ctx.config,
           &ctx.paths,
@@ -85,15 +83,18 @@ pub fn run(
             log_info!("Create task {} (id {})", t::slug(&slug), t::id(id));
           }
           None => {
-            // Do not create the task file; cancel
             bail!("Empty description");
           }
         }
       } else {
-        // Non-interactive: create file immediately with empty body
+        content.body = desc.map(|d| d.trim().to_string()).unwrap_or_default();
         write_task_content(&ctx.paths, &task, &content)?;
         log_info!("Create task {} (id {})", t::slug(&slug), t::id(id));
       }
+    } else {
+      content.body = desc.expect("desc must be Some when not opening editor").trim().to_string();
+      write_task_content(&ctx.paths, &task, &content)?;
+      log_info!("Create task {} (id {})", t::slug(&slug), t::id(id));
     }
 
     // Worktree and bootstrap are now created lazily at attach time

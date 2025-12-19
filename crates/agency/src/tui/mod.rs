@@ -675,7 +675,7 @@ fn ui_loop(
                 let slug = slug.clone();
                 let agent = state.selected_agent.clone();
                 move || {
-                  match crate::commands::new::run(&ctx, &slug, agent.as_deref(), Some("")) {
+                  match crate::commands::new::run(&ctx, &slug, agent.as_deref(), Some(""), false) {
                     Ok(created) => {
                       let id_str = created.id.to_string();
                       if let Err(err) =
@@ -696,7 +696,7 @@ fn ui_loop(
                 let ctx = ctx.clone();
                 let agent = state.selected_agent.clone();
                 move || {
-                  let _ = crate::commands::new::run(&ctx, &slug, agent.as_deref(), None);
+                  let _ = crate::commands::new::run(&ctx, &slug, agent.as_deref(), None, false);
                 }
               });
             }
