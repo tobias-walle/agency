@@ -1,3 +1,11 @@
+## [1.7.1](https://github.com/tobias-walle/agency/compare/v1.7.0...v1.7.1) (2025-12-19)
+
+
+### Bug Fixes
+
+* display stored base_branch in tasks command instead of current HEAD ([b949d83](https://github.com/tobias-walle/agency/commit/b949d83d264b284eab8b0a742a2c5895c6591c2c))
+* resolve clippy pedantic warnings ([0bc2acd](https://github.com/tobias-walle/agency/commit/0bc2acdb6e28f33093a039d94597005df92340c0))
+
 # [1.7.0](https://github.com/tobias-walle/agency/compare/v1.6.1...v1.7.0) (2025-12-19)
 
 
