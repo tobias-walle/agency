@@ -141,6 +141,7 @@ pub fn add_worktree_for_branch(
   let workdir = repo
     .workdir()
     .ok_or_else(|| anyhow::anyhow!("no main worktree: cannot add linked worktree"))?;
+  run_git(&["worktree", "prune"], workdir)?;
   run_git(
     &[
       "worktree",
