@@ -54,7 +54,7 @@ Teach your AI coding agent how to use Agency by installing the Agency skill. Onc
 
 ```bash
 /plugin marketplace add tobias-walle/agency
-/plugin install agency-skills@tobias-walle-agency
+/plugin install agency@agency
 ```
 
 ### Codex CLI

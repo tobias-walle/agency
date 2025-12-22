@@ -22,7 +22,6 @@ agency new <slug> "description"  # Provide description inline
 
 ```bash
 agency new --draft <slug>      # Create task file only, no worktree or session
-agency edit <slug>             # Edit the draft description
 agency start <slug>            # Start the draft (creates worktree and session)
 ```
 
@@ -66,9 +65,14 @@ agency new --draft feature-api "Build REST API endpoints"
 agency new --draft fix-tests "Fix failing unit tests"
 
 # Start all tasks
-agency start feature-auth
-agency start feature-api
-agency start fix-tests
+agency start --no-attach feature-auth
+agency start --no-attach feature-api
+agency start --no-attach fix-tests
+
+# Or start tasks on creation
+agency new --no-attach feature-auth "Implement user authentication"
+agency new --no-attach feature-api "Build REST API endpoints"
+agency new --no-attach fix-tests "Fix failing unit tests"
 
 # Check status
 agency tasks
@@ -76,6 +80,17 @@ agency tasks
 # When done, merge back
 agency merge feature-auth
 ```
+
+## Sandboxing
+
+If you are running in a sandbox you might get errors like `run/agency-tmux.sock (Operation not permitted)`.
+
+IMPORTANT: Despite the error message, this is not because the daemon is not started. It is because the sandbox cannot access the file. Always run the following commands outside the sandbox:
+
+- agency start ...
+- agency stop ...
+- agency tasks ...
+- agency merge ...
 
 ## More Information
 
