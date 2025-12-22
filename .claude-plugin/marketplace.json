@@ -6,7 +6,7 @@
   "plugins": [
     {
       "name": "agency",
-      "source": ".",
+      "source": "./",
       "description": "AI agent orchestrator for managing coding agents in isolated Git worktrees with tmux sessions"
     }
   ]
