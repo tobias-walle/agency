@@ -1,5 +1,13 @@
 {
-  "name": "agency-skills",
-  "description": "Skills for the Agency CLI - an AI agent orchestrator",
-  "version": "1.0.0"
+  "name": "agency",
+  "owner": {
+    "name": "Tobias Walle"
+  },
+  "plugins": [
+    {
+      "name": "agency",
+      "source": ".",
+      "description": "AI agent orchestrator for managing coding agents in isolated Git worktrees with tmux sessions"
+    }
+  ]
 }
