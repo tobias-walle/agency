@@ -1,3 +1,19 @@
+# [1.9.0](https://github.com/tobias-walle/agency/compare/v1.8.0...v1.9.0) (2025-12-22)
+
+
+### Bug Fixes
+
+* fix claude plugin metadata ([22a3a55](https://github.com/tobias-walle/agency/commit/22a3a5556132fe226d7fa246332a0684a995a49f))
+* plugin source ([96a3577](https://github.com/tobias-walle/agency/commit/96a3577977b9fc0d2ad3b85d8c2509f2448a1f24))
+* update skills description to catch common issues ([c794a32](https://github.com/tobias-walle/agency/commit/c794a32ebb289b73c0205caca8fe838a296b82cf))
+* use correct claude marketplace file ([ba4c41f](https://github.com/tobias-walle/agency/commit/ba4c41f5d46f16f0fa84a2e878399d66c92c2ec6))
+
+
+### Features
+
+* add --agent flag to agency init ([280b004](https://github.com/tobias-walle/agency/commit/280b004230cb60b8c96031755613b27362985e5e))
+* add agency skill for AI coding agents ([090dca2](https://github.com/tobias-walle/agency/commit/090dca2c5749e7507e23a99f7950a01678efa510))
+
 # [1.8.0](https://github.com/tobias-walle/agency/compare/v1.7.1...v1.8.0) (2025-12-19)
 
 
