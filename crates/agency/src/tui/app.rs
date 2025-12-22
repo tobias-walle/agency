@@ -14,6 +14,7 @@ use super::help_bar::{self, HELP_ITEMS};
 use super::input_overlay::{self, InputOverlayState};
 use super::select_menu::{MenuOutcome, SelectMenuState};
 use super::task_table::{self, TaskTableState};
+use crate::utils::task_columns::TaskRow;
 use crate::config::AppContext;
 use crate::daemon_protocol::{C2D, C2DControl, D2C, D2CControl, ProjectKey, read_frame, write_frame};
 use crate::utils::daemon::{connect_daemon, get_project_state};
@@ -87,13 +88,13 @@ impl AppState {
         reinit_terminal(terminal)?;
         self.paused = false;
         let _ = ack.send(());
-        let prev_sel_id = self.task_table.selected_row().map(|r| r.id);
+        let prev_sel_id = self.task_table.selected_row().map(TaskRow::id);
         self.refresh(ctx).map_err(|err| {
           log_error!("{}", err);
           err
         })?;
         self.task_table.prune_pending_deletes();
-        let cur_sel_id = self.task_table.selected_row().map(|r| r.id);
+        let cur_sel_id = self.task_table.selected_row().map(TaskRow::id);
         if let (Some(prev), Some(cur)) = (prev_sel_id, cur_sel_id)
           && prev != cur
         {
@@ -107,13 +108,13 @@ impl AppState {
   fn handle_daemon_event(&mut self, ctx: &AppContext, ev: UiEvent) -> Result<(), Error> {
     match ev {
       UiEvent::ProjectState => {
-        let prev_sel_id = self.task_table.selected_row().map(|r| r.id);
+        let prev_sel_id = self.task_table.selected_row().map(TaskRow::id);
         self.refresh(ctx).map_err(|err| {
           log_error!("{}", err);
           err
         })?;
         self.task_table.prune_pending_deletes();
-        let cur_sel_id = self.task_table.selected_row().map(|r| r.id);
+        let cur_sel_id = self.task_table.selected_row().map(TaskRow::id);
         if let (Some(prev), Some(cur)) = (prev_sel_id, cur_sel_id)
           && prev != cur
         {
@@ -311,7 +312,7 @@ fn ui_loop(
   if !state.sent_initial_focus
     && let Some(cur) = state.task_table.selected_row()
   {
-    emit_focus_change(ctx, state.task_table.tui_id, cur.id);
+    emit_focus_change(ctx, state.task_table.tui_id, cur.id());
     state.sent_initial_focus = true;
   }
 

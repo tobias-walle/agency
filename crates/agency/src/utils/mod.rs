@@ -1,5 +1,6 @@
 pub mod bootstrap;
 pub mod child;
+pub mod task_columns;
 pub mod cmd;
 pub mod command;
 pub mod daemon;

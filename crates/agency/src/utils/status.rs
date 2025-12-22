@@ -1,5 +1,3 @@
-use owo_colors::OwoColorize as _;
-
 use crate::config::AgencyPaths;
 use crate::daemon_protocol::SessionInfo;
 use crate::utils::task::TaskRef;
@@ -18,6 +16,22 @@ pub enum TaskStatus {
   Other(String),
 }
 
+impl TaskStatus {
+  /// Returns the display label for this status.
+  #[must_use]
+  pub fn label(&self) -> &str {
+    match self {
+      Self::Draft => "Draft",
+      Self::Stopped => "Stopped",
+      Self::Running => "Running",
+      Self::Idle => "Idle",
+      Self::Exited => "Exited",
+      Self::Completed => "Completed",
+      Self::Other(s) => s,
+    }
+  }
+}
+
 pub fn derive_status(latest: Option<&SessionInfo>, worktree_exists: bool) -> TaskStatus {
   if let Some(s) = latest {
     return match s.status.as_str() {
@@ -31,18 +45,6 @@ pub fn derive_status(latest: Option<&SessionInfo>, worktree_exists: bool) -> Tas
     TaskStatus::Stopped
   } else {
     TaskStatus::Draft
-  }
-}
-
-pub fn status_label(status: &TaskStatus) -> String {
-  match status {
-    TaskStatus::Draft => "Draft".yellow().to_string(),
-    TaskStatus::Stopped => "Stopped".red().to_string(),
-    TaskStatus::Running => "Running".green().to_string(),
-    TaskStatus::Idle => "Idle".blue().to_string(),
-    TaskStatus::Exited => "Exited".red().to_string(),
-    TaskStatus::Completed => "Completed".green().to_string(),
-    TaskStatus::Other(s) => s.clone(),
   }
 }
 

@@ -11,6 +11,7 @@ use crate::config::{AgencyConfig, AgencyPaths};
 static TASK_FILE_RE: OnceLock<Regex> = OnceLock::new();
 static TRAILING_NUM_RE: OnceLock<Regex> = OnceLock::new();
 
+#[derive(Clone, Debug)]
 pub struct TaskRef {
   pub id: u32,
   pub slug: String,

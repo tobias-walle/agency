@@ -10,20 +10,10 @@ use ratatui::widgets::{Block, Borders, Cell, Row, Table, TableState};
 
 use crate::config::AppContext;
 use crate::daemon_protocol::SessionInfo;
-use crate::utils::task::{TaskFrontmatterExt, TaskRef, list_tasks};
-
-/// Data for a single task row in the table.
-#[derive(Clone, Debug)]
-pub struct TaskRow {
-  pub id: u32,
-  pub slug: String,
-  pub status: String,
-  pub session: Option<u64>,
-  pub base: String,
-  pub agent: String,
-  pub uncommitted_display: String,
-  pub commits_display: String,
-}
+use crate::tui::colors::ansi_to_spans;
+use crate::utils::sessions::latest_sessions_by_task;
+use crate::utils::task::list_tasks;
+use crate::utils::task_columns::{TaskColumn, TaskRow};
 
 /// Actions that can be triggered from the task table.
 #[derive(Clone, Debug)]
@@ -83,29 +73,23 @@ impl TaskTableState {
       .map(|(id, slug, add, del, ahead)| ((*id, slug.clone()), (*add, *del, *ahead)))
       .collect();
 
-    let (mut rows, sel) = build_rows(ctx, &tasks, sessions, self.selected);
+    let latest = latest_sessions_by_task(sessions);
 
-    for r in &mut rows {
-      let key = (r.id, r.slug.clone());
-      if let Some((a, d, ahead)) = metric_map.get(&key) {
-        r.uncommitted_display = if *a == 0 && *d == 0 {
-          "+0-0".to_string()
-        } else {
-          format!("+{a}-{d}")
-        };
-        r.commits_display = if *ahead == 0 {
-          "-".to_string()
-        } else {
-          ahead.to_string()
-        };
-      } else {
-        r.uncommitted_display = "-".to_string();
-        r.commits_display = "-".to_string();
-      }
-    }
+    let rows: Vec<TaskRow> = tasks
+      .iter()
+      .map(|t| {
+        let key = (t.id, t.slug.clone());
+        let (add, del, ahead) = metric_map.get(&key).copied().unwrap_or((0, 0, 0));
+        TaskRow::new(ctx, t.clone(), latest.get(&key), add, del, ahead)
+      })
+      .collect();
 
+    self.selected = if rows.is_empty() {
+      0
+    } else {
+      self.selected.min(rows.len().saturating_sub(1))
+    };
     self.rows = rows;
-    self.selected = sel;
     Ok(())
   }
 
@@ -121,38 +105,25 @@ impl TaskTableState {
     let now = Instant::now();
     self.pending_delete.retain(|_, deadline| *deadline > now);
 
-    let visible: HashSet<u32> = self.rows.iter().map(|r| r.id).collect();
+    let visible: HashSet<u32> = self.rows.iter().map(TaskRow::id).collect();
     self.pending_delete.retain(|id, _| visible.contains(id));
   }
 
   /// Draw the task table.
   pub fn draw(&self, f: &mut ratatui::Frame, area: Rect, focused: bool) {
-    let header = Row::new([
-      Cell::from("ID"),
-      Cell::from("SLUG"),
-      Cell::from("STATUS"),
-      Cell::from("UNCOMMITTED"),
-      Cell::from("COMMITS"),
-      Cell::from("BASE"),
-      Cell::from("AGENT"),
-    ])
-    .style(Style::default().fg(Color::Gray));
+    let header_cells: Vec<Cell> = TaskColumn::ALL
+      .iter()
+      .map(|col| Cell::from(col.header()))
+      .collect();
+    let header = Row::new(header_cells).style(Style::default().fg(Color::Gray));
 
     let rows = self.rows.iter().map(|r| {
-      let status_cell = if self.pending_delete.contains_key(&r.id) {
-        Cell::from("Loading").style(Style::default().fg(Color::Gray))
-      } else {
-        Cell::from(r.status.clone()).style(status_style(&r.status))
-      };
-      Row::new([
-        Cell::from(r.id.to_string()),
-        Cell::from(r.slug.clone()),
-        status_cell,
-        uncommitted_cell(&r.uncommitted_display),
-        commits_cell(&r.commits_display),
-        Cell::from(r.base.clone()),
-        Cell::from(r.agent.clone()),
-      ])
+      let pending = self.pending_delete.contains_key(&r.id());
+      let cells: Vec<Cell> = TaskColumn::ALL
+        .iter()
+        .map(|col| Cell::from(Line::from(ansi_to_spans(&col.cell(r, pending)))))
+        .collect();
+      Row::new(cells)
     });
 
     let left_title = if focused {
@@ -170,21 +141,15 @@ impl TaskTableState {
       table_block = table_block.title(right_title);
     }
 
-    let table = Table::new(
-      rows,
-      [
-        Constraint::Percentage(8),
-        Constraint::Percentage(20),
-        Constraint::Percentage(14),
-        Constraint::Percentage(14),
-        Constraint::Percentage(10),
-        Constraint::Percentage(14),
-        Constraint::Percentage(20),
-      ],
-    )
-    .header(header)
-    .highlight_style(Style::default().bg(Color::DarkGray))
-    .block(table_block);
+    let widths: Vec<Constraint> = TaskColumn::width_percentages()
+      .into_iter()
+      .map(Constraint::Percentage)
+      .collect();
+
+    let table = Table::new(rows, widths)
+      .header(header)
+      .highlight_style(Style::default().bg(Color::DarkGray))
+      .block(table_block);
 
     let mut tstate = TableState::default();
     tstate.select(Some(self.selected));
@@ -198,7 +163,7 @@ impl TaskTableState {
         if !self.rows.is_empty() {
           self.selected = self.selected.saturating_sub(1);
           if let Some(sel) = self.rows.get(self.selected) {
-            return Action::SelectionChanged { id: sel.id };
+            return Action::SelectionChanged { id: sel.id() };
           }
         }
         Action::None
@@ -207,7 +172,7 @@ impl TaskTableState {
         if !self.rows.is_empty() {
           self.selected = (self.selected + 1).min(self.rows.len() - 1);
           if let Some(sel) = self.rows.get(self.selected) {
-            return Action::SelectionChanged { id: sel.id };
+            return Action::SelectionChanged { id: sel.id() };
           }
         }
         Action::None
@@ -215,8 +180,8 @@ impl TaskTableState {
       KeyCode::Enter => {
         if let Some(cur) = self.rows.get(self.selected) {
           Action::EditOrAttach {
-            id: cur.id,
-            session: cur.session,
+            id: cur.id(),
+            session: cur.session_id(),
           }
         } else {
           Action::None
@@ -230,49 +195,49 @@ impl TaskTableState {
       },
       KeyCode::Char('s') => {
         if let Some(cur) = self.rows.get(self.selected) {
-          Action::StartTask { id: cur.id }
+          Action::StartTask { id: cur.id() }
         } else {
           Action::None
         }
       }
       KeyCode::Char('S') => {
         if let Some(cur) = self.rows.get(self.selected) {
-          Action::StopTask { id: cur.id }
+          Action::StopTask { id: cur.id() }
         } else {
           Action::None
         }
       }
       KeyCode::Char('m') => {
         if let Some(cur) = self.rows.get(self.selected) {
-          Action::MergeTask { id: cur.id }
+          Action::MergeTask { id: cur.id() }
         } else {
           Action::None
         }
       }
       KeyCode::Char('o') => {
         if let Some(cur) = self.rows.get(self.selected) {
-          Action::OpenTask { id: cur.id }
+          Action::OpenTask { id: cur.id() }
         } else {
           Action::None
         }
       }
       KeyCode::Char('O') => {
         if let Some(cur) = self.rows.get(self.selected) {
-          Action::ShellTask { id: cur.id }
+          Action::ShellTask { id: cur.id() }
         } else {
           Action::None
         }
       }
       KeyCode::Char('X') => {
         if let Some(cur) = self.rows.get(self.selected) {
-          Action::DeleteTask { id: cur.id }
+          Action::DeleteTask { id: cur.id() }
         } else {
           Action::None
         }
       }
       KeyCode::Char('R') => {
         if let Some(cur) = self.rows.get(self.selected) {
-          Action::ResetTask { id: cur.id }
+          Action::ResetTask { id: cur.id() }
         } else {
           Action::None
         }
@@ -287,106 +252,13 @@ impl TaskTableState {
   }
 }
 
-fn build_rows(
-  ctx: &AppContext,
-  tasks: &[TaskRef],
-  sessions: &[SessionInfo],
-  prev_selected: usize,
-) -> (Vec<TaskRow>, usize) {
-  let latest = crate::utils::sessions::latest_sessions_by_task(sessions);
-
-  let mut out = Vec::with_capacity(tasks.len());
-  for t in tasks {
-    let latest_sess = latest.get(&(t.id, t.slug.clone()));
-    let wt_exists = crate::utils::task::worktree_dir(&ctx.paths, t).exists();
-    let base_status = crate::utils::status::derive_status(latest_sess, wt_exists);
-    let status_str = match if crate::utils::status::is_task_completed(&ctx.paths, t) {
-      crate::utils::status::TaskStatus::Completed
-    } else {
-      base_status
-    } {
-      crate::utils::status::TaskStatus::Draft => "Draft".to_string(),
-      crate::utils::status::TaskStatus::Stopped => "Stopped".to_string(),
-      crate::utils::status::TaskStatus::Running => "Running".to_string(),
-      crate::utils::status::TaskStatus::Idle => "Idle".to_string(),
-      crate::utils::status::TaskStatus::Exited => "Exited".to_string(),
-      crate::utils::status::TaskStatus::Completed => "Completed".to_string(),
-      crate::utils::status::TaskStatus::Other(s) => s,
-    };
-
-    let fm = crate::utils::task::read_task_frontmatter(&ctx.paths, t);
-    let agent = crate::utils::task::agent_for_task(&ctx.config, fm.as_ref())
-      .unwrap_or_else(|| "-".to_string());
-    let base = fm.base_branch(ctx);
-
-    out.push(TaskRow {
-      id: t.id,
-      slug: t.slug.clone(),
-      status: status_str,
-      session: latest_sess.map(|s| s.session_id),
-      base,
-      agent,
-      uncommitted_display: "-".to_string(),
-      commits_display: "-".to_string(),
-    });
-  }
-
-  let selected = if out.is_empty() {
-    0
-  } else {
-    prev_selected.min(out.len().saturating_sub(1))
-  };
-  (out, selected)
-}
-
-fn status_style(status: &str) -> Style {
-  match status {
-    "Running" | "Completed" => Style::default().fg(Color::Green),
-    "Idle" => Style::default().fg(Color::Blue),
-    "Exited" | "Stopped" => Style::default().fg(Color::Red),
-    "Draft" => Style::default().fg(Color::Yellow),
-    _ => Style::default(),
-  }
-}
-
-fn uncommitted_cell(text: &str) -> Cell<'_> {
-  if text == "-" {
-    return Cell::from(Line::from(vec![
-      Span::raw("+0").style(Style::default().fg(Color::Gray)),
-      Span::raw("-0").style(Style::default().fg(Color::Gray)),
-    ]));
-  }
-  let s = text.trim();
-  if let Some((plus, rest)) = s.strip_prefix('+').and_then(|p| p.split_once('-')) {
-    let a_num = plus.parse::<u64>().unwrap_or(0);
-    let b_num = rest.parse::<u64>().unwrap_or(0);
-    return Cell::from(Line::from(vec![
-      if a_num > 0 {
-        Span::styled(format!("+{a_num}"), Style::default().fg(Color::Green))
-      } else {
-        Span::styled("+0", Style::default().fg(Color::Gray))
-      },
-      if b_num > 0 {
-        Span::styled(format!("-{b_num}"), Style::default().fg(Color::Red))
-      } else {
-        Span::styled("-0", Style::default().fg(Color::Gray))
-      },
-    ]));
-  }
-  Cell::from(text.to_string())
-}
-
-fn commits_cell(text: &str) -> Cell<'_> {
-  if text == "-" || text == "0" {
-    return Cell::from(text.to_string()).style(Style::default().fg(Color::Gray));
-  }
-  Cell::from(text.to_string()).style(Style::default().fg(Color::Cyan))
-}
-
 #[cfg(test)]
 mod tests {
   use super::*;
+  use crate::config::AgencyPaths;
   use crate::daemon_protocol::TaskMeta;
+  use crate::utils::task::TaskRef;
+  use crate::utils::term::strip_ansi_control_codes;
 
   fn make_task(id: u32, slug: &str) -> TaskRef {
     TaskRef {
@@ -416,80 +288,67 @@ mod tests {
   }
 
   #[test]
-  fn status_style_mapping() {
-    assert_eq!(status_style("Running").fg, Some(Color::Green));
-    assert_eq!(status_style("Idle").fg, Some(Color::Blue));
-    assert_eq!(status_style("Exited").fg, Some(Color::Red));
-    assert_eq!(status_style("Stopped").fg, Some(Color::Red));
-    assert_eq!(status_style("Draft").fg, Some(Color::Yellow));
-    assert_eq!(status_style("Other").fg, None);
+  fn task_row_with_running_session() {
+    let dir = tempfile::TempDir::new().expect("tmp");
+    let ctx = AppContext {
+      paths: AgencyPaths::new(dir.path()),
+      config: crate::config::AgencyConfig::default(),
+    };
+    let task = make_task(1, "alpha");
+    let session = make_session(9, 1, "alpha", "Running", 900);
+    let row = TaskRow::new(&ctx, task, Some(&session), 0, 0, 0);
+
+    assert_eq!(row.id(), 1);
+    assert_eq!(row.task.slug, "alpha");
+    assert_eq!(row.session_id(), Some(9));
+
+    let status_cell = TaskColumn::Status.cell(&row, false);
+    assert_eq!(strip_ansi_control_codes(&status_cell), "Running");
   }
 
   #[test]
-  fn build_rows_session_mapping_and_selection() {
-    let tasks = vec![make_task(1, "alpha"), make_task(2, "beta")];
-    let sessions = vec![
-      make_session(9, 1, "alpha", "Running", 900),
-      make_session(10, 2, "beta", "Running", 1000),
-      make_session(11, 2, "beta", "Exited", 1100),
-    ];
+  fn task_row_without_session_is_draft() {
     let dir = tempfile::TempDir::new().expect("tmp");
     let ctx = AppContext {
-      paths: crate::config::AgencyPaths::new(dir.path()),
+      paths: AgencyPaths::new(dir.path()),
       config: crate::config::AgencyConfig::default(),
     };
-    let (rows, sel) = build_rows(&ctx, &tasks, &sessions, 5);
-    assert_eq!(rows.len(), 2);
-    assert_eq!(rows[0].slug, "alpha");
-    assert_eq!(rows[0].status, "Running");
-    assert_eq!(rows[0].session, Some(9));
-    assert_eq!(rows[1].slug, "beta");
-    assert_eq!(rows[1].status, "Exited");
-    assert_eq!(rows[1].session, Some(11));
-    assert_eq!(sel, 1);
+    let task = make_task(1, "alpha");
+    let row = TaskRow::new(&ctx, task, None, 0, 0, 0);
+
+    assert_eq!(row.session_id(), None);
+
+    let status_cell = TaskColumn::Status.cell(&row, false);
+    assert_eq!(strip_ansi_control_codes(&status_cell), "Draft");
   }
 
   #[test]
-  fn build_rows_show_idle_status() {
-    let tasks = vec![make_task(1, "alpha")];
-    let sessions = vec![make_session(10, 1, "alpha", "Idle", 1000)];
+  fn task_row_with_exited_session() {
     let dir = tempfile::TempDir::new().expect("tmp");
     let ctx = AppContext {
-      paths: crate::config::AgencyPaths::new(dir.path()),
+      paths: AgencyPaths::new(dir.path()),
       config: crate::config::AgencyConfig::default(),
     };
-    let (rows, _) = build_rows(&ctx, &tasks, &sessions, 0);
-    assert_eq!(rows.len(), 1);
-    assert_eq!(rows[0].status, "Idle");
-    assert_eq!(rows[0].session, Some(10));
+    let task = make_task(2, "beta");
+    let session = make_session(11, 2, "beta", "Exited", 1100);
+    let row = TaskRow::new(&ctx, task, Some(&session), 0, 0, 0);
+
+    let status_cell = TaskColumn::Status.cell(&row, false);
+    assert_eq!(strip_ansi_control_codes(&status_cell), "Exited");
   }
 
   #[test]
-  fn build_rows_without_session_are_draft() {
-    let tasks = vec![make_task(1, "alpha")];
-    let sessions: Vec<SessionInfo> = Vec::new();
+  fn task_row_with_idle_session() {
     let dir = tempfile::TempDir::new().expect("tmp");
     let ctx = AppContext {
-      paths: crate::config::AgencyPaths::new(dir.path()),
+      paths: AgencyPaths::new(dir.path()),
       config: crate::config::AgencyConfig::default(),
     };
-    let (rows, _) = build_rows(&ctx, &tasks, &sessions, 0);
-    assert_eq!(rows.len(), 1);
-    assert_eq!(rows[0].status, "Draft");
-    assert_eq!(rows[0].session, None);
-  }
+    let task = make_task(1, "alpha");
+    let session = make_session(10, 1, "alpha", "Idle", 1000);
+    let row = TaskRow::new(&ctx, task, Some(&session), 0, 0, 0);
 
-  #[test]
-  fn selection_zero_when_no_rows() {
-    let tasks: Vec<TaskRef> = Vec::new();
-    let sessions: Vec<SessionInfo> = Vec::new();
-    let dir = tempfile::TempDir::new().expect("tmp");
-    let ctx = AppContext {
-      paths: crate::config::AgencyPaths::new(dir.path()),
-      config: crate::config::AgencyConfig::default(),
-    };
-    let (rows, sel) = build_rows(&ctx, &tasks, &sessions, 3);
-    assert_eq!(rows.len(), 0);
-    assert_eq!(sel, 0);
+    let status_cell = TaskColumn::Status.cell(&row, false);
+    assert_eq!(strip_ansi_control_codes(&status_cell), "Idle");
   }
 }
