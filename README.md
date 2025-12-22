@@ -46,6 +46,25 @@ Everything available in the TUI is also available via the CLI:
 - `agency daemon start|stop|restart` - Manage the background daemon that tracks sessions and notifies clients.
 - ... and many more (see `agency --help`).
 
+## Skills
+
+Teach your AI coding agent how to use Agency by installing the Agency skill. Once installed, your agent will know how to parallelize tasks using Agency when you ask it to.
+
+### Claude Code
+
+```bash
+/plugin marketplace add tobias-walle/agency
+/plugin install agency-skills@tobias-walle-agency
+```
+
+### Codex CLI
+
+```bash
+git clone --depth 1 https://github.com/tobias-walle/agency /tmp/agency && \
+  cp -r /tmp/agency/skills/agency ~/.codex/skills/ && \
+  rm -rf /tmp/agency
+```
+
 ## Configuration
 
 Configuration is layered in three tiers:
