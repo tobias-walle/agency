@@ -1,7 +1,7 @@
 mod common;
 
-use anyhow::Result;
 use crate::common::test_env::TestEnv;
+use anyhow::Result;
 
 #[test]
 fn merge_merges_and_cleans_up() -> Result<()> {

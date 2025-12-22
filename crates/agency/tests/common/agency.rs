@@ -63,8 +63,8 @@ impl TestEnv {
     }
 
     let stdout = String::from_utf8_lossy(&out.stdout);
-    let re_new = Regex::new(r"(?i)Create task ([A-Za-z][A-Za-z0-9-]*) \(id (\d+)\)")
-      .expect("regex new");
+    let re_new =
+      Regex::new(r"(?i)Create task ([A-Za-z][A-Za-z0-9-]*) \(id (\d+)\)").expect("regex new");
     let caps = re_new
       .captures(&stdout)
       .with_context(|| format!("unexpected stdout: {stdout}"))?;

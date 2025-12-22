@@ -19,17 +19,38 @@ use crate::utils::task_columns::{GitMetrics, TaskColumn, TaskRow};
 #[derive(Clone, Debug)]
 pub enum Action {
   None,
-  EditOrAttach { id: u32, session: Option<u64> },
-  NewTask { start_and_attach: bool },
-  StartTask { id: u32 },
-  StopTask { id: u32 },
-  MergeTask { id: u32 },
-  OpenTask { id: u32 },
-  ShellTask { id: u32 },
-  DeleteTask { id: u32 },
-  ResetTask { id: u32 },
+  EditOrAttach {
+    id: u32,
+    session: Option<u64>,
+  },
+  NewTask {
+    start_and_attach: bool,
+  },
+  StartTask {
+    id: u32,
+  },
+  StopTask {
+    id: u32,
+  },
+  MergeTask {
+    id: u32,
+  },
+  OpenTask {
+    id: u32,
+  },
+  ShellTask {
+    id: u32,
+  },
+  DeleteTask {
+    id: u32,
+  },
+  ResetTask {
+    id: u32,
+  },
   /// Selection changed, emit focus event with new task id.
-  SelectionChanged { id: u32 },
+  SelectionChanged {
+    id: u32,
+  },
 }
 
 /// State for the task table component.

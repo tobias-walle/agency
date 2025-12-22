@@ -92,7 +92,10 @@ pub fn run(
         log_info!("Create task {} (id {})", t::slug(&slug), t::id(id));
       }
     } else {
-      content.body = desc.expect("desc must be Some when not opening editor").trim().to_string();
+      content.body = desc
+        .expect("desc must be Some when not opening editor")
+        .trim()
+        .to_string();
       write_task_content(&ctx.paths, &task, &content)?;
       log_info!("Create task {} (id {})", t::slug(&slug), t::id(id));
     }

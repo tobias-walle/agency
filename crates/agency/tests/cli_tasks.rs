@@ -1,7 +1,7 @@
 mod common;
 
-use anyhow::Result;
 use crate::common::test_env::TestEnv;
+use anyhow::Result;
 
 #[test]
 fn tasks_shows_stored_base_branch_not_current_head() -> Result<()> {
@@ -27,10 +27,7 @@ fn tasks_shows_stored_base_branch_not_current_head() -> Result<()> {
     env.git_checkout("main")?;
 
     // Run `agency tasks` and verify BASE column still shows feature-branch
-    let output = env
-      .agency()?
-      .arg("tasks")
-      .output()?;
+    let output = env.agency()?.arg("tasks").output()?;
     let stdout = String::from_utf8_lossy(&output.stdout);
 
     assert!(

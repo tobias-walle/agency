@@ -1,8 +1,8 @@
 mod common;
 
+use crate::common::test_env::TestEnv;
 use anyhow::Result;
 use predicates::prelude::*;
-use crate::common::test_env::TestEnv;
 
 #[test]
 fn new_creates_markdown_branch_and_worktree() -> Result<()> {
@@ -170,9 +170,7 @@ fn new_rejects_slugs_starting_with_digits() -> Result<()> {
       .arg("1invalid")
       .assert()
       .failure()
-      .stderr(
-        predicates::str::contains("invalid slug: must start with a letter").from_utf8(),
-      );
+      .stderr(predicates::str::contains("invalid slug: must start with a letter").from_utf8());
 
     Ok(())
   })

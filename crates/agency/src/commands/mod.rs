@@ -13,7 +13,6 @@ pub mod merge;
 pub mod new;
 pub mod open;
 pub mod path;
-pub mod tasks;
 pub mod reset;
 pub mod rm;
 pub mod sessions;
@@ -21,4 +20,5 @@ pub mod setup;
 pub mod shell;
 pub mod start;
 pub mod stop;
+pub mod tasks;
 // Overlay is handled inline in `attach --follow`.

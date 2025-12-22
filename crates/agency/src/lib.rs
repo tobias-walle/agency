@@ -181,7 +181,11 @@ fn run_command(ctx: &AppContext, cli: Cli) -> Result<()> {
       edit,
     }) => {
       let desc = desc.or(description);
-      let desc = if draft || edit { desc } else { Some(desc.unwrap_or_default()) };
+      let desc = if draft || edit {
+        desc
+      } else {
+        Some(desc.unwrap_or_default())
+      };
       let created = commands::new::run(ctx, &slug, agent.as_deref(), desc.as_deref(), edit)?;
       if !draft {
         let ident = created.id.to_string();

@@ -1,7 +1,7 @@
 mod common;
 
-use anyhow::Result;
 use crate::common::test_env::TestEnv;
+use anyhow::Result;
 
 #[test]
 fn attach_follow_conflicts_with_task_and_session() -> Result<()> {

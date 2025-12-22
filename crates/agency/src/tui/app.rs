@@ -16,8 +16,10 @@ use super::input_overlay::{self, InputOverlayState};
 use super::select_menu::{MenuOutcome, SelectMenuState};
 use super::task_table::{self, TaskTableState};
 use crate::commands::{attach, edit, merge, new, open, reset, rm, shell, start, stop};
-use crate::config::{compute_socket_path, AppContext};
-use crate::daemon_protocol::{C2D, C2DControl, D2C, D2CControl, ProjectKey, read_frame, write_frame};
+use crate::config::{AppContext, compute_socket_path};
+use crate::daemon_protocol::{
+  C2D, C2DControl, D2C, D2CControl, ProjectKey, read_frame, write_frame,
+};
 use crate::utils::daemon::{
   connect_daemon, get_project_state, send_message_to_daemon, tui_register, tui_unregister,
 };
@@ -146,7 +148,9 @@ impl AppState {
     ])
     .split(f.area());
 
-    self.task_table.draw(f, rects[0], self.focus == Focus::Tasks);
+    self
+      .task_table
+      .draw(f, rects[0], self.focus == Focus::Tasks);
     self.command_log.draw(f, rects[1], self.focus == Focus::Log);
     help_bar::draw(f, rects[2]);
 
@@ -185,9 +189,9 @@ impl AppState {
       }
       task_table::Action::StartTask { id } => {
         let id_str = id.to_string();
-        self
-          .command_log
-          .push(LogEvent::Command(format!("agency start --no-attach {id_str}")));
+        self.command_log.push(LogEvent::Command(format!(
+          "agency start --no-attach {id_str}"
+        )));
         spawn_cmd(ctx, move |ctx| {
           if let Err(err) = start::run_with_attach(&ctx, &id_str, false) {
             log_error!("Start failed: {}", err);
@@ -450,17 +454,15 @@ fn handle_input_mode(state: &mut AppState, ctx: &AppContext, key: crossterm::eve
           .push(LogEvent::Command(format!("agency new {slug} + start")));
         std::thread::spawn({
           let ctx = ctx.clone();
-          move || {
-            match new::run(&ctx, &slug, agent.as_deref(), Some(""), false) {
-              Ok(created) => {
-                let id_str = created.id.to_string();
-                if let Err(err) = start::run_with_attach(&ctx, &id_str, true) {
-                  log_error!("Start+attach failed: {}", err);
-                }
+          move || match new::run(&ctx, &slug, agent.as_deref(), Some(""), false) {
+            Ok(created) => {
+              let id_str = created.id.to_string();
+              if let Err(err) = start::run_with_attach(&ctx, &id_str, true) {
+                log_error!("Start+attach failed: {}", err);
               }
-              Err(err) => {
-                log_error!("New failed: {}", err);
-              }
+            }
+            Err(err) => {
+              log_error!("New failed: {}", err);
             }
           }
         });
@@ -479,7 +481,11 @@ fn handle_input_mode(state: &mut AppState, ctx: &AppContext, key: crossterm::eve
   }
 }
 
-fn handle_menu_mode(state: &mut AppState, mut menu: SelectMenuState, key: crossterm::event::KeyEvent) {
+fn handle_menu_mode(
+  state: &mut AppState,
+  mut menu: SelectMenuState,
+  key: crossterm::event::KeyEvent,
+) {
   match menu.handle_key(key) {
     MenuOutcome::Continue => {
       state.mode = Mode::SelectMenu(menu);

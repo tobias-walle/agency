@@ -25,13 +25,11 @@ pub fn resolve_main_workdir(cwd: &Path) -> PathBuf {
 
       // If in a linked worktree, navigate to main repo
       match repo.kind() {
-        git::repository::Kind::WorkTree { is_linked } if is_linked => {
-          repo
-            .main_repo()
-            .ok()
-            .and_then(|r| r.workdir().map(std::path::Path::to_path_buf))
-            .unwrap_or(workdir)
-        }
+        git::repository::Kind::WorkTree { is_linked } if is_linked => repo
+          .main_repo()
+          .ok()
+          .and_then(|r| r.workdir().map(std::path::Path::to_path_buf))
+          .unwrap_or(workdir),
         _ => workdir, // Return repo workdir (not cwd!)
       }
     }
@@ -502,7 +500,10 @@ mod tests {
 
     // Setup main repo with initial commit
     run_git(main_repo.path(), &["init"]);
-    run_git(main_repo.path(), &["config", "user.email", "test@example.com"]);
+    run_git(
+      main_repo.path(),
+      &["config", "user.email", "test@example.com"],
+    );
     run_git(main_repo.path(), &["config", "user.name", "Tester"]);
     fs::write(main_repo.path().join("README.md"), "ok\n").expect("write");
     run_git(main_repo.path(), &["add", "."]);
@@ -542,9 +543,7 @@ mod tests {
 
     let got = resolve_main_workdir(&subdir);
     let got = got.canonicalize().unwrap_or(got);
-    let want = root
-      .canonicalize()
-      .unwrap_or_else(|_| PathBuf::from(root));
+    let want = root.canonicalize().unwrap_or_else(|_| PathBuf::from(root));
     assert_eq!(got, want);
   }
 

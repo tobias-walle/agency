@@ -1,8 +1,8 @@
 mod common;
 
+use crate::common::test_env::TestEnv;
 use anyhow::Result;
 use predicates::prelude::*;
-use crate::common::test_env::TestEnv;
 
 #[test]
 fn setup_creates_global_config_via_wizard() -> Result<()> {

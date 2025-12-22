@@ -1,7 +1,7 @@
 mod common;
 
-use anyhow::Result;
 use crate::common::test_env::TestEnv;
+use anyhow::Result;
 
 #[test]
 fn complete_marks_status_completed_and_uses_env() -> Result<()> {

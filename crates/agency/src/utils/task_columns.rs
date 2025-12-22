@@ -129,12 +129,16 @@ impl TaskColumn {
       TaskColumn::Status => Self::format_status(row, pending_delete),
       TaskColumn::Uncommitted => {
         let plus_str = if row.git_metrics.uncommitted_add > 0 {
-          format!("+{}", row.git_metrics.uncommitted_add).green().to_string()
+          format!("+{}", row.git_metrics.uncommitted_add)
+            .green()
+            .to_string()
         } else {
           "+0".dimmed().to_string()
         };
         let minus_str = if row.git_metrics.uncommitted_del > 0 {
-          format!("-{}", row.git_metrics.uncommitted_del).red().to_string()
+          format!("-{}", row.git_metrics.uncommitted_del)
+            .red()
+            .to_string()
         } else {
           "-0".dimmed().to_string()
         };
@@ -225,7 +229,10 @@ mod tests {
     let widths = TaskColumn::width_percentages();
     assert_eq!(widths.len(), TaskColumn::ALL.len());
     let total: u16 = widths.iter().sum();
-    assert!((95..=100).contains(&total), "Total should be close to 100, got {total}");
+    assert!(
+      (95..=100).contains(&total),
+      "Total should be close to 100, got {total}"
+    );
   }
 
   #[test]

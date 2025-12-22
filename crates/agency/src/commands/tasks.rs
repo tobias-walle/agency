@@ -46,7 +46,11 @@ pub fn run(ctx: &AppContext) -> Result<()> {
     .collect();
 
   // Use TaskColumn to generate headers and cell values
-  let headers: Vec<&str> = TaskColumn::ALL.iter().copied().map(TaskColumn::header).collect();
+  let headers: Vec<&str> = TaskColumn::ALL
+    .iter()
+    .copied()
+    .map(TaskColumn::header)
+    .collect();
   let rows: Vec<Vec<String>> = task_rows
     .iter()
     .map(|row| {
@@ -97,8 +101,14 @@ mod tests {
       ..Default::default()
     };
     let map = latest_sessions_by_task(&[s1.clone(), s2.clone(), s3_other.clone()]);
-    let task_a = TaskRef { id: 5, slug: "a".to_string() };
-    let task_b = TaskRef { id: 6, slug: "b".to_string() };
+    let task_a = TaskRef {
+      id: 5,
+      slug: "a".to_string(),
+    };
+    let task_b = TaskRef {
+      id: 6,
+      slug: "b".to_string(),
+    };
     let a_latest = map.get(&task_a).expect("has a");
     assert_eq!(a_latest.session_id, 2);
     let b_latest = map.get(&task_b).expect("has b");

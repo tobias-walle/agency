@@ -1,8 +1,8 @@
 mod common;
 
+use crate::common::test_env::TestEnv;
 use anyhow::Result;
 use predicates::prelude::*;
-use crate::common::test_env::TestEnv;
 
 #[test]
 fn rm_confirms_and_removes_on_y_or_y() -> Result<()> {

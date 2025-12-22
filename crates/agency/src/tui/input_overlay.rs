@@ -16,7 +16,11 @@ pub enum Action {
   None,
   Cancel,
   OpenAgentMenu,
-  Submit { slug: String, agent: Option<String>, start_and_attach: bool },
+  Submit {
+    slug: String,
+    agent: Option<String>,
+    start_and_attach: bool,
+  },
 }
 
 /// State for the new task input overlay.
@@ -79,22 +83,18 @@ impl InputOverlayState {
   pub fn handle_key(&mut self, key: KeyEvent) -> Action {
     match key.code {
       KeyCode::Esc => Action::Cancel,
-      KeyCode::Char('a') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-        Action::OpenAgentMenu
-      }
-      KeyCode::Enter => {
-        match normalize_and_validate_slug(&self.slug_input) {
-          Ok(slug) => Action::Submit {
-            slug,
-            agent: self.selected_agent.clone(),
-            start_and_attach: self.start_and_attach,
-          },
-          Err(err) => {
-            log_error!("New failed: {}", err);
-            Action::None
-          }
+      KeyCode::Char('a') if key.modifiers.contains(KeyModifiers::CONTROL) => Action::OpenAgentMenu,
+      KeyCode::Enter => match normalize_and_validate_slug(&self.slug_input) {
+        Ok(slug) => Action::Submit {
+          slug,
+          agent: self.selected_agent.clone(),
+          start_and_attach: self.start_and_attach,
+        },
+        Err(err) => {
+          log_error!("New failed: {}", err);
+          Action::None
         }
-      }
+      },
       KeyCode::Backspace => {
         self.slug_input.pop();
         Action::None

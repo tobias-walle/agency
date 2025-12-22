@@ -22,7 +22,10 @@ pub struct TaskRef {
 
 impl From<TaskMeta> for TaskRef {
   fn from(m: TaskMeta) -> Self {
-    Self { id: m.id, slug: m.slug }
+    Self {
+      id: m.id,
+      slug: m.slug,
+    }
   }
 }
 

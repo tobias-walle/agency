@@ -1,7 +1,7 @@
 mod common;
 
-use anyhow::Result;
 use crate::common::test_env::TestEnv;
+use anyhow::Result;
 
 #[test]
 fn edit_opens_markdown_via_editor() -> Result<()> {

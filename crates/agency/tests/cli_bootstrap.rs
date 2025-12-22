@@ -1,8 +1,8 @@
 mod common;
 
+use crate::common::test_env::TestEnv;
 use anyhow::Result;
 use temp_env::with_vars;
-use crate::common::test_env::TestEnv;
 
 #[test]
 fn new_bootstraps_git_ignored_root_files_with_defaults() -> Result<()> {

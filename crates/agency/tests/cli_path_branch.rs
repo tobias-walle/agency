@@ -1,8 +1,8 @@
 mod common;
 
+use crate::common::test_env::TestEnv;
 use anyhow::Result;
 use predicates::prelude::*;
-use crate::common::test_env::TestEnv;
 
 #[test]
 fn path_prints_absolute_worktree_path_by_id_and_slug() -> Result<()> {
