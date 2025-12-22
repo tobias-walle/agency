@@ -28,7 +28,11 @@ enum Commands {
   /// Run the setup wizard to configure Agency
   Setup {},
   /// Scaffold a .agency/ directory with starter files
-  Init {},
+  Init {
+    /// Set the default agent for the project
+    #[arg(short = 'a', long = "agent")]
+    agent: Option<String>,
+  },
   /// Interactive terminal UI
   Tui {},
   /// Create a new task under .agency/tasks
@@ -169,7 +173,7 @@ fn autostart_daemon(ctx: &AppContext, cmd: Option<&Commands>) {
 fn run_command(ctx: &AppContext, cli: Cli) -> Result<()> {
   match cli.command {
     Some(Commands::Setup {}) => commands::setup::run(ctx),
-    Some(Commands::Init {}) => commands::init::run(ctx),
+    Some(Commands::Init { agent }) => commands::init::run(ctx, agent.as_deref()),
     Some(Commands::Tui {}) => tui::run(ctx),
     Some(Commands::New {
       slug,

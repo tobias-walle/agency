@@ -86,3 +86,51 @@ fn init_skips_gitignore_when_agency_entry_exists() -> Result<()> {
     Ok(())
   })
 }
+
+#[test]
+fn init_sets_agent_config() -> Result<()> {
+  TestEnv::run(|env| -> Result<()> {
+    env
+      .agency()?
+      .arg("init")
+      .arg("--agent")
+      .arg("claude")
+      .write_stdin("y\n")
+      .assert()
+      .success();
+
+    let cfg_path = env.path().join(".agency").join("agency.toml");
+    let contents = std::fs::read_to_string(cfg_path)?;
+    assert!(
+      contents.contains("agent = \"claude\""),
+      "agency.toml should contain the specified agent"
+    );
+    Ok(())
+  })
+}
+
+#[test]
+fn init_updates_existing_agent_config() -> Result<()> {
+  TestEnv::run(|env| -> Result<()> {
+    let agency_dir = env.path().join(".agency");
+    std::fs::create_dir_all(&agency_dir)?;
+    let cfg_path = agency_dir.join("agency.toml");
+    std::fs::write(&cfg_path, "# some comment\nother = \"value\"\nagent = \"old\"\n")?;
+
+    env
+      .agency()?
+      .arg("init")
+      .arg("--agent")
+      .arg("new-agent")
+      .write_stdin("y\n")
+      .assert()
+      .success();
+
+    let contents = std::fs::read_to_string(cfg_path)?;
+    assert!(contents.contains("# some comment"), "Comments should be preserved");
+    assert!(contents.contains("other = \"value\""), "Other keys should be preserved");
+    assert!(contents.contains("agent = \"new-agent\""), "Agent should be updated");
+    assert!(!contents.contains("agent = \"old\""), "Old agent should be gone");
+    Ok(())
+  })
+}

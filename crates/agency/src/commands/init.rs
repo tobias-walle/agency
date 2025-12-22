@@ -15,7 +15,7 @@ set -euo pipefail
 echo "Setup"
 "#;
 
-pub fn run(ctx: &AppContext) -> Result<()> {
+pub fn run(ctx: &AppContext, agent: Option<&str>) -> Result<()> {
   let wizard = Wizard::new();
   let root = ctx.paths.cwd().clone();
   let prompt = format!(
@@ -34,7 +34,7 @@ pub fn run(ctx: &AppContext) -> Result<()> {
     .with_context(|| format!("failed to create {}", agency_dir.display()))?;
 
   let config_path = agency_dir.join("agency.toml");
-  ensure_file(&config_path)?;
+  ensure_config(&config_path, agent)?;
 
   let script_path = agency_dir.join("setup.sh");
   ensure_script(&script_path)?;
@@ -46,14 +46,14 @@ pub fn run(ctx: &AppContext) -> Result<()> {
   // also scaffold in the current_dir to satisfy non-repo sandboxes.
   let cur = std::env::current_dir().unwrap_or_else(|_| root.clone());
   if cur != root {
-    let agen2 = cur.join(".agency");
-    let _ = fs::create_dir_all(&agen2);
-    let cfg2 = agen2.join("agency.toml");
-    let sc2 = agen2.join("setup.sh");
-    let gi2 = cur.join(".gitignore");
-    let _ = ensure_file(&cfg2);
-    let _ = ensure_script(&sc2);
-    let _ = ensure_gitignore(&gi2);
+    let cur_agency_dir = cur.join(".agency");
+    let _ = fs::create_dir_all(&cur_agency_dir);
+    let cur_config_path = cur_agency_dir.join("agency.toml");
+    let cur_script_path = cur_agency_dir.join("setup.sh");
+    let cur_gitignore_path = cur.join(".gitignore");
+    let _ = ensure_config(&cur_config_path, agent);
+    let _ = ensure_script(&cur_script_path);
+    let _ = ensure_gitignore(&cur_gitignore_path);
   }
 
   log_info!("");
@@ -65,8 +65,17 @@ pub fn run(ctx: &AppContext) -> Result<()> {
   Ok(())
 }
 
-fn ensure_file(path: &Path) -> Result<()> {
-  if !path.exists() {
+fn ensure_config(path: &Path, agent: Option<&str>) -> Result<()> {
+  if let Some(a) = agent {
+    let content = if path.exists() {
+      fs::read_to_string(path)?
+    } else {
+      String::new()
+    };
+    let mut doc = content.parse::<toml_edit::DocumentMut>()?;
+    doc.insert("agent", toml_edit::value(a));
+    fs::write(path, doc.to_string()).with_context(|| format!("failed to write {}", path.display()))?;
+  } else if !path.exists() {
     fs::write(path, b"").with_context(|| format!("failed to write {}", path.display()))?;
   }
   Ok(())
