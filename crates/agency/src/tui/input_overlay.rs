@@ -7,6 +7,8 @@ use ratatui::widgets::{Block, Borders, Paragraph};
 
 use super::layout::{centered_rect, inner};
 use crate::config::AppContext;
+use crate::log_error;
+use crate::utils::task::normalize_and_validate_slug;
 
 /// Actions from the input overlay.
 #[derive(Clone, Debug)]
@@ -81,14 +83,14 @@ impl InputOverlayState {
         Action::OpenAgentMenu
       }
       KeyCode::Enter => {
-        match crate::utils::task::normalize_and_validate_slug(&self.slug_input) {
+        match normalize_and_validate_slug(&self.slug_input) {
           Ok(slug) => Action::Submit {
             slug,
             agent: self.selected_agent.clone(),
             start_and_attach: self.start_and_attach,
           },
           Err(err) => {
-            crate::log_error!("New failed: {}", err);
+            log_error!("New failed: {}", err);
             Action::None
           }
         }

@@ -5,8 +5,8 @@ use anyhow::Result;
 use crate::config::AppContext;
 use crate::utils::daemon::get_project_state;
 use crate::utils::sessions::latest_sessions_by_task;
-use crate::utils::task::list_tasks;
-use crate::utils::task_columns::{TaskColumn, TaskRow};
+use crate::utils::task::{TaskRef, list_tasks};
+use crate::utils::task_columns::{GitMetrics, TaskColumn, TaskRow};
 use crate::utils::term::print_table;
 
 pub fn run(ctx: &AppContext) -> Result<()> {
@@ -14,15 +14,19 @@ pub fn run(ctx: &AppContext) -> Result<()> {
   tasks.sort_by_key(|t| t.id);
 
   // Query project state (sessions + metrics); fallback gracefully when daemon unavailable
-  let (sessions, metrics_map) = match get_project_state(ctx) {
+  let (sessions, git_metrics_map) = match get_project_state(ctx) {
     Ok(state) => {
-      let m: HashMap<(u32, String), (u64, u64, u64)> = state
+      let m: HashMap<TaskRef, GitMetrics> = state
         .metrics
         .into_iter()
         .map(|m| {
           (
-            (m.task.id, m.task.slug),
-            (m.uncommitted_add, m.uncommitted_del, m.commits_ahead),
+            TaskRef::from(m.task),
+            GitMetrics {
+              uncommitted_add: m.uncommitted_add,
+              uncommitted_del: m.uncommitted_del,
+              commits_ahead: m.commits_ahead,
+            },
           )
         })
         .collect();
@@ -36,9 +40,8 @@ pub fn run(ctx: &AppContext) -> Result<()> {
   let task_rows: Vec<TaskRow> = tasks
     .iter()
     .map(|t| {
-      let key = (t.id, t.slug.clone());
-      let (add, del, ahead) = metrics_map.get(&key).copied().unwrap_or((0, 0, 0));
-      TaskRow::new(ctx, t.clone(), latest.get(&key), add, del, ahead)
+      let git_metrics = git_metrics_map.get(t).cloned().unwrap_or_default();
+      TaskRow::new(ctx, t.clone(), latest.get(t), git_metrics)
     })
     .collect();
 
@@ -63,6 +66,7 @@ pub fn run(ctx: &AppContext) -> Result<()> {
 mod tests {
   use crate::daemon_protocol::SessionInfo;
   use crate::utils::sessions::latest_sessions_by_task;
+  use crate::utils::task::TaskRef;
 
   #[test]
   fn latest_session_selection_by_created_at() {
@@ -92,10 +96,12 @@ mod tests {
       created_at_ms: 150,
       ..Default::default()
     };
-    let map = latest_sessions_by_task(&vec![s1.clone(), s2.clone(), s3_other.clone()]);
-    let a_latest = map.get(&(5_u32, "a".to_string())).expect("has a");
+    let map = latest_sessions_by_task(&[s1.clone(), s2.clone(), s3_other.clone()]);
+    let task_a = TaskRef { id: 5, slug: "a".to_string() };
+    let task_b = TaskRef { id: 6, slug: "b".to_string() };
+    let a_latest = map.get(&task_a).expect("has a");
     assert_eq!(a_latest.session_id, 2);
-    let b_latest = map.get(&(6_u32, "b".to_string())).expect("has b");
+    let b_latest = map.get(&task_b).expect("has b");
     assert_eq!(b_latest.session_id, 10);
   }
 }

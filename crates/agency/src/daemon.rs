@@ -1,3 +1,4 @@
+use crate::config::AgencyConfig;
 use crate::daemon_protocol::{
   C2D, C2DControl, D2C, D2CControl, ProjectKey, SessionInfo, TaskInfo, TaskMeta, TaskMetrics,
   read_frame, write_frame,
@@ -19,7 +20,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
-pub fn run_daemon(socket_path: &Path, cfg: &crate::config::AgencyConfig) -> Result<()> {
+pub fn run_daemon(socket_path: &Path, cfg: &AgencyConfig) -> Result<()> {
   info!("Starting daemon. Socket path: {}", socket_path.display());
   if std::os::unix::net::UnixStream::connect(socket_path).is_ok() {
     warn!("Daemon is already running");
@@ -34,7 +35,7 @@ pub fn run_daemon(socket_path: &Path, cfg: &crate::config::AgencyConfig) -> Resu
 
 pub struct SlimDaemon {
   listener: UnixListener,
-  cfg: crate::config::AgencyConfig,
+  cfg: AgencyConfig,
   shutdown: Arc<std::sync::atomic::AtomicBool>,
   subscribers: Arc<Mutex<Vec<Subscriber>>>,
   // Cache last snapshot per project to avoid redundant broadcasts
@@ -51,11 +52,7 @@ struct Subscriber {
 
 impl SlimDaemon {
   #[must_use]
-  pub fn new(
-    listener: UnixListener,
-    cfg: crate::config::AgencyConfig,
-    socket_path: PathBuf,
-  ) -> Self {
+  pub fn new(listener: UnixListener, cfg: AgencyConfig, socket_path: PathBuf) -> Self {
     Self {
       listener,
       cfg,

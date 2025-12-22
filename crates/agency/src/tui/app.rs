@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::io::{self, IsTerminal as _};
 use std::time::Duration;
 
@@ -14,13 +15,18 @@ use super::help_bar::{self, HELP_ITEMS};
 use super::input_overlay::{self, InputOverlayState};
 use super::select_menu::{MenuOutcome, SelectMenuState};
 use super::task_table::{self, TaskTableState};
-use crate::utils::task_columns::TaskRow;
-use crate::config::AppContext;
+use crate::commands::{attach, edit, merge, new, open, reset, rm, shell, start, stop};
+use crate::config::{compute_socket_path, AppContext};
 use crate::daemon_protocol::{C2D, C2DControl, D2C, D2CControl, ProjectKey, read_frame, write_frame};
-use crate::utils::daemon::{connect_daemon, get_project_state};
+use crate::utils::daemon::{
+  connect_daemon, get_project_state, send_message_to_daemon, tui_register, tui_unregister,
+};
 use crate::utils::git::{open_main_repo, repo_workdir_or};
 use crate::utils::interactive::{InteractiveReq, register_sender as register_interactive_sender};
 use crate::utils::log::{LogEvent, clear_log_sink, set_log_sink};
+use crate::utils::task::TaskRef;
+use crate::utils::task_columns::{GitMetrics, TaskRow};
+use crate::utils::term::restore_terminal_state;
 use crate::{log_error, log_info};
 
 /// Which pane is focused.
@@ -166,9 +172,9 @@ impl AppState {
           let ctx = ctx.clone();
           move || {
             if let Some(sid) = session {
-              let _ = crate::commands::attach::run_join_session(&ctx, sid);
+              let _ = attach::run_join_session(&ctx, sid);
             } else {
-              let _ = crate::commands::edit::run(&ctx, &id.to_string());
+              let _ = edit::run(&ctx, &id.to_string());
             }
           }
         });
@@ -183,8 +189,8 @@ impl AppState {
           .command_log
           .push(LogEvent::Command(format!("agency start --no-attach {id_str}")));
         spawn_cmd(ctx, move |ctx| {
-          if let Err(err) = crate::commands::start::run_with_attach(&ctx, &id_str, false) {
-            crate::log_error!("Start failed: {}", err);
+          if let Err(err) = start::run_with_attach(&ctx, &id_str, false) {
+            log_error!("Start failed: {}", err);
           }
         });
       }
@@ -194,8 +200,8 @@ impl AppState {
           .command_log
           .push(LogEvent::Command(format!("agency stop --task {id}")));
         spawn_cmd(ctx, move |ctx| {
-          if let Err(err) = crate::commands::stop::run(&ctx, Some(&id.to_string()), None) {
-            crate::log_error!("Stop failed: {}", err);
+          if let Err(err) = stop::run(&ctx, Some(&id.to_string()), None) {
+            log_error!("Stop failed: {}", err);
           }
         });
       }
@@ -205,21 +211,21 @@ impl AppState {
           .command_log
           .push(LogEvent::Command(format!("agency merge {id_str}")));
         spawn_cmd(ctx, move |ctx| {
-          if let Err(err) = crate::commands::merge::run(&ctx, &id_str, None) {
-            crate::log_error!("Merge failed: {}", err);
+          if let Err(err) = merge::run(&ctx, &id_str, None) {
+            log_error!("Merge failed: {}", err);
           }
         });
       }
       task_table::Action::OpenTask { id } => {
         let id = *id;
         spawn_cmd(ctx, move |ctx| {
-          let _ = crate::commands::open::run(&ctx, &id.to_string());
+          let _ = open::run(&ctx, &id.to_string());
         });
       }
       task_table::Action::ShellTask { id } => {
         let id = *id;
         spawn_cmd(ctx, move |ctx| {
-          let _ = crate::commands::shell::run(&ctx, &id.to_string());
+          let _ = shell::run(&ctx, &id.to_string());
         });
       }
       task_table::Action::DeleteTask { id } => {
@@ -229,7 +235,7 @@ impl AppState {
           .push(LogEvent::Command(format!("agency rm {id}")));
         self.task_table.mark_pending_delete(id);
         spawn_cmd(ctx, move |ctx| {
-          let _ = crate::commands::rm::run_force(&ctx, &id.to_string());
+          let _ = rm::run_force(&ctx, &id.to_string());
         });
       }
       task_table::Action::ResetTask { id } => {
@@ -238,8 +244,8 @@ impl AppState {
           .command_log
           .push(LogEvent::Command(format!("agency reset {id}")));
         spawn_cmd(ctx, move |ctx| {
-          if let Err(err) = crate::commands::reset::run(&ctx, &id.to_string()) {
-            crate::log_error!("Reset failed: {}", err);
+          if let Err(err) = reset::run(&ctx, &id.to_string()) {
+            log_error!("Reset failed: {}", err);
           }
         });
       }
@@ -248,20 +254,21 @@ impl AppState {
 
   fn refresh(&mut self, ctx: &AppContext) -> Result<()> {
     let snap = get_project_state(ctx)?;
-    let metrics: Vec<_> = snap
+    let git_metrics: HashMap<TaskRef, GitMetrics> = snap
       .metrics
       .into_iter()
       .map(|m| {
         (
-          m.task.id,
-          m.task.slug,
-          m.uncommitted_add,
-          m.uncommitted_del,
-          m.commits_ahead,
+          TaskRef::from(m.task),
+          GitMetrics {
+            uncommitted_add: m.uncommitted_add,
+            uncommitted_del: m.uncommitted_del,
+            commits_ahead: m.commits_ahead,
+          },
         )
       })
       .collect();
-    self.task_table.refresh(ctx, &snap.sessions, &metrics)?;
+    self.task_table.refresh(ctx, &snap.sessions, &git_metrics)?;
     Ok(())
   }
 }
@@ -287,8 +294,8 @@ pub fn run(ctx: &AppContext) -> Result<()> {
   let out = terminal.backend_mut();
   crossterm::execute!(out, crossterm::terminal::LeaveAlternateScreen).ok();
   disable_raw_mode().ok();
-  crate::utils::term::restore_terminal_state();
-  let _ = crate::utils::daemon::tui_unregister(ctx, std::process::id());
+  restore_terminal_state();
+  let _ = tui_unregister(ctx, std::process::id());
 
   res
 }
@@ -304,7 +311,7 @@ fn ui_loop(
   })?;
 
   // Register TUI with daemon
-  if let Ok(id) = crate::utils::daemon::tui_register(ctx, std::process::id()) {
+  if let Ok(id) = tui_register(ctx, std::process::id()) {
     state.task_table.tui_id = Some(id);
   }
 
@@ -444,15 +451,15 @@ fn handle_input_mode(state: &mut AppState, ctx: &AppContext, key: crossterm::eve
         std::thread::spawn({
           let ctx = ctx.clone();
           move || {
-            match crate::commands::new::run(&ctx, &slug, agent.as_deref(), Some(""), false) {
+            match new::run(&ctx, &slug, agent.as_deref(), Some(""), false) {
               Ok(created) => {
                 let id_str = created.id.to_string();
-                if let Err(err) = crate::commands::start::run_with_attach(&ctx, &id_str, true) {
-                  crate::log_error!("Start+attach failed: {}", err);
+                if let Err(err) = start::run_with_attach(&ctx, &id_str, true) {
+                  log_error!("Start+attach failed: {}", err);
                 }
               }
               Err(err) => {
-                crate::log_error!("New failed: {}", err);
+                log_error!("New failed: {}", err);
               }
             }
           }
@@ -461,7 +468,7 @@ fn handle_input_mode(state: &mut AppState, ctx: &AppContext, key: crossterm::eve
         std::thread::spawn({
           let ctx = ctx.clone();
           move || {
-            let _ = crate::commands::new::run(&ctx, &slug, agent.as_deref(), None, false);
+            let _ = new::run(&ctx, &slug, agent.as_deref(), None, false);
           }
         });
       }
@@ -564,8 +571,8 @@ fn emit_focus_change(ctx: &AppContext, tui_id: Option<u32>, task_id: u32) {
   let project = ProjectKey {
     repo_root: root.display().to_string(),
   };
-  let socket = crate::config::compute_socket_path(&ctx.config);
-  let _ = crate::utils::daemon::send_message_to_daemon(
+  let socket = compute_socket_path(&ctx.config);
+  let _ = send_message_to_daemon(
     &socket,
     C2DControl::TuiFocusTaskChange {
       project,

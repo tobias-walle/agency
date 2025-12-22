@@ -1,11 +1,19 @@
 use owo_colors::OwoColorize as _;
 
-use crate::config::{AgencyConfig, AgencyPaths};
+use crate::config::{AgencyConfig, AgencyPaths, AppContext};
 use crate::daemon_protocol::SessionInfo;
 use crate::utils::status::{TaskStatus, derive_status, is_task_completed};
 use crate::utils::task::{
   TaskFrontmatter, TaskFrontmatterExt, TaskRef, agent_for_task, read_task_frontmatter, worktree_dir,
 };
+
+/// Git metrics for a task (uncommitted changes, commits ahead).
+#[derive(Clone, Debug, Default)]
+pub struct GitMetrics {
+  pub uncommitted_add: u64,
+  pub uncommitted_del: u64,
+  pub commits_ahead: u64,
+}
 
 /// Raw data for a single task row. All display logic lives in `TaskColumn::cell()`.
 #[derive(Clone, Debug)]
@@ -14,9 +22,7 @@ pub struct TaskRow {
   pub config: AgencyConfig,
   pub task: TaskRef,
   pub session: Option<SessionInfo>,
-  pub uncommitted_add: u64,
-  pub uncommitted_del: u64,
-  pub commits_ahead: u64,
+  pub git_metrics: GitMetrics,
   pub wt_exists: bool,
   pub frontmatter: Option<TaskFrontmatter>,
 }
@@ -26,12 +32,10 @@ impl TaskRow {
   /// Pre-computes filesystem-dependent values (worktree existence, frontmatter).
   #[must_use]
   pub fn new(
-    ctx: &crate::config::AppContext,
+    ctx: &AppContext,
     task: TaskRef,
     session: Option<&SessionInfo>,
-    uncommitted_add: u64,
-    uncommitted_del: u64,
-    commits_ahead: u64,
+    git_metrics: GitMetrics,
   ) -> Self {
     Self {
       paths: ctx.paths.clone(),
@@ -40,9 +44,7 @@ impl TaskRow {
       frontmatter: read_task_frontmatter(&ctx.paths, &task),
       task,
       session: session.cloned(),
-      uncommitted_add,
-      uncommitted_del,
-      commits_ahead,
+      git_metrics,
     }
   }
 
@@ -126,23 +128,23 @@ impl TaskColumn {
       TaskColumn::Slug => row.task.slug.clone(),
       TaskColumn::Status => Self::format_status(row, pending_delete),
       TaskColumn::Uncommitted => {
-        let plus_str = if row.uncommitted_add > 0 {
-          format!("+{}", row.uncommitted_add).green().to_string()
+        let plus_str = if row.git_metrics.uncommitted_add > 0 {
+          format!("+{}", row.git_metrics.uncommitted_add).green().to_string()
         } else {
           "+0".dimmed().to_string()
         };
-        let minus_str = if row.uncommitted_del > 0 {
-          format!("-{}", row.uncommitted_del).red().to_string()
+        let minus_str = if row.git_metrics.uncommitted_del > 0 {
+          format!("-{}", row.git_metrics.uncommitted_del).red().to_string()
         } else {
           "-0".dimmed().to_string()
         };
         format!("{plus_str}{minus_str}")
       }
       TaskColumn::Commits => {
-        if row.commits_ahead == 0 {
+        if row.git_metrics.commits_ahead == 0 {
           "-".dimmed().to_string()
         } else {
-          row.commits_ahead.to_string().cyan().to_string()
+          row.git_metrics.commits_ahead.to_string().cyan().to_string()
         }
       }
       TaskColumn::Base => row.frontmatter.base_branch_or(|| "main".to_string()),
@@ -231,7 +233,12 @@ mod tests {
     let (_dir, ctx) = make_ctx();
     let task = make_task(42, "test-task");
     let session = make_session(1, 42, "test-task", "Running");
-    let row = TaskRow::new(&ctx, task, Some(&session), 5, 3, 2);
+    let git_metrics = GitMetrics {
+      uncommitted_add: 5,
+      uncommitted_del: 3,
+      commits_ahead: 2,
+    };
+    let row = TaskRow::new(&ctx, task, Some(&session), git_metrics);
 
     let id_cell = TaskColumn::Id.cell(&row, false);
     assert_eq!(strip_ansi_control_codes(&id_cell), "42");
@@ -252,7 +259,7 @@ mod tests {
     let (_dir, ctx) = make_ctx();
     let task = make_task(1, "test");
     let session = make_session(1, 1, "test", "Running");
-    let row = TaskRow::new(&ctx, task, Some(&session), 0, 0, 0);
+    let row = TaskRow::new(&ctx, task, Some(&session), GitMetrics::default());
 
     let status_cell = TaskColumn::Status.cell(&row, true);
     assert_eq!(strip_ansi_control_codes(&status_cell), "Loading");
@@ -262,7 +269,7 @@ mod tests {
   fn uncommitted_zeros_are_dimmed() {
     let (_dir, ctx) = make_ctx();
     let task = make_task(1, "test");
-    let row = TaskRow::new(&ctx, task, None, 0, 0, 0);
+    let row = TaskRow::new(&ctx, task, None, GitMetrics::default());
 
     let cell = TaskColumn::Uncommitted.cell(&row, false);
     assert_eq!(strip_ansi_control_codes(&cell), "+0-0");
@@ -273,7 +280,7 @@ mod tests {
   fn commits_zero_shows_dash() {
     let (_dir, ctx) = make_ctx();
     let task = make_task(1, "test");
-    let row = TaskRow::new(&ctx, task, None, 0, 0, 0);
+    let row = TaskRow::new(&ctx, task, None, GitMetrics::default());
 
     let cell = TaskColumn::Commits.cell(&row, false);
     assert_eq!(strip_ansi_control_codes(&cell), "-");

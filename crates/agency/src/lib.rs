@@ -170,7 +170,7 @@ fn run_command(ctx: &AppContext, cli: Cli) -> Result<()> {
   match cli.command {
     Some(Commands::Setup {}) => commands::setup::run(ctx),
     Some(Commands::Init {}) => commands::init::run(ctx),
-    Some(Commands::Tui {}) => crate::tui::run(ctx),
+    Some(Commands::Tui {}) => tui::run(ctx),
     Some(Commands::New {
       slug,
       desc,
@@ -243,16 +243,16 @@ fn run_default(ctx: &AppContext) -> Result<()> {
     if stdout_tty {
       commands::setup::run(ctx)?;
     } else {
-      crate::log_warn!("Global config missing: run `agency setup` in a terminal");
+      log_warn!("Global config missing: run `agency setup` in a terminal");
     }
     return Ok(());
   }
   let _ = ensure_running_and_latest_version(ctx);
   let _ = ensure_tmux_server(&ctx.config);
   if stdout_tty {
-    crate::tui::run(ctx)
+    tui::run(ctx)
   } else {
-    crate::log_info!("Usage: agency <SUBCOMMAND>. Try 'agency --help'");
+    log_info!("Usage: agency <SUBCOMMAND>. Try 'agency --help'");
     Ok(())
   }
 }

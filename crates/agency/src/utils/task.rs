@@ -6,15 +6,24 @@ use anyhow::{Context, Result, bail};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 
-use crate::config::{AgencyConfig, AgencyPaths};
+use crate::config::{AgencyConfig, AgencyPaths, AppContext};
+use crate::daemon_protocol::TaskMeta;
+use crate::utils::editor::open_path as open_editor;
+use crate::utils::git::head_branch;
 
 static TASK_FILE_RE: OnceLock<Regex> = OnceLock::new();
 static TRAILING_NUM_RE: OnceLock<Regex> = OnceLock::new();
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub struct TaskRef {
   pub id: u32,
   pub slug: String,
+}
+
+impl From<TaskMeta> for TaskRef {
+  fn from(m: TaskMeta) -> Self {
+    Self { id: m.id, slug: m.slug }
+  }
 }
 
 impl TaskRef {
@@ -214,7 +223,7 @@ pub struct TaskFrontmatter {
 /// Extension trait for `Option<TaskFrontmatter>` to extract base branch with fallback.
 pub trait TaskFrontmatterExt {
   /// Returns the stored `base_branch` or falls back to the current HEAD branch.
-  fn base_branch(&self, ctx: &crate::config::AppContext) -> String;
+  fn base_branch(&self, ctx: &AppContext) -> String;
 
   /// Returns the stored `base_branch` or computes a fallback using the provided function.
   /// Use this when `AppContext` is not available (e.g., in the daemon).
@@ -224,8 +233,8 @@ pub trait TaskFrontmatterExt {
 }
 
 impl TaskFrontmatterExt for Option<TaskFrontmatter> {
-  fn base_branch(&self, ctx: &crate::config::AppContext) -> String {
-    self.base_branch_or(|| crate::utils::git::head_branch(ctx))
+  fn base_branch(&self, ctx: &AppContext) -> String {
+    self.base_branch_or(|| head_branch(ctx))
   }
 
   fn base_branch_or<F>(&self, fallback: F) -> String
@@ -317,7 +326,7 @@ pub fn edit_task_description(
   std::fs::write(&temp_path, initial_body)
     .with_context(|| format!("failed to write {}", temp_path.display()))?;
 
-  let editor_result = crate::utils::editor::open_path(cfg, &temp_path, project_root);
+  let editor_result = open_editor(cfg, &temp_path, project_root);
   let updated = std::fs::read_to_string(&temp_path)
     .with_context(|| format!("failed to read {}", temp_path.display()));
   let _ = std::fs::remove_file(&temp_path);
@@ -343,10 +352,7 @@ pub fn read_task_frontmatter(paths: &AgencyPaths, task: &TaskRef) -> Option<Task
 
 /// Resolve the effective agent for a task: front matter `agent` first,
 /// then config default. Returns `None` if neither is set.
-pub fn agent_for_task(
-  cfg: &crate::config::AgencyConfig,
-  fm: Option<&TaskFrontmatter>,
-) -> Option<String> {
+pub fn agent_for_task(cfg: &AgencyConfig, fm: Option<&TaskFrontmatter>) -> Option<String> {
   if let Some(fm) = fm
     && let Some(a) = &fm.agent
   {

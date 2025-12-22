@@ -4,11 +4,12 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use reflink_copy::reflink_or_copy;
 
-use crate::config::BootstrapConfig;
+use crate::config::{AppContext, BootstrapConfig};
 use crate::log_info;
 use crate::log_warn;
 use crate::utils::child::run_child_process;
 use crate::utils::cmd::{CmdCtx, expand_argv};
+use crate::utils::task::TaskRef;
 use gix as git;
 
 const MAX_BOOTSTRAP_FILE_BYTES: u64 = 10 * 1024 * 1024;
@@ -126,11 +127,11 @@ pub fn run_bootstrap_cmd(repo_root: &Path, worktree_dir: &Path, cfg: &BootstrapC
 /// Assumes the task branch has already been created.
 /// Returns the absolute path of the worktree directory (canonicalized if possible).
 pub fn prepare_worktree_for_task(
-  ctx: &crate::config::AppContext,
+  ctx: &AppContext,
   repo: &git::Repository,
-  task: &crate::utils::task::TaskRef,
+  task: &TaskRef,
   branch: &str,
-) -> anyhow::Result<std::path::PathBuf> {
+) -> anyhow::Result<PathBuf> {
   use crate::utils::git::{add_worktree_for_branch, repo_workdir_or};
   use crate::utils::task::{worktree_dir, worktree_name};
   use anyhow::Context as _;

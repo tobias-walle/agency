@@ -12,8 +12,8 @@ use crate::config::AppContext;
 use crate::daemon_protocol::SessionInfo;
 use crate::tui::colors::ansi_to_spans;
 use crate::utils::sessions::latest_sessions_by_task;
-use crate::utils::task::list_tasks;
-use crate::utils::task_columns::{TaskColumn, TaskRow};
+use crate::utils::task::{TaskRef, list_tasks};
+use crate::utils::task_columns::{GitMetrics, TaskColumn, TaskRow};
 
 /// Actions that can be triggered from the task table.
 #[derive(Clone, Debug)]
@@ -63,24 +63,18 @@ impl TaskTableState {
     &mut self,
     ctx: &AppContext,
     sessions: &[SessionInfo],
-    metrics: &[(u32, String, u64, u64, u64)],
+    git_metrics: &HashMap<TaskRef, GitMetrics>,
   ) -> anyhow::Result<()> {
     let mut tasks = list_tasks(&ctx.paths)?;
     tasks.sort_by_key(|t| t.id);
-
-    let metric_map: HashMap<(u32, String), (u64, u64, u64)> = metrics
-      .iter()
-      .map(|(id, slug, add, del, ahead)| ((*id, slug.clone()), (*add, *del, *ahead)))
-      .collect();
 
     let latest = latest_sessions_by_task(sessions);
 
     let rows: Vec<TaskRow> = tasks
       .iter()
       .map(|t| {
-        let key = (t.id, t.slug.clone());
-        let (add, del, ahead) = metric_map.get(&key).copied().unwrap_or((0, 0, 0));
-        TaskRow::new(ctx, t.clone(), latest.get(&key), add, del, ahead)
+        let metrics = git_metrics.get(t).cloned().unwrap_or_default();
+        TaskRow::new(ctx, t.clone(), latest.get(t), metrics)
       })
       .collect();
 
@@ -296,7 +290,7 @@ mod tests {
     };
     let task = make_task(1, "alpha");
     let session = make_session(9, 1, "alpha", "Running", 900);
-    let row = TaskRow::new(&ctx, task, Some(&session), 0, 0, 0);
+    let row = TaskRow::new(&ctx, task, Some(&session), GitMetrics::default());
 
     assert_eq!(row.id(), 1);
     assert_eq!(row.task.slug, "alpha");
@@ -314,7 +308,7 @@ mod tests {
       config: crate::config::AgencyConfig::default(),
     };
     let task = make_task(1, "alpha");
-    let row = TaskRow::new(&ctx, task, None, 0, 0, 0);
+    let row = TaskRow::new(&ctx, task, None, GitMetrics::default());
 
     assert_eq!(row.session_id(), None);
 
@@ -331,7 +325,7 @@ mod tests {
     };
     let task = make_task(2, "beta");
     let session = make_session(11, 2, "beta", "Exited", 1100);
-    let row = TaskRow::new(&ctx, task, Some(&session), 0, 0, 0);
+    let row = TaskRow::new(&ctx, task, Some(&session), GitMetrics::default());
 
     let status_cell = TaskColumn::Status.cell(&row, false);
     assert_eq!(strip_ansi_control_codes(&status_cell), "Exited");
@@ -346,7 +340,7 @@ mod tests {
     };
     let task = make_task(1, "alpha");
     let session = make_session(10, 1, "alpha", "Idle", 1000);
-    let row = TaskRow::new(&ctx, task, Some(&session), 0, 0, 0);
+    let row = TaskRow::new(&ctx, task, Some(&session), GitMetrics::default());
 
     let status_cell = TaskColumn::Status.cell(&row, false);
     assert_eq!(strip_ansi_control_codes(&status_cell), "Idle");

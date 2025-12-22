@@ -40,6 +40,8 @@ Agency is a command-line AI agent orchestrator. It helps developers run one or m
   - Do not panic in library code; return errors instead. In tests, prefer `assert!`/`assert_eq!` over `panic!`.
 - Lint Hygiene
   - Prefer fixing code over broad `#[allow(...)]`; when needed, keep allows local and narrowly scoped.
+- Imports
+  - Always use `use` statements at the top of the file instead of inline `crate::path::Type` paths in function signatures or implementations.
 - You MUST keep the code linear (avoid nesting)
 - If this is not given, you MUST do the following:
   - Detect duplicated code and extract it to seperate functions
