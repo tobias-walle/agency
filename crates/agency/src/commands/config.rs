@@ -14,5 +14,5 @@ pub fn run(ctx: &AppContext) -> Result<()> {
     std::fs::write(&cfg_path, b"")
       .with_context(|| format!("failed to create {}", cfg_path.display()))?;
   }
-  open_path(&ctx.config, &cfg_path, ctx.paths.cwd())
+  open_path(&ctx.config, &cfg_path, ctx.paths.root())
 }

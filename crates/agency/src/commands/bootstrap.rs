@@ -16,10 +16,10 @@ pub fn run(ctx: &AppContext, ident: &str) -> Result<()> {
   let (frontmatter, _body) = parse_task_markdown(&text);
   let base = frontmatter.base_branch(ctx);
 
-  let repo = open_main_repo(ctx.paths.cwd())?;
+  let repo = open_main_repo(ctx.paths.root())?;
   let branch = branch_name(&task);
   // Ensure base branch resolves to a commit; provide friendly guidance when unborn
-  if rev_parse(repo.workdir().unwrap_or(ctx.paths.cwd()), &base).is_err() {
+  if rev_parse(repo.workdir().unwrap_or(ctx.paths.root()), &base).is_err() {
     anyhow::bail!(
       "No worktree can be created as base branch has no commits. Please create an initial commit in your basebranch, e.g. by using `touch README.md; git add .; git commit -m 'init'`."
     );

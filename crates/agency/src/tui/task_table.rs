@@ -306,7 +306,7 @@ mod tests {
   fn task_row_with_running_session() {
     let dir = tempfile::TempDir::new().expect("tmp");
     let ctx = AppContext {
-      paths: AgencyPaths::new(dir.path()),
+      paths: AgencyPaths::new(dir.path(), dir.path()),
       config: crate::config::AgencyConfig::default(),
     };
     let task = make_task(1, "alpha");
@@ -325,7 +325,7 @@ mod tests {
   fn task_row_without_session_is_draft() {
     let dir = tempfile::TempDir::new().expect("tmp");
     let ctx = AppContext {
-      paths: AgencyPaths::new(dir.path()),
+      paths: AgencyPaths::new(dir.path(), dir.path()),
       config: crate::config::AgencyConfig::default(),
     };
     let task = make_task(1, "alpha");
@@ -341,7 +341,7 @@ mod tests {
   fn task_row_with_exited_session() {
     let dir = tempfile::TempDir::new().expect("tmp");
     let ctx = AppContext {
-      paths: AgencyPaths::new(dir.path()),
+      paths: AgencyPaths::new(dir.path(), dir.path()),
       config: crate::config::AgencyConfig::default(),
     };
     let task = make_task(2, "beta");
@@ -356,7 +356,7 @@ mod tests {
   fn task_row_with_idle_session() {
     let dir = tempfile::TempDir::new().expect("tmp");
     let ctx = AppContext {
-      paths: AgencyPaths::new(dir.path()),
+      paths: AgencyPaths::new(dir.path(), dir.path()),
       config: crate::config::AgencyConfig::default(),
     };
     let task = make_task(1, "alpha");

@@ -95,7 +95,7 @@ fn compute_merge_inputs(
   if let Some(b) = base_override {
     base_branch = b.to_string();
   }
-  let repo_workdir = git_workdir(ctx.paths.cwd())?;
+  let repo_workdir = git_workdir(ctx.paths.root())?;
   Ok(MergeInputs {
     task,
     branch,

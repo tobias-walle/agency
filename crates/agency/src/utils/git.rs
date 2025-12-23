@@ -60,7 +60,7 @@ pub fn repo_workdir_or(repo: &git::Repository, fallback: &Path) -> PathBuf {
 /// Uses the main repository (not a linked worktree) and falls back to
 /// "main" when HEAD cannot be resolved to a named branch.
 pub fn head_branch(ctx: &AppContext) -> String {
-  let Ok(repo) = open_main_repo(ctx.paths.cwd()) else {
+  let Ok(repo) = open_main_repo(ctx.paths.root()) else {
     return "main".to_string();
   };
   match current_branch_name(&repo) {

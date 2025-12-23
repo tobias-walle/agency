@@ -23,7 +23,7 @@ pub fn run(ctx: &AppContext, ident: &str) -> Result<()> {
   );
 
   notify_after_task_change(ctx, || {
-    let repo = open_main_repo(ctx.paths.cwd())?;
+    let repo = open_main_repo(ctx.paths.root())?;
     let branch = branch_name(&tref);
     let wt_dir = worktree_dir(&ctx.paths, &tref);
 

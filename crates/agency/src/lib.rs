@@ -165,7 +165,7 @@ pub fn run() -> Result<()> {
 fn build_context() -> Result<AppContext> {
   let cwd = std::env::current_dir()?;
   let project_root = resolve_main_workdir(&cwd);
-  let paths = AgencyPaths::new(project_root.clone());
+  let paths = AgencyPaths::new(project_root.clone(), cwd);
   let config = load_config(&project_root)?;
   Ok(AppContext { paths, config })
 }

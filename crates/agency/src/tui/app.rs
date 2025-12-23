@@ -533,8 +533,8 @@ fn reinit_terminal(terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>) -
 
 fn subscribe_events(ctx: &AppContext) -> Result<Receiver<UiEvent>> {
   let (tx, rx) = unbounded::<UiEvent>();
-  let repo = open_main_repo(ctx.paths.cwd())?;
-  let repo_root = repo_workdir_or(&repo, ctx.paths.cwd());
+  let repo = open_main_repo(ctx.paths.root())?;
+  let repo_root = repo_workdir_or(&repo, ctx.paths.root());
   let project = ProjectKey {
     repo_root: repo_root.display().to_string(),
   };
@@ -570,10 +570,10 @@ fn subscribe_events(ctx: &AppContext) -> Result<Receiver<UiEvent>> {
 
 fn emit_focus_change(ctx: &AppContext, tui_id: Option<u32>, task_id: u32) {
   let Some(tid) = tui_id else { return };
-  let Ok(repo) = open_main_repo(ctx.paths.cwd()) else {
+  let Ok(repo) = open_main_repo(ctx.paths.root()) else {
     return;
   };
-  let root = repo_workdir_or(&repo, ctx.paths.cwd());
+  let root = repo_workdir_or(&repo, ctx.paths.root());
   let project = ProjectKey {
     repo_root: root.display().to_string(),
   };

@@ -1,5 +1,5 @@
 use crate::common::tmux::TMUX_SESSION_NAME;
-use anyhow::Result;
+use anyhow::{Context, Result};
 use assert_cmd::{Command, cargo};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
@@ -328,5 +328,23 @@ impl Drop for TestEnv {
         .output();
     }
     let _ = std::fs::remove_dir_all(&self.runtime_dir);
+  }
+}
+
+impl TestEnv {
+  pub fn read_task_file(&self, id: u32, slug: &str) -> Result<String> {
+    let path = self.task_file_path(id, slug);
+    std::fs::read_to_string(path).context("read task file")
+  }
+
+  pub fn parse_new_task_output(stdout: &[u8]) -> Result<(u32, String)> {
+    let output = String::from_utf8_lossy(stdout);
+    let re = regex::Regex::new(r"Create task (\S+) \(id (\d+)\)")?;
+    let caps = re
+      .captures(&output)
+      .context("failed to parse task output")?;
+    let slug = caps.get(1).context("missing slug")?.as_str().to_string();
+    let id = caps.get(2).context("missing id")?.as_str().parse()?;
+    Ok((id, slug))
   }
 }

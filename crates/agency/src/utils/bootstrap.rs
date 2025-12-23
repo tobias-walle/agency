@@ -142,7 +142,7 @@ pub fn prepare_worktree_for_task(
     std::fs::create_dir_all(&wt_root)
       .with_context(|| format!("failed to create {}", wt_root.display()))?;
     add_worktree_for_branch(repo, &worktree_name(task), &worktree_dir_path, branch)?;
-    let root_workdir = repo_workdir_or(repo, ctx.paths.cwd());
+    let root_workdir = repo_workdir_or(repo, ctx.paths.root());
     let bcfg = ctx.config.bootstrap_config();
     bootstrap_worktree(repo, &root_workdir, &worktree_dir_path, &bcfg)?;
     run_bootstrap_cmd(&root_workdir, &worktree_dir_path, &bcfg);

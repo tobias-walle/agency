@@ -17,7 +17,7 @@ echo "Setup"
 
 pub fn run(ctx: &AppContext, agent: Option<&str>, yes: bool) -> Result<()> {
   let wizard = Wizard::new();
-  let root = ctx.paths.cwd().clone();
+  let root = ctx.paths.root().clone();
   let prompt = format!(
     "Generate project specific configuration files in {}?",
     t::path(root.display())

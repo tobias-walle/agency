@@ -50,8 +50,8 @@ pub fn run(ctx: &AppContext, ident: &str) -> Result<()> {
   // Build environment variables
   let content = read_task_content(&ctx.paths, &tref)?;
   let description = content.body.trim();
-  let repo = open_main_repo(ctx.paths.cwd())?;
-  let repo_root = repo_workdir_or(&repo, ctx.paths.cwd());
+  let repo = open_main_repo(ctx.paths.root())?;
+  let repo_root = repo_workdir_or(&repo, ctx.paths.root());
   let env_map = build_task_env(tref.id, description, &repo_root);
 
   log_info!("Open shell {}", t::path(wt_dir.display()));

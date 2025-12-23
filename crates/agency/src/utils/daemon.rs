@@ -63,8 +63,8 @@ pub fn send_message_to_daemon(socket: &Path, msg: C2DControl) -> Result<()> {
 pub fn stop_sessions_of_task(ctx: &AppContext, task: &TaskRef) -> anyhow::Result<()> {
   let socket = compute_socket_path(&ctx.config);
   // Compute project key from the main repo workdir
-  let repo = open_main_repo(ctx.paths.cwd())?;
-  let repo_root = repo_workdir_or(&repo, ctx.paths.cwd());
+  let repo = open_main_repo(ctx.paths.root())?;
+  let repo_root = repo_workdir_or(&repo, ctx.paths.root());
   let project = ProjectKey {
     repo_root: repo_root.display().to_string(),
   };
@@ -98,8 +98,8 @@ where
 /// Best-effort helper to notify the daemon that tasks changed for this project.
 fn notify_tasks_changed(ctx: &AppContext) -> anyhow::Result<()> {
   let socket = compute_socket_path(&ctx.config);
-  let repo = open_main_repo(ctx.paths.cwd())?;
-  let repo_root = repo_workdir_or(&repo, ctx.paths.cwd());
+  let repo = open_main_repo(ctx.paths.root())?;
+  let repo_root = repo_workdir_or(&repo, ctx.paths.root());
   let project = ProjectKey {
     repo_root: repo_root.display().to_string(),
   };
@@ -127,8 +127,8 @@ pub struct ProjectState {
 /// Best-effort helper to fetch a one-shot project state snapshot.
 pub fn get_project_state(ctx: &AppContext) -> anyhow::Result<ProjectState> {
   let socket = compute_socket_path(&ctx.config);
-  let repo = open_main_repo(ctx.paths.cwd())?;
-  let repo_root = repo_workdir_or(&repo, ctx.paths.cwd());
+  let repo = open_main_repo(ctx.paths.root())?;
+  let repo_root = repo_workdir_or(&repo, ctx.paths.root());
   let project = ProjectKey {
     repo_root: repo_root.display().to_string(),
   };
@@ -161,8 +161,8 @@ pub fn get_project_state(ctx: &AppContext) -> anyhow::Result<ProjectState> {
 /// Register a running TUI instance and obtain a numeric id.
 pub fn tui_register(ctx: &AppContext, pid: u32) -> anyhow::Result<u32> {
   let socket = compute_socket_path(&ctx.config);
-  let repo = open_main_repo(ctx.paths.cwd())?;
-  let repo_root = repo_workdir_or(&repo, ctx.paths.cwd());
+  let repo = open_main_repo(ctx.paths.root())?;
+  let repo_root = repo_workdir_or(&repo, ctx.paths.root());
   let project = ProjectKey {
     repo_root: repo_root.display().to_string(),
   };
@@ -180,8 +180,8 @@ pub fn tui_register(ctx: &AppContext, pid: u32) -> anyhow::Result<u32> {
 
 pub fn tui_unregister(ctx: &AppContext, pid: u32) -> anyhow::Result<()> {
   let socket = compute_socket_path(&ctx.config);
-  let repo = open_main_repo(ctx.paths.cwd())?;
-  let repo_root = repo_workdir_or(&repo, ctx.paths.cwd());
+  let repo = open_main_repo(ctx.paths.root())?;
+  let repo_root = repo_workdir_or(&repo, ctx.paths.root());
   let project = ProjectKey {
     repo_root: repo_root.display().to_string(),
   };
@@ -190,8 +190,8 @@ pub fn tui_unregister(ctx: &AppContext, pid: u32) -> anyhow::Result<()> {
 
 pub fn tui_list(ctx: &AppContext) -> anyhow::Result<Vec<TuiListItem>> {
   let socket = compute_socket_path(&ctx.config);
-  let repo = open_main_repo(ctx.paths.cwd())?;
-  let repo_root = repo_workdir_or(&repo, ctx.paths.cwd());
+  let repo = open_main_repo(ctx.paths.root())?;
+  let repo_root = repo_workdir_or(&repo, ctx.paths.root());
   let project = ProjectKey {
     repo_root: repo_root.display().to_string(),
   };

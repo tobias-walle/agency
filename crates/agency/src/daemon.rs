@@ -348,7 +348,7 @@ fn build_project_snapshot(
   let sessions = tmux_list(cfg, root).unwrap_or_default();
 
   // Task index
-  let paths = crate::config::AgencyPaths::new(root);
+  let paths = crate::config::AgencyPaths::new(root, root);
   let task_refs = list_tasks(&paths).unwrap_or_default();
 
   // Determine base branch default from repo HEAD

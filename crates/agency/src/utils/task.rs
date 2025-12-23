@@ -415,7 +415,7 @@ mod tests {
     assert_eq!(worktree_name(&task), "7-alpha");
 
     let dir = TempDir::new().expect("tmp");
-    let paths = AgencyPaths::new(dir.path());
+    let paths = AgencyPaths::new(dir.path(), dir.path());
     let wt_dir = worktree_dir(&paths, &task);
     assert!(wt_dir.ends_with(".agency/worktrees/7-alpha"));
 
@@ -451,7 +451,7 @@ mod tests {
   #[test]
   fn resolve_id_or_slug_by_id_and_slug() {
     let dir = TempDir::new().expect("tmp");
-    let paths = AgencyPaths::new(dir.path());
+    let paths = AgencyPaths::new(dir.path(), dir.path());
     let tasks = paths.tasks_dir();
     std::fs::create_dir_all(&tasks).unwrap();
 
@@ -473,7 +473,7 @@ mod tests {
   #[test]
   fn write_and_read_task_content_without_header() {
     let dir = TempDir::new().expect("tmp");
-    let paths = AgencyPaths::new(dir.path());
+    let paths = AgencyPaths::new(dir.path(), dir.path());
     let task = TaskRef {
       id: 1,
       slug: "sample-task".to_string(),
@@ -505,7 +505,7 @@ mod tests {
   #[test]
   fn write_task_content_preserves_trailing_newline() {
     let dir = TempDir::new().expect("tmp");
-    let paths = AgencyPaths::new(dir.path());
+    let paths = AgencyPaths::new(dir.path(), dir.path());
     let task = TaskRef {
       id: 2,
       slug: "another-task".to_string(),

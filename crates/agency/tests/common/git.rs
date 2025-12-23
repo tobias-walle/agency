@@ -153,4 +153,9 @@ impl TestEnv {
     self.git_stdout(&["checkout", branch])?;
     Ok(())
   }
+
+  pub fn git_checkout_detach(&self) -> Result<()> {
+    self.git_stdout(&["checkout", "--detach"])?;
+    Ok(())
+  }
 }

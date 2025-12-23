@@ -51,8 +51,8 @@ pub fn build_session_plan(ctx: &AppContext, task: &TaskRef) -> Result<SessionPla
   let description = content.body.trim().to_string();
 
   // Compute repo root and ensure branch/worktree
-  let repo = open_main_repo(ctx.paths.cwd())?;
-  let repo_root = repo_workdir_or(&repo, ctx.paths.cwd());
+  let repo = open_main_repo(ctx.paths.root())?;
+  let repo_root = repo_workdir_or(&repo, ctx.paths.root());
   let base_branch = frontmatter.base_branch(ctx);
   // Ensure base branch resolves
   if rev_parse(&repo_root, &base_branch).is_err() {

@@ -15,7 +15,7 @@ pub fn run(ctx: &AppContext, ident: &str) -> Result<()> {
     &ctx.config,
     &ctx.paths,
     &task,
-    ctx.paths.cwd(),
+    ctx.paths.root(),
     &content.body,
   )? {
     content.body = updated_body;

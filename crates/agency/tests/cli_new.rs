@@ -203,3 +203,97 @@ fn new_increments_trailing_number_slug() -> Result<()> {
     Ok(())
   })
 }
+
+#[test]
+fn new_uses_worktree_branch_as_base() -> Result<()> {
+  TestEnv::run(|env| -> Result<()> {
+    env.init_repo()?;
+
+    // Create a feature branch and worktree
+    env.git_create_branch("feature")?;
+    let worktree_path = env.path().join("worktrees").join("feature-wt");
+    env.git_stdout(&["worktree", "add", worktree_path.to_str().unwrap(), "feature"])?;
+
+    // Run agency new from within the worktree (via current_dir)
+    let output = env.agency()?
+      .current_dir(&worktree_path)
+      .args(["new", "test-task", "--draft", "--description", "test"])
+      .output()?;
+
+    assert!(output.status.success());
+
+    // Read task file and verify base_branch is "feature"
+    let (id, slug) = TestEnv::parse_new_task_output(&output.stdout)?;
+    let task_content = env.read_task_file(id, &slug)?;
+    assert!(task_content.contains("base_branch: feature"));
+
+    // CRITICAL: Verify task is stored in main repo's .agency folder, NOT in worktree
+    let task_file = env.task_file_path(id, &slug);
+    assert!(task_file.starts_with(env.path())); // Main repo path
+    assert!(!task_file.starts_with(&worktree_path)); // NOT in worktree
+    assert!(task_file.exists());
+
+    Ok(())
+  })
+}
+
+#[test]
+fn new_uses_main_repo_branch_when_in_main_repo() -> Result<()> {
+  TestEnv::run(|env| -> Result<()> {
+    env.init_repo()?;
+    env.git_create_branch("develop")?;
+    env.git_checkout("develop")?;
+
+    let (id, slug) = env.new_task("test-task", &["--draft", "--description", "test"])?;
+    let task_content = env.read_task_file(id, &slug)?;
+    assert!(task_content.contains("base_branch: develop"));
+
+    Ok(())
+  })
+}
+
+#[test]
+fn new_falls_back_to_main_on_detached_head_in_worktree() -> Result<()> {
+  TestEnv::run(|env| -> Result<()> {
+    env.init_repo()?;
+
+    // Create worktree
+    env.git_create_branch("feature")?;
+    let worktree_path = env.path().join("worktrees").join("feature-wt");
+    env.git_stdout(&["worktree", "add", worktree_path.to_str().unwrap(), "feature"])?;
+
+    // Detach HEAD in worktree
+    let _ = std::process::Command::new("git")
+      .current_dir(&worktree_path)
+      .args(["checkout", "--detach"])
+      .status()?;
+
+    // Run agency new from detached worktree
+    let output = env.agency()?
+      .current_dir(&worktree_path)
+      .args(["new", "test-task", "--draft", "--description", "test"])
+      .output()?;
+
+    assert!(output.status.success());
+
+    let (id, slug) = TestEnv::parse_new_task_output(&output.stdout)?;
+    let task_content = env.read_task_file(id, &slug)?;
+    assert!(task_content.contains("base_branch: main"));
+
+    Ok(())
+  })
+}
+
+#[test]
+fn new_falls_back_to_main_on_detached_head_in_main_repo() -> Result<()> {
+  TestEnv::run(|env| -> Result<()> {
+    env.init_repo()?;
+    env.git_checkout_detach()?;
+
+    let (id, slug) = env.new_task("test-task", &["--draft", "--description", "test"])?;
+    let task_content = env.read_task_file(id, &slug)?;
+    assert!(task_content.contains("base_branch: main"));
+
+    Ok(())
+  })
+}

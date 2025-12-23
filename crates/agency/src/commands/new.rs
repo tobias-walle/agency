@@ -7,7 +7,7 @@ use anyhow::{Context, Result, bail};
 use crate::config::AppContext;
 use crate::log_info;
 use crate::utils::daemon::notify_after_task_change;
-use crate::utils::git::{current_branch_name, open_main_repo};
+use crate::utils::git::current_branch_name_at;
 use crate::utils::log::t;
 use crate::utils::task::{
   TaskContent, TaskFrontmatter, TaskRef, compute_unique_slug, edit_task_description, next_id,
@@ -31,13 +31,13 @@ pub fn run(
     let id = next_id(&tasks)?;
     let slug = compute_unique_slug(&tasks, &base_slug)?;
 
-    // Determine base branch from current repo HEAD
-    let Ok(repo) = open_main_repo(ctx.paths.cwd()) else {
-      bail!("Not in a git repository. Please run `git init` or cd to a repo.");
-    };
-    let base_branch = match current_branch_name(&repo) {
-      Ok(name) => name,
-      Err(_) => "main".to_string(),
+    // Determine base branch from current working directory
+    let base_branch = match current_branch_name_at(ctx.paths.cwd()) {
+      Ok(Some(name)) => name,
+      Ok(None) => "main".to_string(),
+      Err(_) => {
+        bail!("Not in a git repository. Please run `git init` or cd to a repo.");
+      }
     };
 
     // Compose YAML front matter
@@ -74,7 +74,7 @@ pub fn run(
           &ctx.config,
           &ctx.paths,
           &task,
-          ctx.paths.cwd(),
+          ctx.paths.root(),
           &content.body,
         )? {
           Some(updated_body) => {

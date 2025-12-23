@@ -188,7 +188,7 @@ mod tests {
   fn make_ctx() -> (tempfile::TempDir, AppContext) {
     let dir = tempfile::TempDir::new().expect("tmp");
     let ctx = AppContext {
-      paths: AgencyPaths::new(dir.path()),
+      paths: AgencyPaths::new(dir.path(), dir.path()),
       config: crate::config::AgencyConfig::default(),
     };
     (dir, ctx)

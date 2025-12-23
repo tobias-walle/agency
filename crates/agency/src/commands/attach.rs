@@ -57,8 +57,8 @@ pub fn run_join_session(ctx: &AppContext, session_id: u64) -> Result<()> {
 
 pub fn run_follow(ctx: &AppContext, tui_id_opt: Option<u32>) -> Result<()> {
   // Resolve project key
-  let repo = open_main_repo(ctx.paths.cwd())?;
-  let repo_root = repo_workdir_or(&repo, ctx.paths.cwd());
+  let repo = open_main_repo(ctx.paths.root())?;
+  let repo_root = repo_workdir_or(&repo, ctx.paths.root());
   let project = ProjectKey {
     repo_root: repo_root.display().to_string(),
   };

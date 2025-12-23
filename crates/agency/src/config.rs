@@ -129,12 +129,21 @@ fn dedup_keep_first(items: &mut Vec<String>) {
 
 #[derive(Debug, Clone)]
 pub struct AgencyPaths {
+  root: PathBuf,
   cwd: PathBuf,
 }
 
 impl AgencyPaths {
-  pub fn new(cwd: impl Into<PathBuf>) -> Self {
-    Self { cwd: cwd.into() }
+  pub fn new(root: impl Into<PathBuf>, cwd: impl Into<PathBuf>) -> Self {
+    Self {
+      root: root.into(),
+      cwd: cwd.into(),
+    }
+  }
+
+  #[must_use]
+  pub fn root(&self) -> &PathBuf {
+    &self.root
   }
 
   #[must_use]
@@ -144,17 +153,17 @@ impl AgencyPaths {
 
   #[must_use]
   pub fn tasks_dir(&self) -> PathBuf {
-    self.cwd.join(".agency").join("tasks")
+    self.root.join(".agency").join("tasks")
   }
 
   #[must_use]
   pub fn worktrees_dir(&self) -> PathBuf {
-    self.cwd.join(".agency").join("worktrees")
+    self.root.join(".agency").join("worktrees")
   }
 
   #[must_use]
   pub fn state_dir(&self) -> PathBuf {
-    self.cwd.join(".agency").join("state")
+    self.root.join(".agency").join("state")
   }
 }
 

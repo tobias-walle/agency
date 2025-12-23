@@ -25,7 +25,7 @@ pub fn run(ctx: &AppContext, ident: &str, yes: bool) -> Result<()> {
 
     if confirm("Proceed? [y/N]")? {
       notify_after_task_change(ctx, || {
-        let repo = open_main_repo(ctx.paths.cwd())?;
+        let repo = open_main_repo(ctx.paths.root())?;
         let _ = prune_worktree_if_exists(&repo, &wt_dir)?;
         let _ = delete_branch_if_exists(&repo, &branch)?;
         if file.exists() {
@@ -51,7 +51,7 @@ pub fn run_force(ctx: &AppContext, ident: &str) -> Result<()> {
   let wt_dir = worktree_dir(&ctx.paths, &tref);
   let file = task_file(&ctx.paths, &tref);
   notify_after_task_change(ctx, || {
-    let repo = open_main_repo(ctx.paths.cwd())?;
+    let repo = open_main_repo(ctx.paths.root())?;
     let _ = prune_worktree_if_exists(&repo, &wt_dir)?;
     let _ = delete_branch_if_exists(&repo, &branch)?;
     if file.exists() {

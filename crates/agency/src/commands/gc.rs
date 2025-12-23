@@ -34,7 +34,7 @@ fn list_agency_branches(repo: &gix::Repository) -> Result<Vec<String>> {
 }
 
 pub fn run(ctx: &AppContext) -> Result<()> {
-  let repo = open_main_repo(ctx.paths.cwd())?;
+  let repo = open_main_repo(ctx.paths.root())?;
 
   // Build set of valid task keys: "<id>-<slug>"
   let valid: HashSet<String> = list_tasks(&ctx.paths)?

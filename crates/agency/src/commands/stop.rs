@@ -37,8 +37,8 @@ pub fn run(ctx: &AppContext, ident: Option<&str>, session_id: Option<u64>) -> Re
 
   if let Some(task_ident) = ident {
     let task = resolve_id_or_slug(&ctx.paths, task_ident)?;
-    let repo = open_main_repo(ctx.paths.cwd())?;
-    let repo_root = repo_workdir_or(&repo, ctx.paths.cwd());
+    let repo = open_main_repo(ctx.paths.root())?;
+    let repo_root = repo_workdir_or(&repo, ctx.paths.root());
     let project = ProjectKey {
       repo_root: repo_root.display().to_string(),
     };
