@@ -102,7 +102,7 @@ impl TaskColumn {
   #[must_use]
   pub fn weight(self) -> u8 {
     match self {
-      TaskColumn::Slug | TaskColumn::Agent => 2,
+      TaskColumn::Slug | TaskColumn::Agent | TaskColumn::Base => 2,
       _ => 1,
     }
   }
