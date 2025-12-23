@@ -56,6 +56,15 @@ This command:
 agency stop <slug>             # Stop session, keep worktree and branch
 ```
 
+### Delete a Task
+
+```bash
+agency rm <slug>               # Remove task file, worktree, and branch
+agency reset <slug>            # Reset worktree and branch, keep task file
+```
+
+Use `rm` when you want to completely delete a task without merging changes. Use `reset` if you want to start over but keep the task description.
+
 ## Quick Workflow Example
 
 ```bash
