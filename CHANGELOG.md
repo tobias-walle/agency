@@ -1,3 +1,16 @@
+# [1.10.0](https://github.com/tobias-walle/agency/compare/v1.9.0...v1.10.0) (2025-12-23)
+
+
+### Bug Fixes
+
+* make base column a bit wider ([4561149](https://github.com/tobias-walle/agency/commit/45611492c87c8306da534f4a7882da41a29ad2af))
+
+
+### Features
+
+* add --yes flag to rm and init commands ([78419f1](https://github.com/tobias-walle/agency/commit/78419f1c34883f7002d794fe53dc8bc410693508))
+* separate root and cwd in AgencyPaths to detect worktree branches ([21852e6](https://github.com/tobias-walle/agency/commit/21852e6cbd33a21f7a191ee4673b9375b1839eed))
+
 # [1.9.0](https://github.com/tobias-walle/agency/compare/v1.8.0...v1.9.0) (2025-12-22)
 
 
