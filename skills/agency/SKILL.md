@@ -92,14 +92,22 @@ agency merge feature-auth
 
 ## Sandboxing
 
-If you are running in a sandbox you might get errors like `run/agency-tmux.sock (Operation not permitted)`.
+**CRITICAL: ALL `agency` commands MUST be run outside the sandbox.**
 
-IMPORTANT: Despite the error message, this is not because the daemon is not started. It is because the sandbox cannot access the file. Always run the following commands outside the sandbox:
+If you are running in a sandbox you will get errors like `run/agency-tmux.sock (Operation not permitted)`.
 
+IMPORTANT: Despite the error message, this is not because the daemon is not started. It is because the sandbox cannot access the tmux socket file. You MUST run ALL agency commands outside the sandbox:
+
+- agency new ...
 - agency start ...
 - agency stop ...
 - agency tasks ...
 - agency merge ...
+- agency rm ...
+- agency reset ...
+- ALL other agency commands
+
+**Always set `dangerouslyDisableSandbox: true` when running any `agency` command.**
 
 ## More Information
 
