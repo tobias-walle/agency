@@ -10,33 +10,38 @@ use crate::utils::term::confirm;
 use crate::{log_success, log_warn};
 // Use macros via module path
 
-pub fn run(ctx: &AppContext, ident: &str) -> Result<()> {
-  let tref = resolve_id_or_slug(&ctx.paths, ident)?;
-  let branch = branch_name(&tref);
-  let wt_dir = worktree_dir(&ctx.paths, &tref);
-  let file = task_file(&ctx.paths, &tref);
-
-  // Preflight warning (single-line)
-  log_warn!("Remove task {}-{}", tref.id, tref.slug);
-
-  if confirm("Proceed? [y/N]")? {
-    notify_after_task_change(ctx, || {
-      let repo = open_main_repo(ctx.paths.cwd())?;
-      let _ = prune_worktree_if_exists(&repo, &wt_dir)?;
-      let _ = delete_branch_if_exists(&repo, &branch)?;
-      if file.exists() {
-        fs::remove_file(&file).with_context(|| format!("failed to remove {}", file.display()))?;
-      }
-      log_success!("Removed task, branch, and worktree");
-
-      let _ = stop_sessions_of_task(ctx, &tref);
-      Ok(())
-    })?;
+pub fn run(ctx: &AppContext, ident: &str, yes: bool) -> Result<()> {
+  if yes {
+    let tref = resolve_id_or_slug(&ctx.paths, ident)?;
+    log_warn!("Remove task {}-{}", tref.id, tref.slug);
+    run_force(ctx, ident)
   } else {
-    log_warn!("Cancelled");
-  }
+    let tref = resolve_id_or_slug(&ctx.paths, ident)?;
+    let branch = branch_name(&tref);
+    let wt_dir = worktree_dir(&ctx.paths, &tref);
+    let file = task_file(&ctx.paths, &tref);
 
-  Ok(())
+    log_warn!("Remove task {}-{}", tref.id, tref.slug);
+
+    if confirm("Proceed? [y/N]")? {
+      notify_after_task_change(ctx, || {
+        let repo = open_main_repo(ctx.paths.cwd())?;
+        let _ = prune_worktree_if_exists(&repo, &wt_dir)?;
+        let _ = delete_branch_if_exists(&repo, &branch)?;
+        if file.exists() {
+          fs::remove_file(&file).with_context(|| format!("failed to remove {}", file.display()))?;
+        }
+        log_success!("Removed task, branch, and worktree");
+
+        let _ = stop_sessions_of_task(ctx, &tref);
+        Ok(())
+      })?;
+    } else {
+      log_warn!("Cancelled");
+    }
+
+    Ok(())
+  }
 }
 
 /// Remove without interactive confirmation. Intended for non-interactive TUI use.

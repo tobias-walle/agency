@@ -32,6 +32,9 @@ enum Commands {
     /// Set the default agent for the project
     #[arg(short = 'a', long = "agent")]
     agent: Option<String>,
+    /// Skip confirmation prompt
+    #[arg(short = 'y', long = "yes")]
+    yes: bool,
   },
   /// Interactive terminal UI
   Tui {},
@@ -109,7 +112,12 @@ enum Commands {
   /// Print the branch name
   Branch { ident: String },
   /// Remove task file, worktree, and branch
-  Rm { ident: String },
+  Rm {
+    ident: String,
+    /// Skip confirmation prompt
+    #[arg(short = 'y', long = "yes")]
+    yes: bool,
+  },
   /// Reset a task's worktree and branch (keep markdown)
   Reset { ident: String },
   /// Prepare branch/worktree and run bootstrap (no PTY)
@@ -173,7 +181,7 @@ fn autostart_daemon(ctx: &AppContext, cmd: Option<&Commands>) {
 fn run_command(ctx: &AppContext, cli: Cli) -> Result<()> {
   match cli.command {
     Some(Commands::Setup {}) => commands::setup::run(ctx),
-    Some(Commands::Init { agent }) => commands::init::run(ctx, agent.as_deref()),
+    Some(Commands::Init { agent, yes }) => commands::init::run(ctx, agent.as_deref(), yes),
     Some(Commands::Tui {}) => tui::run(ctx),
     Some(Commands::New {
       slug,
@@ -229,7 +237,7 @@ fn run_command(ctx: &AppContext, cli: Cli) -> Result<()> {
     }
     Some(Commands::Path { ident }) => commands::path::run(ctx, &ident),
     Some(Commands::Branch { ident }) => commands::branch::run(ctx, &ident),
-    Some(Commands::Rm { ident }) => commands::rm::run(ctx, &ident),
+    Some(Commands::Rm { ident, yes }) => commands::rm::run(ctx, &ident, yes),
     Some(Commands::Reset { ident }) => commands::reset::run(ctx, &ident),
     Some(Commands::Bootstrap { ident }) => commands::bootstrap::run(ctx, &ident),
     Some(Commands::Config {}) => commands::config::run(ctx),

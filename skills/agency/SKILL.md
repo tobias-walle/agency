@@ -59,7 +59,7 @@ agency stop <slug>             # Stop session, keep worktree and branch
 ### Delete a Task
 
 ```bash
-agency rm <slug>               # Remove task file, worktree, and branch
+agency rm --yes <slug>         # Remove task file, worktree, and branch
 agency reset <slug>            # Reset worktree and branch, keep task file
 ```
 
@@ -106,8 +106,6 @@ IMPORTANT: Despite the error message, this is not because the daemon is not star
 - agency rm ...
 - agency reset ...
 - ALL other agency commands
-
-**Always set `dangerouslyDisableSandbox: true` when running any `agency` command.**
 
 ## More Information
 

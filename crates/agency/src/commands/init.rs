@@ -15,7 +15,7 @@ set -euo pipefail
 echo "Setup"
 "#;
 
-pub fn run(ctx: &AppContext, agent: Option<&str>) -> Result<()> {
+pub fn run(ctx: &AppContext, agent: Option<&str>, yes: bool) -> Result<()> {
   let wizard = Wizard::new();
   let root = ctx.paths.cwd().clone();
   let prompt = format!(
@@ -25,7 +25,7 @@ pub fn run(ctx: &AppContext, agent: Option<&str>) -> Result<()> {
   // Auto-confirm in non-interactive environments (no TTY)
   let noninteractive = !std::io::stdin().is_terminal() || !std::io::stdout().is_terminal();
   let auto_confirm = noninteractive;
-  if !auto_confirm && !wizard.confirm(&prompt, false)? {
+  if !yes && !auto_confirm && !wizard.confirm(&prompt, false)? {
     return Ok(());
   }
 

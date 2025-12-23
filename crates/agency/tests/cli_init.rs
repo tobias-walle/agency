@@ -134,3 +134,65 @@ fn init_updates_existing_agent_config() -> Result<()> {
     Ok(())
   })
 }
+
+#[test]
+fn init_with_yes_flag_skips_confirmation() -> Result<()> {
+  TestEnv::run(|env| -> Result<()> {
+    let root = env.path().to_path_buf();
+    env
+      .agency()?
+      .arg("init")
+      .arg("--yes")
+      .assert()
+      .success()
+      .stdout(predicates::str::contains(".agency/agency.toml").from_utf8());
+
+    let agency_dir = root.join(".agency");
+    assert!(agency_dir.is_dir(), ".agency directory should be created");
+    assert!(agency_dir.join("agency.toml").is_file(), "agency.toml should be created");
+    assert!(agency_dir.join("setup.sh").is_file(), "setup.sh should be created");
+    Ok(())
+  })
+}
+
+#[test]
+fn init_with_y_flag_skips_confirmation() -> Result<()> {
+  TestEnv::run(|env| -> Result<()> {
+    let root = env.path().to_path_buf();
+    env
+      .agency()?
+      .arg("init")
+      .arg("-y")
+      .assert()
+      .success()
+      .stdout(predicates::str::contains(".agency/agency.toml").from_utf8());
+
+    let agency_dir = root.join(".agency");
+    assert!(agency_dir.is_dir(), ".agency directory should be created");
+    assert!(agency_dir.join("agency.toml").is_file(), "agency.toml should be created");
+    assert!(agency_dir.join("setup.sh").is_file(), "setup.sh should be created");
+    Ok(())
+  })
+}
+
+#[test]
+fn init_with_yes_and_agent_flag() -> Result<()> {
+  TestEnv::run(|env| -> Result<()> {
+    env
+      .agency()?
+      .arg("init")
+      .arg("--yes")
+      .arg("--agent")
+      .arg("claude")
+      .assert()
+      .success();
+
+    let cfg_path = env.path().join(".agency").join("agency.toml");
+    let contents = std::fs::read_to_string(cfg_path)?;
+    assert!(
+      contents.contains("agent = \"claude\""),
+      "agency.toml should contain the specified agent"
+    );
+    Ok(())
+  })
+}

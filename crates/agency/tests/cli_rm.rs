@@ -41,3 +41,53 @@ fn rm_confirms_and_removes_on_y_or_y() -> Result<()> {
     Ok(())
   })
 }
+
+#[test]
+fn rm_with_yes_flag_skips_confirmation() -> Result<()> {
+  TestEnv::run(|env| -> Result<()> {
+    env.init_repo()?;
+    let (id, slug) = env.new_task("epsilon-task", &[])?;
+
+    env.bootstrap_task(id)?;
+
+    env
+      .agency()?
+      .arg("rm")
+      .arg(id.to_string())
+      .arg("--yes")
+      .assert()
+      .success()
+      .stdout(predicates::str::contains("Removed task").from_utf8());
+
+    assert!(!env.branch_exists(id, &slug)?);
+    assert!(!env.task_file_path(id, &slug).exists());
+    assert!(!env.worktree_dir_path(id, &slug).exists());
+
+    Ok(())
+  })
+}
+
+#[test]
+fn rm_with_y_flag_skips_confirmation() -> Result<()> {
+  TestEnv::run(|env| -> Result<()> {
+    env.init_repo()?;
+    let (id, slug) = env.new_task("zeta-task", &[])?;
+
+    env.bootstrap_task(id)?;
+
+    env
+      .agency()?
+      .arg("rm")
+      .arg(&slug)
+      .arg("-y")
+      .assert()
+      .success()
+      .stdout(predicates::str::contains("Removed task").from_utf8());
+
+    assert!(!env.branch_exists(id, &slug)?);
+    assert!(!env.task_file_path(id, &slug).exists());
+    assert!(!env.worktree_dir_path(id, &slug).exists());
+
+    Ok(())
+  })
+}
