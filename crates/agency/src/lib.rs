@@ -107,6 +107,8 @@ enum Commands {
     #[arg(trailing_var_arg = true, allow_hyphen_values = true, required = true)]
     cmd: Vec<String>,
   },
+  /// Select a task with fzf and output its ID
+  Fzf {},
   /// Print the absolute worktree path
   Path { ident: String },
   /// Print the branch name
@@ -235,6 +237,7 @@ fn run_command(ctx: &AppContext, cli: Cli) -> Result<()> {
       let code = commands::exec::run(ctx, &ident, &cmd)?;
       std::process::exit(code);
     }
+    Some(Commands::Fzf {}) => commands::fzf::run(ctx),
     Some(Commands::Path { ident }) => commands::path::run(ctx, &ident),
     Some(Commands::Branch { ident }) => commands::branch::run(ctx, &ident),
     Some(Commands::Rm { ident, yes }) => commands::rm::run(ctx, &ident, yes),

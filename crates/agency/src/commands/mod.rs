@@ -7,6 +7,7 @@ pub mod daemon;
 pub mod defaults;
 pub mod edit;
 pub mod exec;
+pub mod fzf;
 pub mod gc;
 pub mod init;
 pub mod merge;
