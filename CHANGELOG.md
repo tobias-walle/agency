@@ -1,3 +1,10 @@
+# [1.11.0](https://github.com/tobias-walle/agency/compare/v1.10.0...v1.11.0) (2025-12-28)
+
+
+### Features
+
+* add fzf command for interactive task selection ([58c0564](https://github.com/tobias-walle/agency/commit/58c056459d24b5afe06fdd357e70a8d270c65085))
+
 # [1.10.0](https://github.com/tobias-walle/agency/compare/v1.9.0...v1.10.0) (2025-12-23)
 
 
