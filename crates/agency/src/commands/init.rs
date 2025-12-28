@@ -2,12 +2,10 @@ use std::fs;
 use std::path::Path;
 
 use anyhow::{Context, Result};
-use std::io::IsTerminal as _;
 
 use crate::config::AppContext;
 use crate::log_info;
 use crate::utils::log::t;
-use crate::utils::wizard::Wizard;
 
 const SETUP_TEMPLATE: &str = r#"#!/usr/bin/env bash
 set -euo pipefail
@@ -16,16 +14,13 @@ echo "Setup"
 "#;
 
 pub fn run(ctx: &AppContext, agent: Option<&str>, yes: bool) -> Result<()> {
-  let wizard = Wizard::new();
   let root = ctx.paths.root().clone();
   let prompt = format!(
     "Generate project specific configuration files in {}?",
     t::path(root.display())
   );
-  // Auto-confirm in non-interactive environments (no TTY)
-  let noninteractive = !std::io::stdin().is_terminal() || !std::io::stdout().is_terminal();
-  let auto_confirm = noninteractive;
-  if !yes && !auto_confirm && !wizard.confirm(&prompt, false)? {
+  // Auto-confirm in non-interactive environments (default=true) since init is non-destructive
+  if !ctx.tty.confirm(&prompt, true, yes)? {
     return Ok(());
   }
 

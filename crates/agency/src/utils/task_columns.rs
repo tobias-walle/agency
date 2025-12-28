@@ -190,6 +190,7 @@ mod tests {
     let ctx = AppContext {
       paths: AgencyPaths::new(dir.path(), dir.path()),
       config: crate::config::AgencyConfig::default(),
+      tty: crate::utils::tty::Tty::new(),
     };
     (dir, ctx)
   }

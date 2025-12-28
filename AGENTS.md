@@ -48,6 +48,16 @@ Agency is a command-line AI agent orchestrator. It helps developers run one or m
   - Detect strong nesting and create functions to reduce it
   - Use language feature to reduce nesting
 
+# TTY Handling
+
+Agency must work correctly in both interactive terminals and non-interactive environments (e.g., AI agents like Claude Code). Use `ctx.tty` for all TTY-related checks.
+
+Guidelines:
+- Never read from stdin without checking `ctx.tty.is_interactive()` first
+- Commands that require TTY (e.g., attach, TUI) should bail with a clear error message
+- Use `ctx.tty.confirm(prompt, default, yes_flag)` for all confirmations
+- In non-TTY environments, confirmations auto-proceed with `default=true` to enable scripting
+
 # Tests
 
 - Integration tests are living in `./crates/agency/tests/`

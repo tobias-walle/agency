@@ -2,10 +2,11 @@ use std::fmt;
 use std::io::{self, IsTerminal as _, Read, Write};
 
 use anyhow::{Context, Result, anyhow};
-use inquire::{Confirm, Select, Text};
+use inquire::{Select, Text};
 use owo_colors::OwoColorize as _;
 
-use crate::{log_info, log_warn};
+use crate::log_info;
+use crate::utils::tty::stdin_has_data;
 
 /// ASCII art logo rendered during setup flows.
 #[allow(unknown_lints)]
@@ -125,22 +126,23 @@ impl Wizard {
     Ok(parts)
   }
 
-  /// Prompt for a yes/no confirmation.
-  pub fn confirm(&self, prompt: &str, default: bool) -> Result<bool> {
-    if self.is_tty {
-      return Confirm::new(prompt)
-        .with_default(default)
-        .prompt()
-        .map_err(|err| anyhow!(err));
-    }
-    Self::fallback_confirm(prompt, default)
-  }
-
+  /// Non-interactive fallback: reads from stdin if data available, else returns default.
   fn fallback_select(
     prompt: &str,
     options: &[Choice],
     default_value: Option<&str>,
   ) -> Result<String> {
+    // If stdin has no data, return default immediately
+    if !stdin_has_data() {
+      if let Some(def) = default_value
+        && let Some(choice) = options.iter().find(|opt| opt.value == def)
+      {
+        return Ok(choice.value.clone());
+      }
+      return Ok(options[0].value.clone());
+    }
+
+    // Stdin has data - read it
     log_info!("{}", prompt);
     for (idx, opt) in options.iter().enumerate() {
       match &opt.detail {
@@ -175,11 +177,18 @@ impl Wizard {
     }) {
       return Ok(found.value.clone());
     }
-    log_warn!("Invalid selection: {}", trimmed);
-    anyhow::bail!("invalid selection")
+    // Invalid selection - return first option as fallback
+    Ok(options[0].value.clone())
   }
 
+  /// Non-interactive fallback: reads from stdin if data available, else returns default.
   fn fallback_text(prompt: &str, default: &str) -> Result<String> {
+    // If stdin has no data, return default immediately
+    if !stdin_has_data() {
+      return Ok(default.to_string());
+    }
+
+    // Stdin has data - read it
     log_info!("{} [{}]", prompt, default);
     anstream::print!("{}", "-> ".bright_cyan());
     io::stdout().flush().ok();
@@ -193,21 +202,6 @@ impl Wizard {
     Ok(trimmed.to_string())
   }
 
-  fn fallback_confirm(prompt: &str, default: bool) -> Result<bool> {
-    let suffix = if default { "[Y/n]" } else { "[y/N]" };
-    log_info!("{} {}", prompt, suffix);
-    anstream::print!("{}", "-> ".bright_cyan());
-    io::stdout().flush().ok();
-
-    let mut input = String::new();
-    read_line(&mut input)?;
-    let trimmed = input.trim();
-    if trimmed.is_empty() {
-      return Ok(default);
-    }
-    let first = trimmed.chars().next().unwrap_or_default();
-    Ok(matches!(first, 'y' | 'Y'))
-  }
 }
 
 fn read_line(target: &mut String) -> Result<()> {

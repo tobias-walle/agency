@@ -167,10 +167,13 @@ impl AgencyPaths {
   }
 }
 
+use crate::utils::tty::Tty;
+
 #[derive(Debug, Clone)]
 pub struct AppContext {
   pub paths: AgencyPaths,
   pub config: AgencyConfig,
+  pub tty: Tty,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]

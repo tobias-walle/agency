@@ -14,6 +14,7 @@ pub mod task;
 pub mod task_columns;
 pub mod term;
 pub mod tmux;
+pub mod tty;
 pub mod version;
 pub mod which;
 pub mod wizard;

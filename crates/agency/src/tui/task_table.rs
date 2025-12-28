@@ -308,6 +308,7 @@ mod tests {
     let ctx = AppContext {
       paths: AgencyPaths::new(dir.path(), dir.path()),
       config: crate::config::AgencyConfig::default(),
+      tty: crate::utils::tty::Tty::new(),
     };
     let task = make_task(1, "alpha");
     let session = make_session(9, 1, "alpha", "Running", 900);
@@ -327,6 +328,7 @@ mod tests {
     let ctx = AppContext {
       paths: AgencyPaths::new(dir.path(), dir.path()),
       config: crate::config::AgencyConfig::default(),
+      tty: crate::utils::tty::Tty::new(),
     };
     let task = make_task(1, "alpha");
     let row = TaskRow::new(&ctx, task, None, GitMetrics::default());
@@ -343,6 +345,7 @@ mod tests {
     let ctx = AppContext {
       paths: AgencyPaths::new(dir.path(), dir.path()),
       config: crate::config::AgencyConfig::default(),
+      tty: crate::utils::tty::Tty::new(),
     };
     let task = make_task(2, "beta");
     let session = make_session(11, 2, "beta", "Exited", 1100);
@@ -358,6 +361,7 @@ mod tests {
     let ctx = AppContext {
       paths: AgencyPaths::new(dir.path(), dir.path()),
       config: crate::config::AgencyConfig::default(),
+      tty: crate::utils::tty::Tty::new(),
     };
     let task = make_task(1, "alpha");
     let session = make_session(10, 1, "alpha", "Idle", 1000);

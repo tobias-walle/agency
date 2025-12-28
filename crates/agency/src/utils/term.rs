@@ -1,7 +1,6 @@
-use anyhow::Result;
 use owo_colors::OwoColorize as _;
 use regex::Regex;
-use std::io::{self, Read, Write};
+use std::io::{self, Write};
 use std::sync::OnceLock;
 
 fn ansi_regex() -> &'static Regex {
@@ -67,36 +66,6 @@ pub fn print_table(headers: &[&str], rows: &[Vec<String>]) {
     }
     println!();
   }
-}
-
-/// Ask the user to confirm an action. Returns true if input starts with 'y' or 'Y'.
-pub fn confirm(prompt: &str) -> Result<bool> {
-  let mut stdout = io::stdout().lock();
-  write!(stdout, "{prompt} ")?;
-  stdout.flush()?;
-  let mut line = String::new();
-  let mut stdin = io::stdin().lock();
-  // Read a single line (best-effort); empty or non-y -> false
-  loop {
-    let mut buf = [0u8; 1];
-    match stdin.read(&mut buf) {
-      Ok(0) => break,
-      Ok(_) => {
-        let b = buf[0];
-        if b == b'\n' || b == b'\r' {
-          break;
-        }
-        line.push(b as char);
-        // Prevent overly long reads
-        if line.len() > 100 {
-          break;
-        }
-      }
-      Err(err) => return Err(err.into()),
-    }
-  }
-  let ans = line.trim();
-  Ok(matches!(ans.chars().next(), Some('y' | 'Y')))
 }
 
 pub fn strip_ansi_control_codes(input: &str) -> String {

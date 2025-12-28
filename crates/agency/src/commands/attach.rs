@@ -20,6 +20,10 @@ use overlay::OverlayUI;
 use std::process::Child;
 
 pub fn run_with_task(ctx: &AppContext, ident: &str) -> Result<()> {
+  if !ctx.tty.is_interactive() {
+    anyhow::bail!("attach requires an interactive terminal (TTY). Run this command in an interactive shell or terminal.");
+  }
+
   // Initialize env_logger similar to pty-demo main
   let _ = env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
     .format_timestamp_secs()
@@ -48,6 +52,10 @@ pub fn run_with_task(ctx: &AppContext, ident: &str) -> Result<()> {
 }
 
 pub fn run_join_session(ctx: &AppContext, session_id: u64) -> Result<()> {
+  if !ctx.tty.is_interactive() {
+    anyhow::bail!("attach requires an interactive terminal (TTY). Run this command in an interactive shell or terminal.");
+  }
+
   let entries = get_project_state(ctx)?.sessions;
   let Some(si) = entries.into_iter().find(|e| e.session_id == session_id) else {
     anyhow::bail!("Session not found: {session_id}");
@@ -56,6 +64,10 @@ pub fn run_join_session(ctx: &AppContext, session_id: u64) -> Result<()> {
 }
 
 pub fn run_follow(ctx: &AppContext, tui_id_opt: Option<u32>) -> Result<()> {
+  if !ctx.tty.is_interactive() {
+    anyhow::bail!("attach --follow requires an interactive terminal (TTY). Run this command in an interactive shell or terminal.");
+  }
+
   // Resolve project key
   let repo = open_main_repo(ctx.paths.root())?;
   let repo_root = repo_workdir_or(&repo, ctx.paths.root());

@@ -1,6 +1,5 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use std::io::IsTerminal as _;
 
 mod commands;
 pub mod config;
@@ -11,6 +10,7 @@ pub mod tui;
 mod utils;
 
 use crate::config::{AgencyPaths, AppContext, global_config_exists, load_config};
+use crate::utils::tty::Tty;
 use crate::utils::daemon::ensure_running_and_latest_version;
 use crate::utils::git::resolve_main_workdir;
 use crate::utils::tmux::ensure_server as ensure_tmux_server;
@@ -169,7 +169,8 @@ fn build_context() -> Result<AppContext> {
   let project_root = resolve_main_workdir(&cwd);
   let paths = AgencyPaths::new(project_root.clone(), cwd);
   let config = load_config(&project_root)?;
-  Ok(AppContext { paths, config })
+  let tty = Tty::new();
+  Ok(AppContext { paths, config, tty })
 }
 
 fn autostart_daemon(ctx: &AppContext, cmd: Option<&Commands>) {
@@ -203,13 +204,17 @@ fn run_command(ctx: &AppContext, cli: Cli) -> Result<()> {
       let created = commands::new::run(ctx, &slug, agent.as_deref(), desc.as_deref(), edit)?;
       if !draft {
         let ident = created.id.to_string();
-        commands::start::run_with_attach(ctx, &ident, !no_attach)?;
+        // Only attach in interactive mode; non-interactive defaults to no-attach
+        let should_attach = !no_attach && ctx.tty.is_interactive();
+        commands::start::run_with_attach(ctx, &ident, should_attach)?;
       }
       Ok(())
     }
     Some(Commands::Edit { ident }) => commands::edit::run(ctx, &ident),
     Some(Commands::Start { ident, no_attach }) => {
-      commands::start::run_with_attach(ctx, &ident, !no_attach)
+      // Only attach in interactive mode; non-interactive defaults to no-attach
+      let should_attach = !no_attach && ctx.tty.is_interactive();
+      commands::start::run_with_attach(ctx, &ident, should_attach)
     }
     Some(Commands::Attach {
       task,
@@ -257,9 +262,8 @@ fn run_command(ctx: &AppContext, cli: Cli) -> Result<()> {
 }
 
 fn run_default(ctx: &AppContext) -> Result<()> {
-  let stdout_tty = std::io::stdout().is_terminal();
   if !global_config_exists() {
-    if stdout_tty {
+    if ctx.tty.is_interactive() {
       commands::setup::run(ctx)?;
     } else {
       log_warn!("Global config missing: run `agency setup` in a terminal");
@@ -268,7 +272,7 @@ fn run_default(ctx: &AppContext) -> Result<()> {
   }
   let _ = ensure_running_and_latest_version(ctx);
   let _ = ensure_tmux_server(&ctx.config);
-  if stdout_tty {
+  if ctx.tty.is_interactive() {
     tui::run(ctx)
   } else {
     log_info!("Usage: agency <SUBCOMMAND>. Try 'agency --help'");
