@@ -1,13 +1,11 @@
 use std::path::PathBuf;
 
-use crossterm::event::{KeyCode, KeyEvent};
-use ratatui::layout::{Constraint, Layout, Rect};
-use ratatui::prelude::Stylize;
+use crossterm::event::KeyEvent;
+use ratatui::layout::Rect;
 use ratatui::style::Color;
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, Paragraph};
 
-use super::layout::{centered_rect, inner};
+use super::text_input::{TextInputConfig, TextInputOutcome, TextInputState};
 use crate::utils::task::TaskRef;
 
 /// Actions from the file input overlay.
@@ -21,72 +19,49 @@ pub enum FileInputAction {
 /// State for the file path input overlay.
 #[derive(Clone, Debug)]
 pub struct FileInputState {
-  pub path_input: String,
   pub task: TaskRef,
+  text_input: TextInputState,
 }
 
 impl FileInputState {
   pub fn new(task: TaskRef) -> Self {
+    let title = Line::from(vec![
+      Span::raw("Add file to task "),
+      Span::styled(
+        task.slug.clone(),
+        ratatui::style::Style::default().fg(Color::Cyan),
+      ),
+    ]);
+    let config = TextInputConfig {
+      title: title.to_string(),
+      placeholder: "/path/to/file".to_string(),
+      right_title: None,
+    };
     Self {
-      path_input: String::new(),
       task,
+      text_input: TextInputState::new(config),
     }
   }
 
   /// Draw the input overlay centered in the parent area.
   pub fn draw(&self, f: &mut ratatui::Frame, parent: Rect) {
-    let area = centered_rect(parent, 70, 5);
-    let chunks = Layout::vertical([Constraint::Length(3)]).split(area);
-
-    let title = Line::from(vec![
-      Span::raw("Add file to task "),
-      Span::styled(&self.task.slug, ratatui::style::Style::default().fg(Color::Cyan)),
-    ]);
-
-    let block = Block::default()
-      .borders(Borders::ALL)
-      .title(title);
-    f.render_widget(block, chunks[0]);
-
-    let input_area = inner(chunks[0]);
-    let input_text = if self.path_input.is_empty() {
-      Line::from(Span::raw("/path/to/file").fg(Color::Gray))
-    } else {
-      Line::from(self.path_input.clone())
-    };
-    f.render_widget(Paragraph::new(input_text), input_area);
-
-    // Cursor placement
-    let mut cx = input_area.x + u16::try_from(self.path_input.len()).unwrap_or(0);
-    let max_x = input_area.x + input_area.width.saturating_sub(1);
-    if cx > max_x {
-      cx = max_x;
-    }
-    f.set_cursor_position((cx, input_area.y));
+    self.text_input.draw(f, parent);
   }
 
   /// Handle key events. Returns a `FileInputAction` describing what happened.
   pub fn handle_key(&mut self, key: KeyEvent) -> FileInputAction {
-    match key.code {
-      KeyCode::Esc => FileInputAction::Cancel,
-      KeyCode::Enter => {
-        if self.path_input.is_empty() {
+    match self.text_input.handle_key(key) {
+      TextInputOutcome::Continue => FileInputAction::None,
+      TextInputOutcome::Canceled => FileInputAction::Cancel,
+      TextInputOutcome::Submit(path) => {
+        if path.is_empty() {
           FileInputAction::None
         } else {
           FileInputAction::Submit {
-            path: PathBuf::from(&self.path_input),
+            path: PathBuf::from(path),
           }
         }
       }
-      KeyCode::Backspace => {
-        self.path_input.pop();
-        FileInputAction::None
-      }
-      KeyCode::Char(c) => {
-        self.path_input.push(c);
-        FileInputAction::None
-      }
-      _ => FileInputAction::None,
     }
   }
 }
@@ -94,6 +69,7 @@ impl FileInputState {
 #[cfg(test)]
 mod tests {
   use super::*;
+  use crossterm::event::KeyCode;
 
   fn make_state() -> FileInputState {
     FileInputState::new(TaskRef {
@@ -112,7 +88,7 @@ mod tests {
   #[test]
   fn submit_with_path() {
     let mut state = make_state();
-    state.path_input = "/tmp/test.txt".to_string();
+    state.text_input.input = "/tmp/test.txt".to_string();
     let key = KeyEvent::from(KeyCode::Enter);
     match state.handle_key(key) {
       FileInputAction::Submit { path } => {
@@ -136,14 +112,14 @@ mod tests {
     state.handle_key(KeyEvent::from(KeyCode::Char('t')));
     state.handle_key(KeyEvent::from(KeyCode::Char('m')));
     state.handle_key(KeyEvent::from(KeyCode::Char('p')));
-    assert_eq!(state.path_input, "/tmp");
+    assert_eq!(state.text_input.input, "/tmp");
   }
 
   #[test]
   fn backspace_removes_char() {
     let mut state = make_state();
-    state.path_input = "/tmp".to_string();
+    state.text_input.input = "/tmp".to_string();
     state.handle_key(KeyEvent::from(KeyCode::Backspace));
-    assert_eq!(state.path_input, "/tm");
+    assert_eq!(state.text_input.input, "/tm");
   }
 }

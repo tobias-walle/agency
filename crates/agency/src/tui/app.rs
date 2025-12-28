@@ -17,7 +17,7 @@ use super::files_overlay::{FilesOutcome, FilesOverlayState};
 use super::help_bar::{
   self, HELP_ITEMS, HELP_ITEMS_FILES, HELP_ITEMS_FILE_INPUT, HELP_ITEMS_INPUT, HELP_ITEMS_LOG,
 };
-use super::input_overlay::{self, InputOverlayState};
+use super::task_input_overlay::{self, InputOverlayState};
 use super::select_menu::{MenuOutcome, SelectMenuState};
 use super::task_table::{self, TaskTableState};
 use crate::commands::{attach, complete, edit, merge, new, open, reset, rm, shell, start, stop};
@@ -472,12 +472,12 @@ fn handle_input_mode(state: &mut AppState, ctx: &AppContext, key: crossterm::eve
 
   let action = overlay.handle_key(key);
   match action {
-    input_overlay::Action::None => {}
-    input_overlay::Action::Cancel => {
+    task_input_overlay::Action::None => {}
+    task_input_overlay::Action::Cancel => {
       state.mode = Mode::List;
       state.input_overlay = None;
     }
-    input_overlay::Action::OpenAgentMenu => {
+    task_input_overlay::Action::OpenAgentMenu => {
       let mut items: Vec<String> = ctx.config.agents.keys().cloned().collect();
       items.sort();
       let pre = overlay
@@ -488,7 +488,7 @@ fn handle_input_mode(state: &mut AppState, ctx: &AppContext, key: crossterm::eve
       let menu = SelectMenuState::new("Select agent", items, pre);
       state.mode = Mode::SelectMenu(menu);
     }
-    input_overlay::Action::Submit {
+    task_input_overlay::Action::Submit {
       slug,
       agent,
       start_and_attach,
