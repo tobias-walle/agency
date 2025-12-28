@@ -4,25 +4,44 @@ use ratatui::style::Color;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 
-/// Help items to display in the TUI.
+/// Help items for list mode (default).
 pub const HELP_ITEMS: &[&str] = &[
-  "Select: ↑/↓ j/k",
+  "Select: j/k",
   "Edit/Attach: ⏎",
-  "New: n",
-  "New + Start: N",
+  "New: n/N",
   "Start: s",
   "Stop: S",
+  "Files: f",
   "Merge: m",
   "Complete: C",
   "Open: o",
   "Delete: X",
-  "Reset: R",
   "Quit: C-c",
 ];
 
-/// Draw the help bar with smart item-boundary wrapping.
-pub fn draw(f: &mut ratatui::Frame, area: Rect) {
-  let mut lines = layout_lines(HELP_ITEMS, area.width);
+/// Help items for files overlay.
+pub const HELP_ITEMS_FILES: &[&str] = &[
+  "Select: j/k/1-9",
+  "Open: ⏎/o",
+  "Open Dir: O",
+  "Paste: p",
+  "Close: Esc",
+];
+
+/// Help items for input overlay.
+pub const HELP_ITEMS_INPUT: &[&str] = &[
+  "Type slug",
+  "Agent: C-a",
+  "Submit: ⏎",
+  "Cancel: Esc",
+];
+
+/// Help items for command log pane.
+pub const HELP_ITEMS_LOG: &[&str] = &["Scroll: j/k"];
+
+/// Draw the help bar with custom items.
+pub fn draw_with_items(f: &mut ratatui::Frame, area: Rect, items: &[&str]) {
+  let mut lines = layout_lines(items, area.width);
   lines = lines.into_iter().map(|ln| ln.fg(Color::Blue)).collect();
   f.render_widget(Paragraph::new(lines).alignment(Alignment::Center), area);
 }

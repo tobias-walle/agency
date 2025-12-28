@@ -5,6 +5,7 @@ use anyhow::Result;
 use crate::config::AppContext;
 use crate::log_info;
 use crate::utils::clipboard::read_image_from_clipboard;
+use crate::utils::daemon::notify_tasks_changed;
 use crate::utils::files::{add_file, add_file_from_bytes};
 use crate::utils::log::t;
 use crate::utils::task::resolve_id_or_slug;
@@ -34,6 +35,7 @@ pub fn run(
     t::path(&file_ref.name),
     t::slug(&task.slug)
   );
+  let _ = notify_tasks_changed(ctx);
 
   Ok(())
 }

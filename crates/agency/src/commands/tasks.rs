@@ -46,19 +46,11 @@ pub fn run(ctx: &AppContext) -> Result<()> {
     .collect();
 
   // Use TaskColumn to generate headers and cell values
-  let headers: Vec<&str> = TaskColumn::ALL
-    .iter()
-    .copied()
-    .map(TaskColumn::header)
-    .collect();
+  let columns = TaskColumn::visible_columns(&task_rows);
+  let headers: Vec<&str> = columns.iter().copied().map(TaskColumn::header).collect();
   let rows: Vec<Vec<String>> = task_rows
     .iter()
-    .map(|row| {
-      TaskColumn::ALL
-        .iter()
-        .map(|col| col.cell(row, false))
-        .collect()
-    })
+    .map(|row| columns.iter().map(|col| col.cell(row, false)).collect())
     .collect();
 
   print_table(&headers, &rows);

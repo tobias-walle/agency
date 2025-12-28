@@ -2,6 +2,7 @@ use owo_colors::OwoColorize as _;
 
 use crate::config::{AgencyConfig, AppContext};
 use crate::daemon_protocol::SessionInfo;
+use crate::utils::files::list_files;
 use crate::utils::status::{TaskStatus, derive_status};
 use crate::utils::task::{
   TaskFrontmatter, TaskFrontmatterExt, TaskRef, agent_for_task, read_task_frontmatter, worktree_dir,
@@ -24,11 +25,12 @@ pub struct TaskRow {
   pub git_metrics: GitMetrics,
   pub wt_exists: bool,
   pub frontmatter: Option<TaskFrontmatter>,
+  pub file_count: usize,
 }
 
 impl TaskRow {
   /// Create a new `TaskRow` from raw components.
-  /// Pre-computes filesystem-dependent values (worktree existence, frontmatter).
+  /// Pre-computes filesystem-dependent values (worktree existence, frontmatter, file count).
   #[must_use]
   pub fn new(
     ctx: &AppContext,
@@ -36,6 +38,9 @@ impl TaskRow {
     session: Option<&SessionInfo>,
     git_metrics: GitMetrics,
   ) -> Self {
+    let file_count = list_files(&ctx.paths, &task)
+      .map(|f| f.len())
+      .unwrap_or(0);
     Self {
       config: ctx.config.clone(),
       wt_exists: worktree_dir(&ctx.paths, &task).exists(),
@@ -43,6 +48,7 @@ impl TaskRow {
       task,
       session: session.cloned(),
       git_metrics,
+      file_count,
     }
   }
 
@@ -63,6 +69,7 @@ pub enum TaskColumn {
   Id,
   Slug,
   Status,
+  Files,
   Uncommitted,
   Commits,
   Base,
@@ -75,11 +82,24 @@ impl TaskColumn {
     TaskColumn::Id,
     TaskColumn::Slug,
     TaskColumn::Status,
+    TaskColumn::Files,
     TaskColumn::Uncommitted,
     TaskColumn::Commits,
     TaskColumn::Base,
     TaskColumn::Agent,
   ];
+
+  /// Returns visible columns based on the rows.
+  /// Hides the Files column if no task has any files.
+  #[must_use]
+  pub fn visible_columns(rows: &[TaskRow]) -> Vec<TaskColumn> {
+    let has_files = rows.iter().any(|r| r.file_count > 0);
+    Self::ALL
+      .iter()
+      .filter(|col| **col != TaskColumn::Files || has_files)
+      .copied()
+      .collect()
+  }
 
   /// Column header text.
   #[must_use]
@@ -88,6 +108,7 @@ impl TaskColumn {
       TaskColumn::Id => "ID",
       TaskColumn::Slug => "SLUG",
       TaskColumn::Status => "STATUS",
+      TaskColumn::Files => "FILES",
       TaskColumn::Uncommitted => "UNCOMMITTED",
       TaskColumn::Commits => "COMMITS",
       TaskColumn::Base => "BASE",
@@ -101,15 +122,19 @@ impl TaskColumn {
   pub fn weight(self) -> u8 {
     match self {
       TaskColumn::Slug | TaskColumn::Agent | TaskColumn::Base => 2,
-      _ => 1,
+      TaskColumn::Id
+      | TaskColumn::Status
+      | TaskColumn::Files
+      | TaskColumn::Uncommitted
+      | TaskColumn::Commits => 1,
     }
   }
 
-  /// Calculate percentage widths from weights for all columns.
+  /// Calculate percentage widths from weights for a given set of columns.
   #[must_use]
-  pub fn width_percentages() -> Vec<u16> {
-    let total_weight: u16 = Self::ALL.iter().map(|c| u16::from(c.weight())).sum();
-    Self::ALL
+  pub fn width_percentages_for(columns: &[TaskColumn]) -> Vec<u16> {
+    let total_weight: u16 = columns.iter().map(|c| u16::from(c.weight())).sum();
+    columns
       .iter()
       .map(|c| u16::from(c.weight()) * 100 / total_weight)
       .collect()
@@ -125,6 +150,13 @@ impl TaskColumn {
       TaskColumn::Id => row.task.id.to_string(),
       TaskColumn::Slug => row.task.slug.clone(),
       TaskColumn::Status => Self::format_status(row, pending_delete),
+      TaskColumn::Files => {
+        if row.file_count == 0 {
+          "-".dimmed().to_string()
+        } else {
+          row.file_count.to_string()
+        }
+      }
       TaskColumn::Uncommitted => {
         let plus_str = if row.git_metrics.uncommitted_add > 0 {
           format!("+{}", row.git_metrics.uncommitted_add)
@@ -212,6 +244,7 @@ mod tests {
     assert_eq!(TaskColumn::Id.header(), "ID");
     assert_eq!(TaskColumn::Slug.header(), "SLUG");
     assert_eq!(TaskColumn::Status.header(), "STATUS");
+    assert_eq!(TaskColumn::Files.header(), "FILES");
     assert_eq!(TaskColumn::Uncommitted.header(), "UNCOMMITTED");
     assert_eq!(TaskColumn::Commits.header(), "COMMITS");
     assert_eq!(TaskColumn::Base.header(), "BASE");
@@ -220,7 +253,7 @@ mod tests {
 
   #[test]
   fn width_percentages_are_calculated_from_weights() {
-    let widths = TaskColumn::width_percentages();
+    let widths = TaskColumn::width_percentages_for(TaskColumn::ALL);
     assert_eq!(widths.len(), TaskColumn::ALL.len());
     let total: u16 = widths.iter().sum();
     assert!(

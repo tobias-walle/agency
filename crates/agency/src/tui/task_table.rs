@@ -50,6 +50,10 @@ pub enum Action {
   ResetTask {
     id: u32,
   },
+  /// Open the files overlay for a task.
+  OpenFilesOverlay {
+    task: TaskRef,
+  },
   /// Selection changed, emit focus event with new task id.
   SelectionChanged {
     id: u32,
@@ -129,15 +133,14 @@ impl TaskTableState {
 
   /// Draw the task table.
   pub fn draw(&self, f: &mut ratatui::Frame, area: Rect, focused: bool) {
-    let header_cells: Vec<Cell> = TaskColumn::ALL
-      .iter()
-      .map(|col| Cell::from(col.header()))
-      .collect();
+    let columns = TaskColumn::visible_columns(&self.rows);
+
+    let header_cells: Vec<Cell> = columns.iter().map(|col| Cell::from(col.header())).collect();
     let header = Row::new(header_cells).style(Style::default().fg(Color::Gray));
 
     let rows = self.rows.iter().map(|r| {
       let pending = self.pending_delete.contains_key(&r.id());
-      let cells: Vec<Cell> = TaskColumn::ALL
+      let cells: Vec<Cell> = columns
         .iter()
         .map(|col| Cell::from(Line::from(ansi_to_spans(&col.cell(r, pending)))))
         .collect();
@@ -159,7 +162,7 @@ impl TaskTableState {
       table_block = table_block.title(right_title);
     }
 
-    let widths: Vec<Constraint> = TaskColumn::width_percentages()
+    let widths: Vec<Constraint> = TaskColumn::width_percentages_for(&columns)
       .into_iter()
       .map(Constraint::Percentage)
       .collect();
@@ -177,98 +180,66 @@ impl TaskTableState {
   /// Handle key events. Returns an Action describing what to do.
   pub fn handle_key(&mut self, key: KeyEvent) -> Action {
     match key.code {
-      KeyCode::Up | KeyCode::Char('k') => {
-        if !self.rows.is_empty() {
-          self.selected = self.selected.saturating_sub(1);
-          if let Some(sel) = self.rows.get(self.selected) {
-            return Action::SelectionChanged { id: sel.id() };
-          }
-        }
-        Action::None
-      }
-      KeyCode::Down | KeyCode::Char('j') => {
-        if !self.rows.is_empty() {
-          self.selected = (self.selected + 1).min(self.rows.len() - 1);
-          if let Some(sel) = self.rows.get(self.selected) {
-            return Action::SelectionChanged { id: sel.id() };
-          }
-        }
-        Action::None
-      }
-      KeyCode::Enter => {
-        if let Some(cur) = self.rows.get(self.selected) {
-          Action::EditOrAttach {
-            id: cur.id(),
-            session: cur.session_id(),
-          }
-        } else {
-          Action::None
-        }
-      }
-      KeyCode::Char('n') => Action::NewTask {
-        start_and_attach: false,
-      },
-      KeyCode::Char('N') => Action::NewTask {
-        start_and_attach: true,
-      },
-      KeyCode::Char('s') => {
-        if let Some(cur) = self.rows.get(self.selected) {
-          Action::StartTask { id: cur.id() }
-        } else {
-          Action::None
-        }
-      }
-      KeyCode::Char('S') => {
-        if let Some(cur) = self.rows.get(self.selected) {
-          Action::StopTask { id: cur.id() }
-        } else {
-          Action::None
-        }
-      }
-      KeyCode::Char('m') => {
-        if let Some(cur) = self.rows.get(self.selected) {
-          Action::MergeTask { id: cur.id() }
-        } else {
-          Action::None
-        }
-      }
-      KeyCode::Char('C') => {
-        if let Some(cur) = self.rows.get(self.selected) {
-          Action::CompleteTask { id: cur.id() }
-        } else {
-          Action::None
-        }
-      }
-      KeyCode::Char('o') => {
-        if let Some(cur) = self.rows.get(self.selected) {
-          Action::OpenTask { id: cur.id() }
-        } else {
-          Action::None
-        }
-      }
-      KeyCode::Char('O') => {
-        if let Some(cur) = self.rows.get(self.selected) {
-          Action::ShellTask { id: cur.id() }
-        } else {
-          Action::None
-        }
-      }
-      KeyCode::Char('X') => {
-        if let Some(cur) = self.rows.get(self.selected) {
-          Action::DeleteTask { id: cur.id() }
-        } else {
-          Action::None
-        }
-      }
-      KeyCode::Char('R') => {
-        if let Some(cur) = self.rows.get(self.selected) {
-          Action::ResetTask { id: cur.id() }
-        } else {
-          Action::None
-        }
-      }
+      KeyCode::Up | KeyCode::Char('k') => self.select_prev(),
+      KeyCode::Down | KeyCode::Char('j') => self.select_next(),
+      KeyCode::Enter => self.action_for_selected(|cur| Action::EditOrAttach {
+        id: cur.id(),
+        session: cur.session_id(),
+      }),
+      KeyCode::Char('n') => Action::NewTask { start_and_attach: false },
+      KeyCode::Char('N') => Action::NewTask { start_and_attach: true },
+      KeyCode::Char('s') => self.action_for_id(|id| Action::StartTask { id }),
+      KeyCode::Char('S') => self.action_for_id(|id| Action::StopTask { id }),
+      KeyCode::Char('m') => self.action_for_id(|id| Action::MergeTask { id }),
+      KeyCode::Char('C') => self.action_for_id(|id| Action::CompleteTask { id }),
+      KeyCode::Char('o') => self.action_for_id(|id| Action::OpenTask { id }),
+      KeyCode::Char('O') => self.action_for_id(|id| Action::ShellTask { id }),
+      KeyCode::Char('X') => self.action_for_id(|id| Action::DeleteTask { id }),
+      KeyCode::Char('R') => self.action_for_id(|id| Action::ResetTask { id }),
+      KeyCode::Char('f') => self.action_for_task(|task| Action::OpenFilesOverlay { task }),
       _ => Action::None,
     }
+  }
+
+  fn select_prev(&mut self) -> Action {
+    if self.rows.is_empty() {
+      return Action::None;
+    }
+    self.selected = self.selected.saturating_sub(1);
+    self.rows.get(self.selected).map_or(Action::None, |sel| {
+      Action::SelectionChanged { id: sel.id() }
+    })
+  }
+
+  fn select_next(&mut self) -> Action {
+    if self.rows.is_empty() {
+      return Action::None;
+    }
+    self.selected = (self.selected + 1).min(self.rows.len() - 1);
+    self.rows.get(self.selected).map_or(Action::None, |sel| {
+      Action::SelectionChanged { id: sel.id() }
+    })
+  }
+
+  fn action_for_selected<F>(&self, f: F) -> Action
+  where
+    F: FnOnce(&TaskRow) -> Action,
+  {
+    self.rows.get(self.selected).map_or(Action::None, f)
+  }
+
+  fn action_for_id<F>(&self, f: F) -> Action
+  where
+    F: FnOnce(u32) -> Action,
+  {
+    self.rows.get(self.selected).map_or(Action::None, |cur| f(cur.id()))
+  }
+
+  fn action_for_task<F>(&self, f: F) -> Action
+  where
+    F: FnOnce(TaskRef) -> Action,
+  {
+    self.rows.get(self.selected).map_or(Action::None, |cur| f(cur.task.clone()))
   }
 
   /// Get the currently selected row, if any.

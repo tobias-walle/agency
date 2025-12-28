@@ -1,6 +1,7 @@
 use anyhow::Result;
 
 use crate::config::AppContext;
+use crate::utils::daemon::notify_tasks_changed;
 use crate::utils::files::{remove_file, resolve_file};
 use crate::utils::log::t;
 use crate::utils::task::resolve_id_or_slug;
@@ -28,6 +29,7 @@ pub fn run(ctx: &AppContext, task_ident: &str, file_ident: &str, yes: bool) -> R
     t::id(file.id),
     t::path(&file.name)
   );
+  let _ = notify_tasks_changed(ctx);
 
   Ok(())
 }

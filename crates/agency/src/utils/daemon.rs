@@ -96,7 +96,8 @@ where
 }
 
 /// Best-effort helper to notify the daemon that tasks changed for this project.
-fn notify_tasks_changed(ctx: &AppContext) -> anyhow::Result<()> {
+/// This triggers a broadcast to all TUI subscribers so they can refresh.
+pub fn notify_tasks_changed(ctx: &AppContext) -> anyhow::Result<()> {
   let socket = compute_socket_path(&ctx.config);
   let repo = open_main_repo(ctx.paths.root())?;
   let repo_root = repo_workdir_or(&repo, ctx.paths.root());
