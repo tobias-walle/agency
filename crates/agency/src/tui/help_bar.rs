@@ -24,9 +24,15 @@ pub const HELP_ITEMS_FILES: &[&str] = &[
   "Select: j/k/1-9",
   "Open: ⏎/o",
   "Open Dir: O",
+  "Add: a",
+  "Edit: e",
+  "Delete: X",
   "Paste: p",
   "Close: Esc",
 ];
+
+/// Help items for file input overlay.
+pub const HELP_ITEMS_FILE_INPUT: &[&str] = &["Type path", "Submit: ⏎", "Cancel: Esc"];
 
 /// Help items for input overlay.
 pub const HELP_ITEMS_INPUT: &[&str] = &[

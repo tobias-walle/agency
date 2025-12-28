@@ -16,6 +16,9 @@ pub enum FilesOutcome {
   OpenFile(FileRef),
   OpenDirectory,
   PasteClipboard,
+  RemoveFile(FileRef),
+  EditFile(FileRef),
+  AddFile,
   Canceled,
 }
 
@@ -103,8 +106,19 @@ impl FilesOverlayState {
       KeyCode::Enter | KeyCode::Char('o') => self.open_selected(),
       KeyCode::Char('O') => FilesOutcome::OpenDirectory,
       KeyCode::Char('p') => FilesOutcome::PasteClipboard,
+      KeyCode::Char('X') => self.remove_selected(),
+      KeyCode::Char('e') => self.edit_selected(),
+      KeyCode::Char('a') => FilesOutcome::AddFile,
       KeyCode::Char(c) => self.handle_digit(c),
       _ => FilesOutcome::Continue,
+    }
+  }
+
+  /// Refresh the files list from disk.
+  pub fn refresh(&mut self, paths: &AgencyPaths) {
+    self.files = list_files(paths, &self.task).unwrap_or_default();
+    if self.selected >= self.files.len() && !self.files.is_empty() {
+      self.selected = self.files.len().saturating_sub(1);
     }
   }
 
@@ -114,6 +128,24 @@ impl FilesOverlayState {
       .get(self.selected)
       .map_or(FilesOutcome::Continue, |file| {
         FilesOutcome::OpenFile(file.clone())
+      })
+  }
+
+  fn remove_selected(&self) -> FilesOutcome {
+    self
+      .files
+      .get(self.selected)
+      .map_or(FilesOutcome::Continue, |file| {
+        FilesOutcome::RemoveFile(file.clone())
+      })
+  }
+
+  fn edit_selected(&self) -> FilesOutcome {
+    self
+      .files
+      .get(self.selected)
+      .map_or(FilesOutcome::Continue, |file| {
+        FilesOutcome::EditFile(file.clone())
       })
   }
 
@@ -297,6 +329,69 @@ mod tests {
 
     // Enter should not crash
     let ev = KeyEvent::from(KeyCode::Enter);
+    match overlay.handle_key(ev) {
+      FilesOutcome::Continue => {}
+      _ => panic!("expected Continue for empty overlay"),
+    }
+  }
+
+  #[test]
+  fn uppercase_x_removes_selected_file() {
+    let mut overlay = make_overlay_with_files();
+    overlay.selected = 0;
+
+    let ev = KeyEvent::from(KeyCode::Char('X'));
+    match overlay.handle_key(ev) {
+      FilesOutcome::RemoveFile(file) => {
+        assert_eq!(file.id, 1);
+        assert_eq!(file.name, "screenshot.png");
+      }
+      _ => panic!("expected RemoveFile"),
+    }
+  }
+
+  #[test]
+  fn e_edits_selected_file() {
+    let mut overlay = make_overlay_with_files();
+    overlay.selected = 1;
+
+    let ev = KeyEvent::from(KeyCode::Char('e'));
+    match overlay.handle_key(ev) {
+      FilesOutcome::EditFile(file) => {
+        assert_eq!(file.id, 2);
+        assert_eq!(file.name, "spec.pdf");
+      }
+      _ => panic!("expected EditFile"),
+    }
+  }
+
+  #[test]
+  fn a_triggers_add_file() {
+    let mut overlay = make_overlay_with_files();
+
+    let ev = KeyEvent::from(KeyCode::Char('a'));
+    match overlay.handle_key(ev) {
+      FilesOutcome::AddFile => {}
+      _ => panic!("expected AddFile"),
+    }
+  }
+
+  #[test]
+  fn remove_on_empty_overlay_returns_continue() {
+    let mut overlay = make_empty_overlay();
+
+    let ev = KeyEvent::from(KeyCode::Char('X'));
+    match overlay.handle_key(ev) {
+      FilesOutcome::Continue => {}
+      _ => panic!("expected Continue for empty overlay"),
+    }
+  }
+
+  #[test]
+  fn edit_on_empty_overlay_returns_continue() {
+    let mut overlay = make_empty_overlay();
+
+    let ev = KeyEvent::from(KeyCode::Char('e'));
     match overlay.handle_key(ev) {
       FilesOutcome::Continue => {}
       _ => panic!("expected Continue for empty overlay"),

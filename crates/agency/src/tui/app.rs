@@ -12,13 +12,16 @@ use ratatui::layout::Constraint;
 
 use super::command_log::CommandLogState;
 use super::confirm_dialog::{ConfirmAction, ConfirmDialogState, ConfirmOutcome};
+use super::file_input_overlay::{FileInputAction, FileInputState};
 use super::files_overlay::{FilesOutcome, FilesOverlayState};
-use super::help_bar::{self, HELP_ITEMS, HELP_ITEMS_FILES, HELP_ITEMS_INPUT, HELP_ITEMS_LOG};
+use super::help_bar::{
+  self, HELP_ITEMS, HELP_ITEMS_FILES, HELP_ITEMS_FILE_INPUT, HELP_ITEMS_INPUT, HELP_ITEMS_LOG,
+};
 use super::input_overlay::{self, InputOverlayState};
 use super::select_menu::{MenuOutcome, SelectMenuState};
 use super::task_table::{self, TaskTableState};
 use crate::commands::{attach, complete, edit, merge, new, open, reset, rm, shell, start, stop};
-use crate::utils::files::{add_file_from_bytes, files_dir_for_task};
+use crate::utils::files::{FileRef, add_file, add_file_from_bytes, files_dir_for_task};
 use crate::utils::opener::open_with_default;
 use crate::config::{AppContext, compute_socket_path};
 use crate::daemon_protocol::{
@@ -50,6 +53,7 @@ pub enum Mode {
   List,
   InputSlug,
   FilesOverlay(FilesOverlayState),
+  FileInput(FileInputState),
   SelectMenu(SelectMenuState),
   ConfirmDialog(ConfirmDialogState),
 }
@@ -90,6 +94,7 @@ impl AppState {
     match self.mode {
       Mode::InputSlug | Mode::SelectMenu(_) => HELP_ITEMS_INPUT,
       Mode::FilesOverlay(_) => HELP_ITEMS_FILES,
+      Mode::FileInput(_) => HELP_ITEMS_FILE_INPUT,
       Mode::List | Mode::ConfirmDialog(_) => match self.focus {
         Focus::Log => HELP_ITEMS_LOG,
         Focus::Tasks => HELP_ITEMS,
@@ -178,6 +183,10 @@ impl AppState {
 
     if let Mode::FilesOverlay(ref overlay) = self.mode {
       overlay.draw(f, rects[0]);
+    }
+
+    if let Mode::FileInput(ref input) = self.mode {
+      input.draw(f, rects[0]);
     }
 
     if let Mode::SelectMenu(ref menu) = self.mode {
@@ -412,6 +421,9 @@ fn ui_loop(
         Mode::FilesOverlay(overlay) => {
           handle_files_mode(&mut state, ctx, overlay, key);
         }
+        Mode::FileInput(input) => {
+          handle_file_input_mode(&mut state, ctx, input, key);
+        }
         Mode::SelectMenu(menu) => {
           handle_menu_mode(&mut state, menu, key);
         }
@@ -596,6 +608,67 @@ fn handle_files_mode(
       spawn_paste_clipboard(ctx, overlay.task.clone());
       state.mode = Mode::FilesOverlay(overlay);
     }
+    FilesOutcome::RemoveFile(file) => {
+      state.command_log.push(LogEvent::Command(format!(
+        "agency files rm {} {}",
+        overlay.task.id, file.id
+      )));
+      if let Err(err) = crate::utils::files::remove_file(&ctx.paths, &overlay.task, &file) {
+        log_error!("Remove file failed: {}", err);
+      } else {
+        log_info!("Removed file {} {}", file.id, file.name);
+        let _ = crate::utils::daemon::notify_tasks_changed(ctx);
+      }
+      overlay.refresh(&ctx.paths);
+      state.mode = Mode::FilesOverlay(overlay);
+    }
+    FilesOutcome::EditFile(file) => {
+      let task = overlay.task.clone();
+      spawn_edit_file(ctx, task, file);
+      state.mode = Mode::FilesOverlay(overlay);
+    }
+    FilesOutcome::AddFile => {
+      let input = FileInputState::new(overlay.task.clone());
+      state.mode = Mode::FileInput(input);
+    }
+  }
+}
+
+fn handle_file_input_mode(
+  state: &mut AppState,
+  ctx: &AppContext,
+  mut input: FileInputState,
+  key: crossterm::event::KeyEvent,
+) {
+  match input.handle_key(key) {
+    FileInputAction::None => {
+      state.mode = Mode::FileInput(input);
+    }
+    FileInputAction::Cancel => {
+      // Return to files overlay
+      let overlay = FilesOverlayState::new(&ctx.paths, input.task);
+      state.mode = Mode::FilesOverlay(overlay);
+    }
+    FileInputAction::Submit { path } => {
+      state.command_log.push(LogEvent::Command(format!(
+        "agency files add {} {}",
+        input.task.id,
+        path.display()
+      )));
+      let task = input.task.clone();
+      match add_file(&ctx.paths, &task, &path) {
+        Ok(file_ref) => {
+          log_info!("Added file {} {}", file_ref.id, file_ref.name);
+          let _ = crate::utils::daemon::notify_tasks_changed(ctx);
+        }
+        Err(err) => {
+          log_error!("Failed to add file: {}", err);
+        }
+      }
+      // Return to files overlay with refreshed list
+      let overlay = FilesOverlayState::new(&ctx.paths, task);
+      state.mode = Mode::FilesOverlay(overlay);
+    }
   }
 }
 
@@ -654,6 +727,17 @@ fn spawn_edit_or_attach(ctx: &AppContext, id: u32, session: Option<u64>) {
       let _ = attach::run_join_session(&ctx, sid);
     } else {
       let _ = edit::run(&ctx, &id.to_string());
+    }
+  });
+}
+
+fn spawn_edit_file(ctx: &AppContext, task: TaskRef, file: FileRef) {
+  let ctx = ctx.clone();
+  std::thread::spawn(move || {
+    let path = crate::utils::files::file_path(&ctx.paths, &task, &file);
+    log_info!("Editing file {} {}", file.id, file.name);
+    if let Err(err) = crate::utils::editor::open_path(&ctx.config, &path, ctx.paths.root()) {
+      log_error!("Edit failed: {}", err);
     }
   });
 }
