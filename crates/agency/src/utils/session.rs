@@ -8,6 +8,7 @@ use crate::daemon_protocol::TaskMeta;
 use crate::utils::bootstrap::prepare_worktree_for_task;
 use crate::utils::cmd::{CmdCtx, expand_argv};
 use crate::utils::command::as_shell_command;
+use crate::utils::files::has_files;
 use crate::utils::git::{ensure_branch_at, open_main_repo, repo_workdir_or, rev_parse};
 use crate::utils::interactive;
 use crate::utils::task::{
@@ -15,15 +16,24 @@ use crate::utils::task::{
 };
 use crate::utils::tmux;
 
+const FILES_NOTICE: &str = "\n\n<agency>\nThere are files attached to this task. Run `agency info` to see task context and attached files.\n</agency>";
+
 /// Build the standard Agency environment variables for a task.
 /// Returns a `HashMap` with inherited env vars plus `AGENCY_TASK`, `AGENCY_ROOT`, and `AGENCY_TASK_ID`.
 pub fn build_task_env(
   task_id: u32,
   task_description: &str,
   repo_root: &Path,
+  task_has_files: bool,
 ) -> HashMap<String, String> {
   let mut env_map: HashMap<String, String> = std::env::vars().collect();
-  env_map.insert("AGENCY_TASK".to_string(), task_description.to_string());
+
+  let mut description = task_description.to_string();
+  if task_has_files && !task_description.trim().is_empty() {
+    description.push_str(FILES_NOTICE);
+  }
+
+  env_map.insert("AGENCY_TASK".to_string(), description);
   let root_abs = repo_root
     .canonicalize()
     .unwrap_or_else(|_| repo_root.to_path_buf())
@@ -65,7 +75,8 @@ pub fn build_session_plan(ctx: &AppContext, task: &TaskRef) -> Result<SessionPla
   let worktree_dir = prepare_worktree_for_task(ctx, &repo, task, &branch)?;
 
   // Build env map
-  let env_map = build_task_env(task.id, &description, &repo_root);
+  let task_has_files = has_files(&ctx.paths, task);
+  let env_map = build_task_env(task.id, &description, &repo_root, task_has_files);
 
   // Select agent and expand argv
   let agent_name = agent_for_task(&ctx.config, frontmatter.as_ref()).ok_or_else(|| {
@@ -127,6 +138,7 @@ pub fn start_session_for_task(ctx: &AppContext, plan: &SessionPlan, attach: bool
     &plan.worktree_dir,
     &sh_prog,
     &sh_args,
+    &plan.env_map,
   )?;
 
   // Inject environment into session

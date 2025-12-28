@@ -3,6 +3,7 @@ use std::process::Command as ProcCommand;
 use anyhow::{Context, Result, bail};
 
 use crate::config::AppContext;
+use crate::utils::files::has_files;
 use crate::utils::git::{open_main_repo, repo_workdir_or};
 use crate::utils::session::build_task_env;
 use crate::utils::task::{read_task_content, resolve_id_or_slug, worktree_dir};
@@ -33,7 +34,8 @@ pub fn run(ctx: &AppContext, ident: &str, cmd: &[String]) -> Result<i32> {
   let description = content.body.trim();
   let repo = open_main_repo(ctx.paths.root())?;
   let repo_root = repo_workdir_or(&repo, ctx.paths.root());
-  let env_map = build_task_env(tref.id, description, &repo_root);
+  let task_has_files = has_files(&ctx.paths, &tref);
+  let env_map = build_task_env(tref.id, description, &repo_root, task_has_files);
 
   // Execute command (no log output from agency)
   let status = ProcCommand::new(program)

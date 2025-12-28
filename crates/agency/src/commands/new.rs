@@ -1,12 +1,13 @@
 use std::fs;
 use std::io::IsTerminal as _;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 
 use crate::config::AppContext;
 use crate::log_info;
 use crate::utils::daemon::notify_after_task_change;
+use crate::utils::files::add_file;
 use crate::utils::git::current_branch_name_at;
 use crate::utils::log::t;
 use crate::utils::task::{
@@ -20,6 +21,7 @@ pub fn run(
   agent: Option<&str>,
   desc: Option<&str>,
   edit: bool,
+  files: &[String],
 ) -> Result<TaskRef> {
   notify_after_task_change(ctx, || {
     let base_slug = normalize_and_validate_slug(slug)?;
@@ -100,7 +102,18 @@ pub fn run(
       log_info!("Create task {} (id {})", t::slug(&slug), t::id(id));
     }
 
-    // Worktree and bootstrap are now created lazily at attach time
+    for file_path in files {
+      let path = PathBuf::from(file_path);
+      match add_file(&ctx.paths, &task, &path) {
+        Ok(file_ref) => {
+          log_info!("Attached file {} {}", t::id(file_ref.id), t::path(&file_ref.name));
+        }
+        Err(err) => {
+          crate::log_warn!("Failed to attach {}: {}", file_path, err);
+        }
+      }
+    }
+
     Ok(task)
   })
 }

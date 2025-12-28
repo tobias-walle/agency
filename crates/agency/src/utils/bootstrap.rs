@@ -9,6 +9,7 @@ use crate::log_info;
 use crate::log_warn;
 use crate::utils::child::run_child_process;
 use crate::utils::cmd::{CmdCtx, expand_argv};
+use crate::utils::files::{files_dir_for_task, local_files_path};
 use crate::utils::task::TaskRef;
 use gix as git;
 
@@ -147,11 +148,46 @@ pub fn prepare_worktree_for_task(
     bootstrap_worktree(repo, &root_workdir, &worktree_dir_path, &bcfg)?;
     run_bootstrap_cmd(&root_workdir, &worktree_dir_path, &bcfg);
   }
+
+  create_files_symlink(&ctx.paths, task, &worktree_dir_path);
+
   Ok(
     worktree_dir_path
       .canonicalize()
       .unwrap_or(worktree_dir_path.clone()),
   )
+}
+
+fn create_files_symlink(paths: &crate::config::AgencyPaths, task: &TaskRef, worktree: &Path) {
+  let files_dir = files_dir_for_task(paths, task);
+  let local_path = local_files_path(worktree);
+
+  if local_path.exists() || local_path.is_symlink() {
+    return;
+  }
+
+  if let Some(parent) = local_path.parent()
+    && let Err(err) = std::fs::create_dir_all(parent)
+  {
+    log_warn!("Could not create symlink parent: {err}");
+    return;
+  }
+
+  #[cfg(unix)]
+  {
+    use std::os::unix::fs::symlink;
+    if let Err(err) = symlink(&files_dir, &local_path) {
+      log_warn!("Could not create symlink: {err}");
+    }
+  }
+
+  #[cfg(windows)]
+  {
+    use std::os::windows::fs::symlink_dir;
+    if let Err(err) = symlink_dir(&files_dir, &local_path) {
+      log_warn!("Could not create symlink: {err}");
+    }
+  }
 }
 
 fn discover_root_entries(root_workdir: &Path) -> Result<Vec<fs::DirEntry>> {

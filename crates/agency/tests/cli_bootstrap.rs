@@ -34,7 +34,8 @@ fn new_bootstraps_git_ignored_root_files_with_defaults() -> Result<()> {
     assert!(!wt.join("big.bin").exists());
     assert!(!wt.join(".venv").exists());
     assert!(!wt.join(".direnv").exists());
-    assert!(!wt.join(".agency").exists());
+    // Root's .agency config should not be copied (.agency/local is allowed for worktree-local files)
+    assert!(!wt.join(".agency/agency.toml").exists());
 
     Ok(())
   })
@@ -86,7 +87,8 @@ fn new_bootstrap_respects_config_includes_and_excludes() -> Result<()> {
         assert!(wt.join(".direnv").is_dir());
         assert!(wt.join(".direnv").join("env.txt").is_file());
         assert!(!wt.join(".env.local").exists());
-        assert!(!wt.join(".agency").exists());
+        // Root's .agency config should not be copied (.agency/local is allowed for worktree-local files)
+        assert!(!wt.join(".agency/agency.toml").exists());
       },
     );
 

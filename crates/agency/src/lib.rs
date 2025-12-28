@@ -58,6 +58,9 @@ enum Commands {
     /// Open editor for description (even without --draft)
     #[arg(short = 'e', long = "edit")]
     edit: bool,
+    /// Attach file(s) to the task (can be repeated)
+    #[arg(short = 'f', long = "file")]
+    files: Vec<String>,
   },
   /// Open the task's markdown in $EDITOR
   Edit { ident: String },
@@ -143,6 +146,13 @@ enum Commands {
     #[command(subcommand)]
     cmd: DaemonCmd,
   },
+  /// Manage files attached to a task
+  Files {
+    #[command(subcommand)]
+    cmd: FilesCmd,
+  },
+  /// Show current task context and attached files
+  Info {},
 }
 
 #[derive(Debug, Subcommand)]
@@ -158,7 +168,61 @@ enum DaemonCmd {
   Run {},
 }
 
-// Inline overlay implemented within attach follow; dedicated Overlay subcommand removed
+#[derive(Debug, Subcommand)]
+#[allow(clippy::struct_field_names)]
+enum FilesCmd {
+  /// List files attached to a task
+  List {
+    /// Task ID or slug
+    task: String,
+  },
+  /// Add a file to a task
+  Add {
+    /// Task ID or slug
+    task: String,
+    /// Path to the source file
+    source: Option<String>,
+    /// Read image from clipboard (optionally specify filename)
+    #[arg(long = "from-clipboard", num_args = 0..=1, default_missing_value = "clipboard.png")]
+    from_clipboard: Option<String>,
+  },
+  /// Remove a file from a task
+  Rm {
+    /// Task ID or slug
+    task: String,
+    /// File ID or name
+    file: String,
+    /// Skip confirmation prompt
+    #[arg(short = 'y', long = "yes")]
+    yes: bool,
+  },
+  /// Print the path to a file or files directory
+  Path {
+    /// Task ID or slug
+    task: String,
+    /// File ID or name (omit to print directory)
+    file: Option<String>,
+  },
+  /// Select a file with fzf
+  Fzf {
+    /// Task ID or slug
+    task: String,
+  },
+  /// Open a file or the files directory
+  Open {
+    /// Task ID or slug
+    task: String,
+    /// File ID or name (omit to open directory)
+    file: Option<String>,
+  },
+  /// Edit a file in $EDITOR
+  Edit {
+    /// Task ID or slug
+    task: String,
+    /// File ID or name
+    file: String,
+  },
+}
 
 #[must_use]
 pub fn parse() -> Cli {
@@ -202,6 +266,7 @@ fn run_command(ctx: &AppContext, cli: Cli) -> Result<()> {
       description,
       no_attach,
       edit,
+      files,
     }) => {
       let desc = desc.or(description);
       let desc = if draft || edit {
@@ -209,7 +274,8 @@ fn run_command(ctx: &AppContext, cli: Cli) -> Result<()> {
       } else {
         Some(desc.unwrap_or_default())
       };
-      let created = commands::new::run(ctx, &slug, agent.as_deref(), desc.as_deref(), edit)?;
+      let created =
+        commands::new::run(ctx, &slug, agent.as_deref(), desc.as_deref(), edit, &files)?;
       if !draft {
         let ident = created.id.to_string();
         // Only attach in interactive mode; non-interactive defaults to no-attach
@@ -267,6 +333,20 @@ fn run_command(ctx: &AppContext, cli: Cli) -> Result<()> {
       DaemonCmd::Restart {} => commands::daemon::restart(),
       DaemonCmd::Run {} => commands::daemon::run_blocking(),
     },
+    Some(Commands::Files { cmd }) => match cmd {
+      FilesCmd::List { task } => commands::files::list::run(ctx, &task),
+      FilesCmd::Add {
+        task,
+        source,
+        from_clipboard,
+      } => commands::files::add::run(ctx, &task, source.as_deref(), from_clipboard.as_deref()),
+      FilesCmd::Rm { task, file, yes } => commands::files::rm::run(ctx, &task, &file, yes),
+      FilesCmd::Path { task, file } => commands::files::path::run(ctx, &task, file.as_deref()),
+      FilesCmd::Fzf { task } => commands::files::fzf::run(ctx, &task),
+      FilesCmd::Open { task, file } => commands::files::open::run(ctx, &task, file.as_deref()),
+      FilesCmd::Edit { task, file } => commands::files::edit::run(ctx, &task, &file),
+    },
+    Some(Commands::Info {}) => commands::info::run(ctx),
     None => run_default(ctx),
   }
 }

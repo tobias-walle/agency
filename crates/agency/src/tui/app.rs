@@ -471,7 +471,7 @@ fn handle_input_mode(state: &mut AppState, ctx: &AppContext, key: crossterm::eve
           .push(LogEvent::Command(format!("agency new {slug} + start")));
         std::thread::spawn({
           let ctx = ctx.clone();
-          move || match new::run(&ctx, &slug, agent.as_deref(), Some(""), false) {
+          move || match new::run(&ctx, &slug, agent.as_deref(), Some(""), false, &[]) {
             Ok(created) => {
               let id_str = created.id.to_string();
               if let Err(err) = start::run_with_attach(&ctx, &id_str, true) {
@@ -487,7 +487,7 @@ fn handle_input_mode(state: &mut AppState, ctx: &AppContext, key: crossterm::eve
         std::thread::spawn({
           let ctx = ctx.clone();
           move || {
-            let _ = new::run(&ctx, &slug, agent.as_deref(), None, false);
+            let _ = new::run(&ctx, &slug, agent.as_deref(), None, false, &[]);
           }
         });
       }

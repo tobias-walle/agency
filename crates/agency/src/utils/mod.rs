@@ -1,12 +1,16 @@
 pub mod bootstrap;
 pub mod child;
+pub mod clipboard;
 pub mod cmd;
 pub mod command;
+pub mod context;
 pub mod daemon;
 pub mod editor;
+pub mod files;
 pub mod git;
 pub mod interactive;
 pub mod log;
+pub mod opener;
 pub mod session;
 pub mod sessions;
 pub mod status;

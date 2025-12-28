@@ -165,6 +165,11 @@ impl AgencyPaths {
   pub fn state_dir(&self) -> PathBuf {
     self.root.join(".agency").join("state")
   }
+
+  #[must_use]
+  pub fn files_dir(&self) -> PathBuf {
+    self.root.join(".agency").join("files")
+  }
 }
 
 use crate::utils::tty::Tty;

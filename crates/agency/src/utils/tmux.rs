@@ -1,5 +1,7 @@
-use anyhow::{Context, Result};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+
+use anyhow::{Context, Result};
 
 use crate::config::AgencyConfig;
 use crate::daemon_protocol::{SessionInfo, TaskMeta};
@@ -84,6 +86,7 @@ pub fn start_session(
   cwd: &Path,
   program: &str,
   args: &[String],
+  env_vars: &HashMap<String, String>,
 ) -> Result<()> {
   let name = session_name(task.id, &task.slug);
   // Ensure tmux server is up before applying any configuration
@@ -115,10 +118,13 @@ pub fn start_session(
   let _ = tmux_set_env_global(cfg, "COLORTERM", "truecolor");
 
   // Create session and launch program
+  // Use -e flags to pass env vars to the new session (tmux 3.2+)
   let mut tmux_cmd = std::process::Command::new("tmux");
+  tmux_cmd.args(tmux_args_base(cfg)).arg("new-session");
+  for (k, v) in env_vars {
+    tmux_cmd.arg("-e").arg(format!("{k}={v}"));
+  }
   tmux_cmd
-    .args(tmux_args_base(cfg))
-    .arg("new-session")
     .arg("-d")
     .arg("-s")
     .arg(&name)

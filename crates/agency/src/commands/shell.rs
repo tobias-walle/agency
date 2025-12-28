@@ -4,6 +4,7 @@ use anyhow::{Context, Result, bail};
 
 use crate::config::{AgencyConfig, AppContext};
 use crate::log_info;
+use crate::utils::files::has_files;
 use crate::utils::git::{open_main_repo, repo_workdir_or};
 use crate::utils::interactive;
 use crate::utils::log::t;
@@ -52,7 +53,8 @@ pub fn run(ctx: &AppContext, ident: &str) -> Result<()> {
   let description = content.body.trim();
   let repo = open_main_repo(ctx.paths.root())?;
   let repo_root = repo_workdir_or(&repo, ctx.paths.root());
-  let env_map = build_task_env(tref.id, description, &repo_root);
+  let task_has_files = has_files(&ctx.paths, &tref);
+  let env_map = build_task_env(tref.id, description, &repo_root, task_has_files);
 
   log_info!("Open shell {}", t::path(wt_dir.display()));
 

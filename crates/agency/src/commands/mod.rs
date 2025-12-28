@@ -7,8 +7,10 @@ pub mod daemon;
 pub mod defaults;
 pub mod edit;
 pub mod exec;
+pub mod files;
 pub mod fzf;
 pub mod gc;
+pub mod info;
 pub mod init;
 pub mod merge;
 pub mod new;
@@ -22,4 +24,3 @@ pub mod shell;
 pub mod start;
 pub mod stop;
 pub mod tasks;
-// Overlay is handled inline in `attach --follow`.
