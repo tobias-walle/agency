@@ -1,6 +1,7 @@
 mod app;
 mod colors;
 mod command_log;
+mod confirm_dialog;
 mod help_bar;
 mod input_overlay;
 mod layout;

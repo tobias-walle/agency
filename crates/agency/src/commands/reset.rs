@@ -6,7 +6,6 @@ use crate::log_success;
 use crate::utils::daemon::{notify_after_task_change, stop_sessions_of_task};
 use crate::utils::git::{delete_branch_if_exists, open_main_repo, prune_worktree_if_exists};
 use crate::utils::log::t;
-use crate::utils::status::clear_task_completed;
 use crate::utils::task::{branch_name, resolve_id_or_slug, worktree_dir};
 
 /// Reset a task's workspace by pruning its worktree and deleting its branch.
@@ -33,8 +32,6 @@ pub fn run(ctx: &AppContext, ident: &str) -> Result<()> {
     if delete_branch_if_exists(&repo, &branch).is_ok() {
       log_success!("Deleted branch {}", branch);
     }
-    // Clear completed marker so future status derives from runtime state
-    clear_task_completed(&ctx.paths, &tref);
 
     Ok(())
   })

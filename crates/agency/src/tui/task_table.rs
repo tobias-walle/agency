@@ -35,6 +35,9 @@ pub enum Action {
   MergeTask {
     id: u32,
   },
+  CompleteTask {
+    id: u32,
+  },
   OpenTask {
     id: u32,
   },
@@ -225,6 +228,13 @@ impl TaskTableState {
       KeyCode::Char('m') => {
         if let Some(cur) = self.rows.get(self.selected) {
           Action::MergeTask { id: cur.id() }
+        } else {
+          Action::None
+        }
+      }
+      KeyCode::Char('C') => {
+        if let Some(cur) = self.rows.get(self.selected) {
+          Action::CompleteTask { id: cur.id() }
         } else {
           Action::None
         }

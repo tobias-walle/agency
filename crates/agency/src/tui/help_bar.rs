@@ -13,6 +13,7 @@ pub const HELP_ITEMS: &[&str] = &[
   "Start: s",
   "Stop: S",
   "Merge: m",
+  "Complete: C",
   "Open: o",
   "Delete: X",
   "Reset: R",

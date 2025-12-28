@@ -11,11 +11,12 @@ use ratatui::backend::CrosstermBackend;
 use ratatui::layout::Constraint;
 
 use super::command_log::CommandLogState;
+use super::confirm_dialog::{ConfirmAction, ConfirmDialogState, ConfirmOutcome};
 use super::help_bar::{self, HELP_ITEMS};
 use super::input_overlay::{self, InputOverlayState};
 use super::select_menu::{MenuOutcome, SelectMenuState};
 use super::task_table::{self, TaskTableState};
-use crate::commands::{attach, edit, merge, new, open, reset, rm, shell, start, stop};
+use crate::commands::{attach, complete, edit, merge, new, open, reset, rm, shell, start, stop};
 use crate::config::{AppContext, compute_socket_path};
 use crate::daemon_protocol::{
   C2D, C2DControl, D2C, D2CControl, ProjectKey, read_frame, write_frame,
@@ -46,6 +47,7 @@ pub enum Mode {
   List,
   InputSlug,
   SelectMenu(SelectMenuState),
+  ConfirmDialog(ConfirmDialogState),
 }
 
 /// Daemon events for the UI.
@@ -161,6 +163,10 @@ impl AppState {
     if let Mode::SelectMenu(ref menu) = self.mode {
       menu.draw(f, rects[0]);
     }
+
+    if let Mode::ConfirmDialog(ref dialog) = self.mode {
+      dialog.draw(f, rects[0]);
+    }
   }
 
   fn dispatch_action(&mut self, ctx: &AppContext, action: &task_table::Action) {
@@ -219,6 +225,14 @@ impl AppState {
             log_error!("Merge failed: {}", err);
           }
         });
+      }
+      task_table::Action::CompleteTask { id } => {
+        let dialog = ConfirmDialogState::new(
+          "Complete Task",
+          "Merge into base and delete task?",
+          ConfirmAction::CompleteTask { id: *id },
+        );
+        self.mode = Mode::ConfirmDialog(dialog);
       }
       task_table::Action::OpenTask { id } => {
         let id = *id;
@@ -385,6 +399,9 @@ fn ui_loop(
         Mode::SelectMenu(menu) => {
           handle_menu_mode(&mut state, menu, key);
         }
+        Mode::ConfirmDialog(dialog) => {
+          handle_confirm_mode(&mut state, ctx, dialog, key);
+        }
       }
     }
   }
@@ -500,6 +517,43 @@ fn handle_menu_mode(
         overlay.set_agent(menu.items[idx].clone());
       }
       state.mode = Mode::InputSlug;
+    }
+  }
+}
+
+fn handle_confirm_mode(
+  state: &mut AppState,
+  ctx: &AppContext,
+  mut dialog: ConfirmDialogState,
+  key: crossterm::event::KeyEvent,
+) {
+  match dialog.handle_key(key) {
+    ConfirmOutcome::Continue => {
+      state.mode = Mode::ConfirmDialog(dialog);
+    }
+    ConfirmOutcome::Canceled => {
+      state.mode = Mode::List;
+    }
+    ConfirmOutcome::Confirmed => {
+      state
+        .command_log
+        .push(LogEvent::Command(dialog.action.command_log()));
+      state.task_table.mark_pending_delete(dialog.action.task_id());
+      execute_confirm_action(ctx, &dialog.action);
+      state.mode = Mode::List;
+    }
+  }
+}
+
+fn execute_confirm_action(ctx: &AppContext, action: &ConfirmAction) {
+  match *action {
+    ConfirmAction::CompleteTask { id } => {
+      let id_str = id.to_string();
+      spawn_cmd(ctx, move |ctx| {
+        if let Err(err) = complete::run_force(&ctx, &id_str, None) {
+          log_error!("Complete failed: {}", err);
+        }
+      });
     }
   }
 }

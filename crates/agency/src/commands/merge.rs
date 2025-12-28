@@ -4,72 +4,89 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, bail};
 
 use crate::config::AppContext;
-use crate::utils::daemon::{notify_after_task_change, stop_sessions_of_task};
+use crate::utils::daemon::notify_after_task_change;
 use crate::utils::git::{
   current_branch_name_at, git_workdir, hard_reset_to_head_at, is_fast_forward_at, rebase_onto,
   rev_parse, stash_pop, stash_push, update_branch_ref_at, worktree_is_clean_at,
 };
 use crate::utils::task::{
-  branch_name, parse_task_markdown, resolve_id_or_slug, task_file, worktree_dir,
+  TaskRef, branch_name, parse_task_markdown, resolve_id_or_slug, task_file, worktree_dir,
 };
-use crate::{log_success, log_warn};
+use crate::{log_info, log_success, log_warn};
 
+/// Result of a successful merge operation.
+pub struct MergeResult {
+  pub task: TaskRef,
+  pub repo_workdir: PathBuf,
+}
+
+/// Run the merge command: rebase and fast-forward, but keep task intact.
 pub fn run(ctx: &AppContext, ident: &str, base_override: Option<&str>) -> Result<()> {
   notify_after_task_change(ctx, || {
-    let inputs = compute_merge_inputs(ctx, ident, base_override)?;
-
-    let (refresh_checked_out_base, needs_auto_stash) =
-      assess_base_state(&inputs.repo_workdir, &inputs.base_branch)?;
-
-    log_warn!("Rebase {} onto {}", inputs.branch, inputs.base_branch);
-    perform_rebase(&inputs.wt_dir, &inputs.base_branch)?;
-
-    let (_base_head, new_head) = ensure_can_fast_forward(
-      &inputs.repo_workdir,
-      &inputs.wt_dir,
-      &inputs.base_branch,
-      &inputs.branch,
-    )?;
-
-    let mut pending_stash =
-      maybe_autostash(&inputs.repo_workdir, &inputs.base_branch, needs_auto_stash)?;
+    let result = perform_merge(ctx, ident, base_override)?;
 
     log_success!(
-      "Fast-forward {} to {} at {}",
-      inputs.base_branch,
-      inputs.branch,
-      new_head
+      "Merge complete. Run `agency complete {}` to clean up the task.",
+      result.task.id
     );
-    update_branch_ref_at(&inputs.repo_workdir, &inputs.base_branch, &new_head)?;
-
-    fast_forward_refresh_and_unstash(
-      &inputs.repo_workdir,
-      &inputs.base_branch,
-      refresh_checked_out_base,
-      &mut pending_stash,
-    )?;
-
-    // Stop any running sessions for this task (best-effort)
-    let _ = stop_sessions_of_task(ctx, &inputs.task);
-
-    cleanup_task_artifacts(
-      &inputs.repo_workdir,
-      &inputs.wt_dir,
-      &inputs.branch,
-      &inputs.file_path,
-    )?;
-
-    log_success!("Merge complete");
 
     Ok(())
   })
 }
 
+/// Perform the merge operation: rebase onto base and fast-forward.
+/// Does NOT clean up the task - use `cleanup_task_artifacts` for that.
+///
+/// # Errors
+/// Returns an error if the task is not found, rebase fails, or fast-forward is not possible.
+pub fn perform_merge(
+  ctx: &AppContext,
+  ident: &str,
+  base_override: Option<&str>,
+) -> Result<MergeResult> {
+  let inputs = compute_merge_inputs(ctx, ident, base_override)?;
+
+  let (refresh_checked_out_base, needs_auto_stash) =
+    assess_base_state(&inputs.repo_workdir, &inputs.base_branch)?;
+
+  log_warn!("Rebase {} onto {}", inputs.branch, inputs.base_branch);
+  perform_rebase(&inputs.wt_dir, &inputs.base_branch)?;
+
+  let (_base_head, new_head) = ensure_can_fast_forward(
+    &inputs.repo_workdir,
+    &inputs.wt_dir,
+    &inputs.base_branch,
+    &inputs.branch,
+  )?;
+
+  let mut pending_stash =
+    maybe_autostash(&inputs.repo_workdir, &inputs.base_branch, needs_auto_stash)?;
+
+  log_success!(
+    "Fast-forward {} to {} at {}",
+    inputs.base_branch,
+    inputs.branch,
+    new_head
+  );
+  update_branch_ref_at(&inputs.repo_workdir, &inputs.base_branch, &new_head)?;
+
+  fast_forward_refresh_and_unstash(
+    &inputs.repo_workdir,
+    &inputs.base_branch,
+    refresh_checked_out_base,
+    &mut pending_stash,
+  )?;
+
+  Ok(MergeResult {
+    task: inputs.task,
+    repo_workdir: inputs.repo_workdir,
+  })
+}
+
 struct MergeInputs {
-  task: crate::utils::task::TaskRef,
+  task: TaskRef,
   branch: String,
   wt_dir: PathBuf,
-  file_path: PathBuf,
   base_branch: String,
   repo_workdir: PathBuf,
 }
@@ -100,7 +117,6 @@ fn compute_merge_inputs(
     task,
     branch,
     wt_dir,
-    file_path,
     base_branch,
     repo_workdir,
   })
@@ -114,7 +130,7 @@ fn assess_base_state(repo_workdir: &Path, base_branch: &str) -> Result<(bool, bo
   {
     refresh_checked_out_base = true;
     if worktree_is_clean_at(repo_workdir)? {
-      log_warn!(
+      log_info!(
         "Base is checked out and clean; will refresh after merge: {}",
         base_branch
       );
@@ -203,22 +219,6 @@ fn fast_forward_refresh_and_unstash(
       );
     }
     log_success!("Restored auto-stashed changes for {}", base_branch);
-  }
-  Ok(())
-}
-
-fn cleanup_task_artifacts(
-  repo_workdir: &Path,
-  wt_dir: &Path,
-  branch: &str,
-  file_path: &Path,
-) -> Result<()> {
-  use crate::utils::git::{delete_branch_if_exists_at, prune_worktree_if_exists_at};
-  let _ = prune_worktree_if_exists_at(repo_workdir, wt_dir);
-  let _ = delete_branch_if_exists_at(repo_workdir, branch)?;
-  if file_path.exists() {
-    fs::remove_file(file_path)
-      .with_context(|| format!("failed to remove {}", file_path.display()))?;
   }
   Ok(())
 }

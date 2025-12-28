@@ -7,7 +7,7 @@ use anyhow::{Result, bail};
 use crate::config::AppContext;
 use crate::utils::daemon::get_project_state;
 use crate::utils::sessions::latest_sessions_by_task;
-use crate::utils::status::{TaskStatus, derive_status, is_task_completed};
+use crate::utils::status::derive_status;
 use crate::utils::task::{TaskRef, list_tasks, worktree_dir};
 use crate::utils::which;
 
@@ -29,7 +29,7 @@ pub fn run(ctx: &AppContext) -> Result<()> {
     .iter()
     .map(|t| {
       let wt_exists = wt_exists_map.get(t).copied().unwrap_or(false);
-      let status = compute_status(ctx, t, latest.get(t), wt_exists);
+      let status = derive_status(latest.get(t), wt_exists);
       format!("{}\t{}\t{}", t.id, t.slug, status.label())
     })
     .collect();
@@ -69,20 +69,6 @@ fn get_task_state(
     .collect();
 
   (sessions, wt_exists_map)
-}
-
-fn compute_status(
-  ctx: &AppContext,
-  task: &TaskRef,
-  session: Option<&crate::daemon_protocol::SessionInfo>,
-  wt_exists: bool,
-) -> TaskStatus {
-  let base_status = derive_status(session, wt_exists);
-  if is_task_completed(&ctx.paths, task) {
-    TaskStatus::Completed
-  } else {
-    base_status
-  }
 }
 
 /// Runs fzf with the given input and returns the selected line, or None if cancelled.

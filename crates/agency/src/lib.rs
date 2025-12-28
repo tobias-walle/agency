@@ -90,8 +90,16 @@ enum Commands {
     #[arg(short = 'b', long = "branch")]
     base: Option<String>,
   },
-  /// Mark a task as Completed (uses $`AGENCY_TASK_ID` when omitted)
-  Complete { ident: Option<String> },
+  /// Merge task into base and clean up (branch, worktree, file)
+  Complete {
+    ident: Option<String>,
+    /// Override base branch
+    #[arg(short = 'b', long = "branch")]
+    base: Option<String>,
+    /// Skip confirmation prompt
+    #[arg(short = 'y', long = "yes")]
+    yes: bool,
+  },
   /// List tasks (ID and SLUG)
   Tasks {},
   /// List running sessions in this project
@@ -233,7 +241,9 @@ fn run_command(ctx: &AppContext, cli: Cli) -> Result<()> {
     }
     Some(Commands::Stop { task, session }) => commands::stop::run(ctx, task.as_deref(), session),
     Some(Commands::Merge { ident, base }) => commands::merge::run(ctx, &ident, base.as_deref()),
-    Some(Commands::Complete { ident }) => commands::complete::run(ctx, ident.as_deref()),
+    Some(Commands::Complete { ident, base, yes }) => {
+      commands::complete::run(ctx, ident.as_deref(), base.as_deref(), yes)
+    }
     Some(Commands::Tasks {}) => commands::tasks::run(ctx),
     Some(Commands::Sessions {}) => commands::sessions::run(ctx),
     Some(Commands::Open { ident }) => commands::open::run(ctx, &ident),

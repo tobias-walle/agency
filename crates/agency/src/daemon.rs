@@ -6,7 +6,6 @@ use crate::daemon_protocol::{
 use crate::utils::git::{
   commits_ahead_at, current_branch_name_at, git_workdir, uncommitted_numstat_at,
 };
-use crate::utils::status::is_task_completed;
 use crate::utils::task::{TaskRef, branch_name, list_tasks, read_task_frontmatter, worktree_dir};
 use crate::utils::tmux::list_sessions_for_project as tmux_list;
 use anyhow::Result;
@@ -367,19 +366,12 @@ fn build_project_snapshot(
     });
   }
 
-  // Determine candidate tasks: Running from sessions or Completed via flags
-  let running: std::collections::HashSet<(u32, String)> = sessions
+  // Determine candidate tasks for metrics: tasks with active sessions
+  let candidates: std::collections::HashSet<(u32, String)> = sessions
     .iter()
     .filter(|s| s.status == "Running" || s.status == "Idle" || s.status == "Exited")
     .map(|s| (s.task.id, s.task.slug.clone()))
     .collect();
-
-  let mut candidates: std::collections::HashSet<(u32, String)> = running.clone();
-  for t in &task_refs {
-    if is_task_completed(&paths, t) {
-      candidates.insert((t.id, t.slug.clone()));
-    }
-  }
 
   // Compute metrics
   let mut metrics: Vec<TaskMetrics> = Vec::new();

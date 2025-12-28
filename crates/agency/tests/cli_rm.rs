@@ -32,7 +32,7 @@ fn rm_confirms_and_removes_on_y_or_y() -> Result<()> {
       .write_stdin("Y\n")
       .assert()
       .success()
-      .stdout(predicates::str::contains("Removed task, branch, and worktree").from_utf8());
+      .stdout(predicates::str::contains("removed").from_utf8());
 
     assert!(!env.branch_exists(id, &slug)?);
     assert!(!env.task_file_path(id, &slug).exists());
@@ -57,7 +57,7 @@ fn rm_with_yes_flag_skips_confirmation() -> Result<()> {
       .arg("--yes")
       .assert()
       .success()
-      .stdout(predicates::str::contains("Removed task").from_utf8());
+      .stdout(predicates::str::contains("removed").from_utf8());
 
     assert!(!env.branch_exists(id, &slug)?);
     assert!(!env.task_file_path(id, &slug).exists());
@@ -82,7 +82,7 @@ fn rm_with_y_flag_skips_confirmation() -> Result<()> {
       .arg("-y")
       .assert()
       .success()
-      .stdout(predicates::str::contains("Removed task").from_utf8());
+      .stdout(predicates::str::contains("removed").from_utf8());
 
     assert!(!env.branch_exists(id, &slug)?);
     assert!(!env.task_file_path(id, &slug).exists());

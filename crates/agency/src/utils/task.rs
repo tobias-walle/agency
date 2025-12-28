@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
@@ -8,8 +9,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::config::{AgencyConfig, AgencyPaths, AppContext};
 use crate::daemon_protocol::TaskMeta;
+use crate::utils::daemon::stop_sessions_of_task;
 use crate::utils::editor::open_path as open_editor;
-use crate::utils::git::head_branch;
+use crate::utils::git::{delete_branch_if_exists_at, head_branch, prune_worktree_if_exists_at};
 
 static TASK_FILE_RE: OnceLock<Regex> = OnceLock::new();
 static TRAILING_NUM_RE: OnceLock<Regex> = OnceLock::new();
@@ -180,6 +182,20 @@ pub fn resolve_id_or_slug(paths: &AgencyPaths, ident: &str) -> Result<TaskRef> {
   bail!("task with slug {ident} not found");
 }
 
+/// Resolve task identifier to a `TaskRef`, supporting `AGENCY_TASK_ID` env var fallback.
+///
+/// # Errors
+/// Returns an error if the task cannot be resolved.
+pub fn resolve_task_ident(paths: &AgencyPaths, ident: Option<&str>) -> Result<TaskRef> {
+  if let Some(i) = ident {
+    resolve_id_or_slug(paths, i)
+  } else {
+    let id_env = std::env::var("AGENCY_TASK_ID")
+      .map_err(|_| anyhow::anyhow!("Not running in an agency environment. Cannot resolve task"))?;
+    resolve_id_or_slug(paths, &id_env)
+  }
+}
+
 pub fn branch_name(task: &TaskRef) -> String {
   format!("agency/{}-{}", task.id, task.slug)
 }
@@ -213,6 +229,33 @@ pub fn list_tasks(paths: &AgencyPaths) -> Result<Vec<TaskRef>> {
     }
   }
   Ok(out)
+}
+
+/// Clean up task artifacts: stop sessions, prune worktree, delete branch, remove task file.
+///
+/// # Errors
+/// Returns an error if worktree pruning, branch deletion, or file removal fails.
+pub fn cleanup_task_artifacts(
+  ctx: &AppContext,
+  task: &TaskRef,
+  repo_workdir: &Path,
+) -> Result<()> {
+  // Best-effort stop of running sessions
+  let _ = stop_sessions_of_task(ctx, task);
+
+  let wt_dir = worktree_dir(&ctx.paths, task);
+  let branch = branch_name(task);
+  let file_path = task_file(&ctx.paths, task);
+
+  let _ = prune_worktree_if_exists_at(repo_workdir, &wt_dir);
+  let _ = delete_branch_if_exists_at(repo_workdir, &branch)?;
+
+  if file_path.exists() {
+    fs::remove_file(&file_path)
+      .with_context(|| format!("failed to remove {}", file_path.display()))?;
+  }
+
+  Ok(())
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]

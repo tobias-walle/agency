@@ -1,8 +1,8 @@
 use owo_colors::OwoColorize as _;
 
-use crate::config::{AgencyConfig, AgencyPaths, AppContext};
+use crate::config::{AgencyConfig, AppContext};
 use crate::daemon_protocol::SessionInfo;
-use crate::utils::status::{TaskStatus, derive_status, is_task_completed};
+use crate::utils::status::{TaskStatus, derive_status};
 use crate::utils::task::{
   TaskFrontmatter, TaskFrontmatterExt, TaskRef, agent_for_task, read_task_frontmatter, worktree_dir,
 };
@@ -18,7 +18,6 @@ pub struct GitMetrics {
 /// Raw data for a single task row. All display logic lives in `TaskColumn::cell()`.
 #[derive(Clone, Debug)]
 pub struct TaskRow {
-  pub paths: AgencyPaths,
   pub config: AgencyConfig,
   pub task: TaskRef,
   pub session: Option<SessionInfo>,
@@ -38,7 +37,6 @@ impl TaskRow {
     git_metrics: GitMetrics,
   ) -> Self {
     Self {
-      paths: ctx.paths.clone(),
       config: ctx.config.clone(),
       wt_exists: worktree_dir(&ctx.paths, &task).exists(),
       frontmatter: read_task_frontmatter(&ctx.paths, &task),
@@ -162,14 +160,9 @@ impl TaskColumn {
     if pending_delete {
       return "Loading".dimmed().to_string();
     }
-    let base_status = derive_status(row.session.as_ref(), row.wt_exists);
-    let status = if is_task_completed(&row.paths, &row.task) {
-      TaskStatus::Completed
-    } else {
-      base_status
-    };
+    let status = derive_status(row.session.as_ref(), row.wt_exists);
     match status {
-      TaskStatus::Running | TaskStatus::Completed => status.label().green().to_string(),
+      TaskStatus::Running => status.label().green().to_string(),
       TaskStatus::Idle => status.label().blue().to_string(),
       TaskStatus::Exited | TaskStatus::Stopped => status.label().red().to_string(),
       TaskStatus::Draft => status.label().yellow().to_string(),
