@@ -101,7 +101,7 @@ impl SlimDaemon {
           }
           // Liveness: best-effort every ~10s
           counter = counter.wrapping_add(1);
-          if counter % 10 == 0 {
+          if counter.is_multiple_of(10) {
             prune_dead_tuis(&registry);
           }
         }
