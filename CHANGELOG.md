@@ -1,3 +1,19 @@
+# [1.12.0](https://github.com/tobias-walle/agency/compare/v1.11.0...v1.12.0) (2025-12-28)
+
+
+### Bug Fixes
+
+* add missing Stdio import and use is_multiple_of ([c7d3965](https://github.com/tobias-walle/agency/commit/c7d39659ae6411cfdb8156c926013324b7e3f639))
+
+
+### Features
+
+* add file attachments for tasks ([88adc02](https://github.com/tobias-walle/agency/commit/88adc02ad07226e8c65dd117d0cbca061058e204))
+* add files feature to the TUI ([a85e1cc](https://github.com/tobias-walle/agency/commit/a85e1cc049c47d7ae968bdb47e3040071861a60e))
+* add remove, add, and edit features to TUI files dialog ([ca85d98](https://github.com/tobias-walle/agency/commit/ca85d98bea18a8224eaf413892a98743c33090de))
+* centralize TTY detection for non-interactive environments ([823ba1b](https://github.com/tobias-walle/agency/commit/823ba1b3681a2878c2b1111ad4b339bc424ab999))
+* refactor merge to be non-destructive, complete now merges and cleans up ([0384022](https://github.com/tobias-walle/agency/commit/038402210b2f6f552eea13426ad0f58ad52c8730))
+
 # [1.11.0](https://github.com/tobias-walle/agency/compare/v1.10.0...v1.11.0) (2025-12-28)
 
 
