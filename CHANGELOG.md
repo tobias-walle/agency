@@ -1,3 +1,17 @@
+# [1.13.0](https://github.com/tobias-walle/agency/compare/v1.12.0...v1.13.0) (2025-12-29)
+
+
+### Bug Fixes
+
+* add space before agents commands, so they don't appear in the git history ([e70bc3f](https://github.com/tobias-walle/agency/commit/e70bc3fb819289b313b6a256b23f53e28b456bcb))
+* handle TUI daemon disconnect gracefully with auto-reconnect ([a182aa3](https://github.com/tobias-walle/agency/commit/a182aa34c6b488d41425afc0e28288e71e9fad18))
+* run bootstrap in the background for better performance ([a216eba](https://github.com/tobias-walle/agency/commit/a216eba6d3e7886493c1a51f970329e662c37216))
+
+
+### Features
+
+* daemon restart now also starts/restarts tmux server ([30296e5](https://github.com/tobias-walle/agency/commit/30296e53f3cd00af8705138bb8830a8c8bcbfb9e))
+
 # [1.12.0](https://github.com/tobias-walle/agency/compare/v1.11.0...v1.12.0) (2025-12-28)
 
 
