@@ -10,6 +10,8 @@ use crate::config::{compute_socket_path, load_config};
 use crate::daemon as slim_daemon;
 use crate::daemon_protocol::{C2D, C2DControl, write_frame};
 use crate::utils::daemon::connect_daemon_socket;
+use crate::utils::tmux;
+use crate::AppContext;
 
 pub fn run_blocking() -> Result<()> {
   // Initialize env_logger similar to pty-demo main
@@ -45,10 +47,12 @@ pub fn start() -> Result<()> {
   let _child = daemon_cmd.spawn().context("failed to spawn daemon child")?;
 
   // Poll for readiness
-  let start = Instant::now();
-  while start.elapsed() < Duration::from_secs(5) {
+  let poll_start = Instant::now();
+  while poll_start.elapsed() < Duration::from_secs(5) {
     if std::fs::metadata(&socket).is_ok() {
       info!("Started daemon at {}", socket.display());
+      // Ensure tmux server is running
+      tmux::ensure_server(&cfg)?;
       return Ok(());
     }
     thread::sleep(Duration::from_millis(50));
@@ -81,8 +85,40 @@ pub fn stop() -> Result<()> {
   anyhow::bail!("Daemon socket still present after stop")
 }
 
-pub fn restart() -> Result<()> {
-  // Stop may fail if not running; ignore and proceed
+/// Internal function to restart daemon only, ensuring tmux is running.
+/// Used for automatic version-mismatch restarts.
+pub fn restart_daemon_only() -> Result<()> {
   let _ = stop();
   start()
+}
+
+/// User-facing restart command with optional tmux server restart.
+///
+/// # Errors
+/// Returns an error if daemon or tmux server fails to start.
+pub fn restart(ctx: &AppContext, yes: bool) -> Result<()> {
+  let tmux_was_running = tmux::is_server_running(&ctx.config);
+
+  // If tmux is running, ask for confirmation before restarting (kills all tasks)
+  let restart_tmux = if tmux_was_running {
+    ctx
+      .tty
+      .confirm("Restart tmux server? This will terminate all running tasks", false, yes)?
+  } else {
+    true
+  };
+
+  // Kill tmux server if user confirmed
+  if restart_tmux && tmux_was_running {
+    tmux::kill_server(&ctx.config);
+  }
+
+  // Restart daemon (stop may fail if not running; ignore and proceed)
+  let _ = stop();
+  start()?;
+
+  // Ensure tmux server is running (already handled by start(), but explicit for clarity)
+  tmux::ensure_server(&ctx.config)?;
+
+  Ok(())
 }

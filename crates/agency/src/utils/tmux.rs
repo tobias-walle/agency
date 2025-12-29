@@ -44,6 +44,7 @@ pub fn ensure_server(cfg: &AgencyConfig) -> Result<()> {
     .arg("has-session")
     .arg("-t")
     .arg(guard)
+    .stderr(std::process::Stdio::null())
     .status()
     && st.success()
   {
@@ -56,6 +57,7 @@ pub fn ensure_server(cfg: &AgencyConfig) -> Result<()> {
     .arg("-d")
     .arg("-s")
     .arg(guard)
+    .stderr(std::process::Stdio::null())
     .status()
     .context("tmux new-session (guard) failed")?;
   if create.success() {
@@ -67,12 +69,36 @@ pub fn ensure_server(cfg: &AgencyConfig) -> Result<()> {
     .arg("has-session")
     .arg("-t")
     .arg(guard)
+    .stderr(std::process::Stdio::null())
     .status()
     && st2.success()
   {
     return Ok(());
   }
   anyhow::bail!("tmux server not reachable on configured socket")
+}
+
+/// Check if the tmux server is running by checking for the guard session.
+pub fn is_server_running(cfg: &AgencyConfig) -> bool {
+  let guard = "__agency_guard__";
+  std::process::Command::new("tmux")
+    .args(tmux_args_base(cfg))
+    .arg("has-session")
+    .arg("-t")
+    .arg(guard)
+    .stderr(std::process::Stdio::null())
+    .status()
+    .is_ok_and(|st| st.success())
+}
+
+/// Kill the tmux server on our socket. Silently ignores if server isn't running.
+pub fn kill_server(cfg: &AgencyConfig) {
+  // Suppress stderr to avoid confusing "no server running" messages
+  let _ = std::process::Command::new("tmux")
+    .args(tmux_args_base(cfg))
+    .arg("kill-server")
+    .stderr(std::process::Stdio::null())
+    .status();
 }
 
 pub fn session_name(task_id: u32, slug: &str) -> String {

@@ -161,8 +161,12 @@ enum DaemonCmd {
   Start {},
   /// Stop the daemon gracefully
   Stop {},
-  /// Restart the daemon
-  Restart {},
+  /// Restart the daemon (and tmux server if not running)
+  Restart {
+    /// Skip confirmation prompt when restarting tmux server
+    #[arg(short = 'y', long = "yes")]
+    yes: bool,
+  },
   /// Run the daemon in the foreground (internal)
   #[command(hide = true)]
   Run {},
@@ -330,7 +334,7 @@ fn run_command(ctx: &AppContext, cli: Cli) -> Result<()> {
     Some(Commands::Daemon { cmd }) => match cmd {
       DaemonCmd::Start {} => commands::daemon::start(),
       DaemonCmd::Stop {} => commands::daemon::stop(),
-      DaemonCmd::Restart {} => commands::daemon::restart(),
+      DaemonCmd::Restart { yes } => commands::daemon::restart(ctx, yes),
       DaemonCmd::Run {} => commands::daemon::run_blocking(),
     },
     Some(Commands::Files { cmd }) => match cmd {

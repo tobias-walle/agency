@@ -236,8 +236,8 @@ pub fn ensure_running_and_latest_version(ctx: &AppContext) -> anyhow::Result<()>
         _ => false,
       };
       if !matches {
-        // Older daemon without version support or mismatched -> restart
-        crate::commands::daemon::restart()?;
+        // Older daemon without version support or mismatched -> restart daemon only
+        crate::commands::daemon::restart_daemon_only()?;
       }
     }
   }
