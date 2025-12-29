@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::io::{self, IsTerminal as _};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use anyhow::{Context, Error, Result};
 use crossbeam_channel::{Receiver, unbounded};
@@ -8,7 +8,10 @@ use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
-use ratatui::layout::Constraint;
+use ratatui::layout::{Constraint, Rect};
+use ratatui::style::{Color, Style};
+use ratatui::text::Span;
+use ratatui::widgets::Paragraph;
 
 use super::command_log::CommandLogState;
 use super::confirm_dialog::{ConfirmAction, ConfirmDialogState, ConfirmOutcome};
@@ -64,6 +67,12 @@ enum UiEvent {
   Disconnected(Error),
 }
 
+/// Connection status for daemon subscription.
+enum SubscriptionStatus {
+  Connected,
+  Disconnected { since: Instant },
+}
+
 /// Main application state composing all component states.
 struct AppState {
   task_table: TaskTableState,
@@ -73,6 +82,8 @@ struct AppState {
   mode: Mode,
   paused: bool,
   sent_initial_focus: bool,
+  subscription_status: SubscriptionStatus,
+  events_rx: Option<Receiver<UiEvent>>,
 }
 
 impl Default for AppState {
@@ -85,6 +96,8 @@ impl Default for AppState {
       mode: Mode::List,
       paused: false,
       sent_initial_focus: false,
+      subscription_status: SubscriptionStatus::Connected,
+      events_rx: None,
     }
   }
 }
@@ -152,8 +165,9 @@ impl AppState {
         }
       }
       UiEvent::Disconnected(err) => {
-        log_error!("{}", err);
-        return Err(err);
+        log_info!("Daemon connection lost: {}", err);
+        self.subscription_status = SubscriptionStatus::Disconnected { since: Instant::now() };
+        self.events_rx = None;
       }
     }
     Ok(())
@@ -195,6 +209,18 @@ impl AppState {
 
     if let Mode::ConfirmDialog(ref dialog) = self.mode {
       dialog.draw(f, rects[0]);
+    }
+
+    // Show disconnected indicator
+    if matches!(self.subscription_status, SubscriptionStatus::Disconnected { .. }) {
+      let indicator = Paragraph::new(Span::styled(
+        " Disconnected ",
+        Style::default().fg(Color::Black).bg(Color::Yellow),
+      ));
+      let area = f.area();
+      let width = 14_u16;
+      let indicator_rect = Rect::new(area.width.saturating_sub(width + 1), 0, width, 1);
+      f.render_widget(indicator, indicator_rect);
     }
   }
 
@@ -363,10 +389,12 @@ fn ui_loop(
     state.sent_initial_focus = true;
   }
 
-  let events_rx = subscribe_events(ctx).map_err(|err| {
-    log_error!("{}", err);
-    err
-  })?;
+  state.events_rx = subscribe_events(ctx)
+    .map_err(|err| {
+      log_error!("{}", err);
+      err
+    })
+    .ok();
 
   let (log_tx, log_rx) = unbounded::<LogEvent>();
   set_log_sink(log_tx);
@@ -393,8 +421,31 @@ fn ui_loop(
 
     terminal.draw(|f| state.draw(f))?;
 
-    while let Ok(ev) = events_rx.try_recv() {
-      state.handle_daemon_event(ctx, ev)?;
+    if let Some(rx) = state.events_rx.take() {
+      while let Ok(ev) = rx.try_recv() {
+        state.handle_daemon_event(ctx, ev)?;
+      }
+      // Put receiver back if still connected (not set to None by disconnect handler)
+      if state.events_rx.is_none()
+        && matches!(state.subscription_status, SubscriptionStatus::Connected)
+      {
+        state.events_rx = Some(rx);
+      }
+    }
+
+    // Attempt reconnection if disconnected
+    if let SubscriptionStatus::Disconnected { since } = state.subscription_status
+      && since.elapsed() > Duration::from_secs(2)
+    {
+      if let Ok(rx) = subscribe_events(ctx) {
+        state.events_rx = Some(rx);
+        state.subscription_status = SubscriptionStatus::Connected;
+        state.refresh(ctx).ok();
+        log_info!("Reconnected to daemon");
+      } else {
+        // Reset timer to avoid spamming connection attempts
+        state.subscription_status = SubscriptionStatus::Disconnected { since: Instant::now() };
+      }
     }
 
     // Handle key events
