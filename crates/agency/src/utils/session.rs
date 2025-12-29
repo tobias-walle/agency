@@ -147,8 +147,9 @@ pub fn start_session_for_task(ctx: &AppContext, plan: &SessionPlan, attach: bool
     let _ = tmux::tmux_set_env_local(&ctx.config, &target, k, v);
   }
 
-  // Send agent command into the shell using POSIX quoting
-  let run = as_shell_command(&plan.agent_program, &plan.agent_args);
+  // Send agent command into the shell using POSIX quoting.
+  // Prefix with space to avoid adding to shell history (HISTCONTROL=ignorespace).
+  let run = format!(" {}", as_shell_command(&plan.agent_program, &plan.agent_args));
   tmux::send_keys(&ctx.config, &target, &run)?;
   tmux::send_keys_enter(&ctx.config, &target)?;
 
