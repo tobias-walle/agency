@@ -18,11 +18,6 @@ impl CmdCtx {
       env,
     }
   }
-
-  pub fn from_process_env(repo_root: impl Into<String>) -> Self {
-    let env: HashMap<String, String> = std::env::vars().collect();
-    Self::with_env(repo_root, env)
-  }
 }
 
 /// Expand argv tokens using context:

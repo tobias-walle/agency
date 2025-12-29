@@ -1,7 +1,7 @@
 use crate::config::{AppContext, compute_socket_path};
 use crate::daemon_protocol::{
-  C2D, C2DControl, D2C, D2CControl, ProjectKey, SessionInfo, TaskInfo, TaskMetrics, TuiListItem,
-  read_frame, write_frame,
+  BootstrapRequest, C2D, C2DControl, D2C, D2CControl, ProjectKey, SessionInfo, TaskInfo,
+  TaskMetrics, TuiListItem, read_frame, write_frame,
 };
 use crate::log_warn;
 use crate::utils::git::{open_main_repo, repo_workdir_or};
@@ -205,7 +205,28 @@ pub fn tui_list(ctx: &AppContext) -> anyhow::Result<Vec<TuiListItem>> {
   }
 }
 
-// removed unused follow helpers; Attach::run_follow performs this logic directly
+/// Send a bootstrap request to the daemon for background execution.
+///
+/// This is best-effort: if the daemon is unavailable, it logs a warning and continues.
+pub fn send_start_bootstrap(ctx: &AppContext, request: BootstrapRequest) {
+  let socket = compute_socket_path(&ctx.config);
+  let repo = match open_main_repo(ctx.paths.root()) {
+    Ok(r) => r,
+    Err(err) => {
+      log_warn!("Failed to open repo for bootstrap request: {}", err);
+      return;
+    }
+  };
+  let repo_root = repo_workdir_or(&repo, ctx.paths.root());
+  let project = ProjectKey {
+    repo_root: repo_root.display().to_string(),
+  };
+
+  if let Err(err) = send_message_to_daemon(&socket, C2DControl::StartBootstrap { project, request })
+  {
+    log_warn!("Failed to send bootstrap request to daemon: {}", err);
+  }
+}
 
 /// Ensure the daemon is running and matches the current CLI version.
 ///

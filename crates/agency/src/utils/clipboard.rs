@@ -1,4 +1,4 @@
-use std::process::{Command, Stdio};
+use std::process::Command;
 
 use anyhow::{Result, bail};
 
@@ -71,6 +71,8 @@ fn read_image_macos() -> Result<Vec<u8>> {
 
 #[cfg(target_os = "linux")]
 fn read_image_linux() -> Result<Vec<u8>> {
+  use std::process::Stdio;
+
   let output = Command::new("xclip")
     .args(["-selection", "clipboard", "-t", "image/png", "-o"])
     .stdout(Stdio::piped())

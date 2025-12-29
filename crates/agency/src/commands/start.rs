@@ -1,5 +1,5 @@
 use crate::config::AppContext;
-use crate::utils::daemon::get_project_state;
+use crate::utils::daemon::{get_project_state, send_start_bootstrap};
 use crate::utils::session::{build_session_plan, start_session_for_task};
 use crate::utils::task::resolve_id_or_slug;
 use anyhow::Result;
@@ -20,5 +20,25 @@ pub fn run_with_attach(ctx: &AppContext, ident: &str, attach: bool) -> Result<()
     anyhow::bail!("Already started. Use attach");
   }
   let plan = build_session_plan(ctx, &task)?;
-  crate::utils::daemon::notify_after_task_change(ctx, || start_session_for_task(ctx, &plan, attach))
+  let bootstrap_request = plan.bootstrap_request.clone();
+
+  crate::utils::daemon::notify_after_task_change(ctx, || {
+    // Send bootstrap request to daemon BEFORE starting session
+    // This ensures fast bootstrap commands complete before the agent starts
+    if let Some(request) = bootstrap_request {
+      send_start_bootstrap(ctx, request);
+    }
+
+    // Start session (creates tmux session and sends agent command)
+    start_session_for_task(ctx, &plan, false)?;
+
+    // Attach if requested (this blocks until user detaches)
+    if attach {
+      crate::utils::interactive::scope(|| {
+        crate::utils::tmux::attach_session(&ctx.config, &plan.task_meta)
+      })
+    } else {
+      Ok(())
+    }
+  })
 }

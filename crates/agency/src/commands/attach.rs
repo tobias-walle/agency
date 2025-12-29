@@ -7,7 +7,7 @@ use crate::daemon_protocol::{
   C2D, C2DControl, D2C, D2CControl, ProjectKey, read_frame, write_frame,
 };
 use crate::utils::daemon as dutil;
-use crate::utils::daemon::get_project_state;
+use crate::utils::daemon::{get_project_state, send_start_bootstrap};
 use crate::utils::git::{open_main_repo, repo_workdir_or};
 use crate::utils::interactive;
 use crate::utils::session::{build_session_plan, start_session_for_task};
@@ -48,7 +48,21 @@ pub fn run_with_task(ctx: &AppContext, ident: &str) -> Result<()> {
   }
   // Auto-start when missing using shared session helpers, then attach
   let plan = build_session_plan(ctx, &task)?;
-  crate::utils::daemon::notify_after_task_change(ctx, || start_session_for_task(ctx, &plan, true))
+  let bootstrap_request = plan.bootstrap_request.clone();
+
+  crate::utils::daemon::notify_after_task_change(ctx, || {
+    // Send bootstrap request to daemon BEFORE starting session
+    // This ensures fast bootstrap commands complete before the agent starts
+    if let Some(request) = bootstrap_request {
+      send_start_bootstrap(ctx, request);
+    }
+
+    // Start session (creates tmux session and sends agent command)
+    start_session_for_task(ctx, &plan, false)?;
+
+    // Attach (this blocks until user detaches)
+    interactive::scope(|| tmux::attach_session(&ctx.config, &plan.task_meta))
+  })
 }
 
 pub fn run_join_session(ctx: &AppContext, session_id: u64) -> Result<()> {
@@ -300,6 +314,11 @@ fn handle_overlay(
           .map_or_else(|| format!("task-{task_id}"), |t| t.slug.clone());
         let tref = crate::utils::task::TaskRef { id: task_id, slug };
         let plan = build_session_plan(ctx, &tref)?;
+        let bootstrap_request = plan.bootstrap_request.clone();
+        // Send bootstrap request BEFORE starting session
+        if let Some(request) = bootstrap_request {
+          send_start_bootstrap(ctx, request);
+        }
         let _ = start_session_for_task(ctx, &plan, false);
       }
     }

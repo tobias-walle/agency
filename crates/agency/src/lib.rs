@@ -134,7 +134,12 @@ enum Commands {
   /// Reset a task's worktree and branch (keep markdown)
   Reset { ident: String },
   /// Prepare branch/worktree and run bootstrap (no PTY)
-  Bootstrap { ident: String },
+  Bootstrap {
+    #[command(subcommand)]
+    cmd: Option<BootstrapCmd>,
+    /// Task ID or slug (for default subcommand)
+    ident: Option<String>,
+  },
   /// Open the global config in the configured editor
   Config {},
   /// Print embedded defaults for inspection
@@ -170,6 +175,26 @@ enum DaemonCmd {
   /// Run the daemon in the foreground (internal)
   #[command(hide = true)]
   Run {},
+}
+
+#[derive(Debug, Subcommand)]
+enum BootstrapCmd {
+  /// Run bootstrap for a specific task (default when ident provided)
+  Task { ident: String },
+  /// Internal: run bootstrap in worktree (called by daemon)
+  #[command(hide = true)]
+  Run {
+    #[arg(long)]
+    repo_root: String,
+    #[arg(long)]
+    worktree_dir: String,
+    #[arg(long = "include", action = clap::ArgAction::Append)]
+    include: Vec<String>,
+    #[arg(long = "exclude", action = clap::ArgAction::Append)]
+    exclude: Vec<String>,
+    #[arg(long = "cmd", action = clap::ArgAction::Append)]
+    cmd: Vec<String>,
+  },
 }
 
 #[derive(Debug, Subcommand)]
@@ -257,6 +282,7 @@ fn autostart_daemon(ctx: &AppContext, cmd: Option<&Commands>) {
   let _ = ensure_tmux_server(&ctx.config);
 }
 
+#[allow(clippy::too_many_lines)]
 fn run_command(ctx: &AppContext, cli: Cli) -> Result<()> {
   match cli.command {
     Some(Commands::Setup {}) => commands::setup::run(ctx),
@@ -327,7 +353,15 @@ fn run_command(ctx: &AppContext, cli: Cli) -> Result<()> {
     Some(Commands::Branch { ident }) => commands::branch::run(ctx, &ident),
     Some(Commands::Rm { ident, yes }) => commands::rm::run(ctx, &ident, yes),
     Some(Commands::Reset { ident }) => commands::reset::run(ctx, &ident),
-    Some(Commands::Bootstrap { ident }) => commands::bootstrap::run(ctx, &ident),
+    Some(Commands::Bootstrap { cmd, ident }) => match (cmd, ident) {
+      (Some(BootstrapCmd::Task { ident }), _) | (None, Some(ident)) => {
+        commands::bootstrap::run(ctx, &ident)
+      }
+      (Some(BootstrapCmd::Run { repo_root, worktree_dir, include, exclude, cmd }), _) => {
+        commands::bootstrap::run_internal(&repo_root, &worktree_dir, &include, &exclude, &cmd)
+      }
+      (None, None) => anyhow::bail!("Bootstrap requires a task ID or slug"),
+    },
     Some(Commands::Config {}) => commands::config::run(ctx),
     Some(Commands::Defaults {}) => commands::defaults::run(),
     Some(Commands::Gc {}) => commands::gc::run(ctx),

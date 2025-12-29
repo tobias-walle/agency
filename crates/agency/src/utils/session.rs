@@ -4,8 +4,8 @@ use std::path::{Path, PathBuf};
 
 use crate::commands::shell::resolve_shell_argv;
 use crate::config::AppContext;
-use crate::daemon_protocol::TaskMeta;
-use crate::utils::bootstrap::prepare_worktree_for_task;
+use crate::daemon_protocol::{BootstrapRequest, TaskMeta};
+use crate::utils::bootstrap::create_worktree_for_task;
 use crate::utils::cmd::{CmdCtx, expand_argv};
 use crate::utils::command::as_shell_command;
 use crate::utils::files::has_files;
@@ -52,6 +52,8 @@ pub struct SessionPlan {
   pub agent_args: Vec<String>,
   pub env_map: HashMap<String, String>,
   pub shell_argv: Vec<String>,
+  /// If set, bootstrap should be run in the background for this task.
+  pub bootstrap_request: Option<BootstrapRequest>,
 }
 
 pub fn build_session_plan(ctx: &AppContext, task: &TaskRef) -> Result<SessionPlan> {
@@ -72,7 +74,10 @@ pub fn build_session_plan(ctx: &AppContext, task: &TaskRef) -> Result<SessionPla
   }
   let branch = branch_name(task);
   let _ = ensure_branch_at(&repo, &branch, &base_branch)?;
-  let worktree_dir = prepare_worktree_for_task(ctx, &repo, task, &branch)?;
+
+  // Create worktree (fast, synchronous)
+  let wt_result = create_worktree_for_task(ctx, &repo, task, &branch)?;
+  let worktree_dir = wt_result.worktree_dir;
 
   // Build env map
   let task_has_files = has_files(&ctx.paths, task);
@@ -112,6 +117,23 @@ pub fn build_session_plan(ctx: &AppContext, task: &TaskRef) -> Result<SessionPla
     id: task.id,
     slug: task.slug.clone(),
   };
+
+  // Build bootstrap request for new worktrees
+  let bootstrap_request = if wt_result.is_new {
+    let bcfg = ctx.config.bootstrap_config();
+    Some(BootstrapRequest {
+      repo_root: repo_root.display().to_string(),
+      worktree_dir: worktree_dir.display().to_string(),
+      task_meta: task_meta.clone(),
+      bootstrap_include: bcfg.include.clone(),
+      bootstrap_exclude: bcfg.exclude.clone(),
+      bootstrap_cmd: bcfg.cmd.clone(),
+      env_vars: env_map.clone(),
+    })
+  } else {
+    None
+  };
+
   Ok(SessionPlan {
     task_meta,
     repo_root,
@@ -120,6 +142,7 @@ pub fn build_session_plan(ctx: &AppContext, task: &TaskRef) -> Result<SessionPla
     agent_args,
     env_map,
     shell_argv,
+    bootstrap_request,
   })
 }
 

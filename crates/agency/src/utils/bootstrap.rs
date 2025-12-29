@@ -13,40 +13,94 @@ use crate::utils::files::{files_dir_for_task, local_files_path};
 use crate::utils::task::TaskRef;
 use gix as git;
 
+/// Maximum file size for any bootstrap file copying (10MB)
 const MAX_BOOTSTRAP_FILE_BYTES: u64 = 10 * 1024 * 1024;
 
-pub fn bootstrap_worktree(
-  repo: &git::Repository,
+/// Maximum file size for synchronous copying during worktree creation (100KB)
+/// Files under this threshold are copied immediately; larger files are handled in background.
+const SYNC_BOOTSTRAP_FILE_BYTES: u64 = 100 * 1024;
+
+/// Copy small gitignored root files synchronously during worktree creation.
+///
+/// This ensures commonly-needed files like .env are available immediately
+/// when the user attaches to the session, without waiting for background bootstrap.
+pub fn sync_copy_small_gitignored_files(
   root_workdir: &Path,
   dst_worktree: &Path,
   cfg: &BootstrapConfig,
+) -> Result<()> {
+  copy_gitignored_root_files(root_workdir, dst_worktree, cfg, Some(SYNC_BOOTSTRAP_FILE_BYTES))
+}
+
+/// Bootstrap a worktree by copying larger gitignored files and included directories.
+///
+/// This runs in the background and handles files larger than the sync threshold,
+/// as well as directories explicitly included in the bootstrap config.
+pub fn bootstrap_worktree(
+  root_workdir: &Path,
+  dst_worktree: &Path,
+  cfg: &BootstrapConfig,
+) -> Result<()> {
+  // Copy remaining large files (small ones were already copied synchronously)
+  copy_gitignored_root_files(root_workdir, dst_worktree, cfg, None)?;
+
+  // Copy explicitly included directories
+  let entries = discover_root_entries(root_workdir)?;
+  for entry in entries {
+    let Ok(file_type) = entry.file_type() else {
+      continue;
+    };
+    if !file_type.is_dir() {
+      continue;
+    }
+    let name = entry.file_name().to_string_lossy().to_string();
+    if is_excluded(&name, cfg) {
+      continue;
+    }
+    // Only copy directories when explicitly included
+    if cfg.include.iter().any(|inc| inc == &name) {
+      let dst_dir = dst_worktree.join(&name);
+      copy_dir_tree(&entry.path(), &dst_dir)?;
+    }
+  }
+
+  Ok(())
+}
+
+/// Copy gitignored root files to the worktree.
+///
+/// If `max_size` is Some, only files under that size are copied.
+/// Files that already exist in the destination are skipped.
+fn copy_gitignored_root_files(
+  root_workdir: &Path,
+  dst_worktree: &Path,
+  cfg: &BootstrapConfig,
+  max_size: Option<u64>,
 ) -> Result<()> {
   let entries = discover_root_entries(root_workdir)?;
 
   // Split entries by type and filter out excluded names up front
   let mut file_names: Vec<String> = Vec::new();
   let mut file_paths: Vec<std::path::PathBuf> = Vec::new();
-  let mut dir_entries: Vec<(String, std::path::PathBuf)> = Vec::new();
   for entry in entries {
     let Ok(file_type) = entry.file_type() else {
       continue;
     };
+    if !file_type.is_file() {
+      continue;
+    }
     let name = entry.file_name().to_string_lossy().to_string();
     if is_excluded(&name, cfg) {
       continue;
     }
-    let path = entry.path();
-    if file_type.is_file() {
-      file_names.push(name);
-      file_paths.push(path);
-    } else if file_type.is_dir() {
-      dir_entries.push((name, path));
-    }
+    file_names.push(name);
+    file_paths.push(entry.path());
   }
 
   // Batch evaluate ignore status for root files once
+  // Always use root_workdir for git check-ignore since that's where .gitignore lives
   let ignored = run_git_check_ignore_batch(
-    repo.workdir().unwrap_or(root_workdir),
+    root_workdir,
     &file_names
       .iter()
       .map(std::string::String::as_str)
@@ -59,9 +113,24 @@ pub fn bootstrap_worktree(
       continue;
     }
     let src_path = &file_paths[idx];
-    if !file_size_within_limit(src_path)? {
+
+    // Check file size against the limit
+    let size = fs::metadata(src_path)
+      .with_context(|| format!("stat {}", src_path.display()))?
+      .len();
+
+    // Skip files over the max bootstrap limit
+    if size > MAX_BOOTSTRAP_FILE_BYTES {
       continue;
     }
+
+    // If max_size is specified, only copy files within that size
+    if let Some(max) = max_size
+      && size > max
+    {
+      continue;
+    }
+
     let dst_path = dst_worktree.join(name);
     if dst_path.exists() {
       continue;
@@ -69,35 +138,97 @@ pub fn bootstrap_worktree(
     copy_file(src_path, &dst_path)?;
   }
 
-  for (name, src_dir) in dir_entries {
-    // Only copy directories when explicitly included
-    if cfg.include.iter().any(|inc| inc == &name) {
-      let dst_dir = dst_worktree.join(&name);
-      copy_dir_tree(&src_dir, &dst_dir)?;
-    }
-  }
-
   Ok(())
 }
 
-/// Run the configured bootstrap command inside the new worktree.
+/// Result from creating a worktree.
+pub struct CreateWorktreeResult {
+  pub worktree_dir: PathBuf,
+  /// True if the worktree was newly created (bootstrap will run in background)
+  pub is_new: bool,
+}
+
+/// Create a worktree for a task (fast, synchronous).
 ///
-/// - Replaces `<root>` placeholders in argv with the repository root path.
-/// - If `cfg.cmd` equals the default and the file does not exist, it silently skips.
-/// - Streams child stdout/stderr directly to the user.
-pub fn run_bootstrap_cmd(repo_root: &Path, worktree_dir: &Path, cfg: &BootstrapConfig) {
-  // No command configured -> no-op
+/// This creates the git worktree, files symlink, and copies small gitignored files
+/// (like .env) synchronously. Larger files and directories are handled by
+/// `run_bootstrap_in_worktree` in the background.
+///
+/// Returns the worktree path and whether background bootstrap is needed.
+pub fn create_worktree_for_task(
+  ctx: &AppContext,
+  repo: &git::Repository,
+  task: &TaskRef,
+  branch: &str,
+) -> anyhow::Result<CreateWorktreeResult> {
+  use crate::utils::git::{add_worktree_for_branch, repo_workdir_or};
+  use crate::utils::task::{worktree_dir, worktree_name};
+  use anyhow::Context as _;
+
+  let worktree_dir_path = worktree_dir(&ctx.paths, task);
+  let is_new = if worktree_dir_path.exists() {
+    false
+  } else {
+    let wt_root = ctx.paths.worktrees_dir();
+    std::fs::create_dir_all(&wt_root)
+      .with_context(|| format!("failed to create {}", wt_root.display()))?;
+    add_worktree_for_branch(repo, &worktree_name(task), &worktree_dir_path, branch)?;
+    true
+  };
+
+  create_files_symlink(&ctx.paths, task, &worktree_dir_path);
+
+  // Copy small gitignored files synchronously (like .env) so they're available immediately
+  if is_new {
+    let repo_root = repo_workdir_or(repo, ctx.paths.root());
+    let bcfg = ctx.config.bootstrap_config();
+    if let Err(err) = sync_copy_small_gitignored_files(&repo_root, &worktree_dir_path, &bcfg) {
+      log_warn!("Failed to copy small gitignored files: {err}");
+    }
+  }
+
+  let canonical = worktree_dir_path
+    .canonicalize()
+    .unwrap_or(worktree_dir_path.clone());
+
+  Ok(CreateWorktreeResult {
+    worktree_dir: canonical,
+    is_new,
+  })
+}
+
+/// Run bootstrap operations in a worktree (slow, meant for background execution).
+///
+/// This copies gitignored files and runs the bootstrap command.
+/// Receives pre-built environment variables from the caller.
+pub fn run_bootstrap_in_worktree(
+  repo_root: &Path,
+  worktree_dir: &Path,
+  cfg: &BootstrapConfig,
+  env_vars: &std::collections::HashMap<String, String>,
+) -> anyhow::Result<()> {
+  bootstrap_worktree(repo_root, worktree_dir, cfg)?;
+  run_bootstrap_cmd_with_env(repo_root, worktree_dir, cfg, env_vars);
+  Ok(())
+}
+
+/// Run the configured bootstrap command with custom environment variables.
+fn run_bootstrap_cmd_with_env(
+  repo_root: &Path,
+  worktree_dir: &Path,
+  cfg: &BootstrapConfig,
+  env_vars: &std::collections::HashMap<String, String>,
+) {
   if cfg.cmd.is_empty() {
     return;
   }
 
-  // Build expansion context and expand argv
   let root_abs = repo_root
     .canonicalize()
     .unwrap_or_else(|_| repo_root.to_path_buf())
     .display()
     .to_string();
-  let ctx = CmdCtx::from_process_env(root_abs.clone());
+  let ctx = CmdCtx::with_env(root_abs.clone(), env_vars.clone());
   let argv = expand_argv(&cfg.cmd, &ctx);
 
   // Special-case: default path missing should be a silent skip
@@ -108,9 +239,11 @@ pub fn run_bootstrap_cmd(repo_root: &Path, worktree_dir: &Path, cfg: &BootstrapC
     }
   }
 
-  // Preface and run via unified child runner (routes I/O into TUI when active)
   log_info!("Run bootstrap {}", argv.join(" "));
-  let env_overrides: Vec<(String, String)> = Vec::new();
+  let env_overrides: Vec<(String, String)> = env_vars
+    .iter()
+    .map(|(k, v)| (k.clone(), v.clone()))
+    .collect();
   match run_child_process(&argv[0], &argv[1..], worktree_dir, &env_overrides) {
     Ok(status) => {
       if !status.success() {
@@ -121,41 +254,6 @@ pub fn run_bootstrap_cmd(repo_root: &Path, worktree_dir: &Path, cfg: &BootstrapC
       log_warn!("Bootstrap failed to start: {}", err);
     }
   }
-}
-
-/// Ensure the task's worktree directory exists and is bootstrapped.
-///
-/// Assumes the task branch has already been created.
-/// Returns the absolute path of the worktree directory (canonicalized if possible).
-pub fn prepare_worktree_for_task(
-  ctx: &AppContext,
-  repo: &git::Repository,
-  task: &TaskRef,
-  branch: &str,
-) -> anyhow::Result<PathBuf> {
-  use crate::utils::git::{add_worktree_for_branch, repo_workdir_or};
-  use crate::utils::task::{worktree_dir, worktree_name};
-  use anyhow::Context as _;
-
-  let worktree_dir_path = worktree_dir(&ctx.paths, task);
-  if !worktree_dir_path.exists() {
-    let wt_root = ctx.paths.worktrees_dir();
-    std::fs::create_dir_all(&wt_root)
-      .with_context(|| format!("failed to create {}", wt_root.display()))?;
-    add_worktree_for_branch(repo, &worktree_name(task), &worktree_dir_path, branch)?;
-    let root_workdir = repo_workdir_or(repo, ctx.paths.root());
-    let bcfg = ctx.config.bootstrap_config();
-    bootstrap_worktree(repo, &root_workdir, &worktree_dir_path, &bcfg)?;
-    run_bootstrap_cmd(&root_workdir, &worktree_dir_path, &bcfg);
-  }
-
-  create_files_symlink(&ctx.paths, task, &worktree_dir_path);
-
-  Ok(
-    worktree_dir_path
-      .canonicalize()
-      .unwrap_or(worktree_dir_path.clone()),
-  )
 }
 
 fn create_files_symlink(paths: &crate::config::AgencyPaths, task: &TaskRef, worktree: &Path) {
