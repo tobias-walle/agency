@@ -162,6 +162,7 @@ pub fn run_follow(ctx: &AppContext, tui_id_opt: Option<u32>) -> Result<()> {
       tid,
     )?;
     if let Some(task) = attach_target {
+      tmux::prepare_session_for_attach(&ctx.config, &task);
       child_gen = child_gen.wrapping_add(1);
       current_child = Some((tmux::spawn_attach_session(&ctx.config, &task)?, child_gen));
     }
@@ -202,7 +203,7 @@ fn run_follow_loop(
     }
 
     // Periodically ensure the followed TUI still exists; cancel if it disappeared
-    check_tui_still_exists(ctx, target_id, &mut overlay_ui)?;
+    check_tui_still_exists(ctx, target_id, &mut overlay_ui, &mut current_child)?;
 
     match rx.recv_timeout(std::time::Duration::from_millis(200)) {
       Ok(D2C::Control(D2CControl::TuiFocusTaskChanged {
@@ -223,6 +224,7 @@ fn run_follow_loop(
           if let Some(ui) = overlay_ui.take() {
             ui.restore();
           }
+          tmux::prepare_session_for_attach(&ctx.config, &task);
           child_gen = child_gen.wrapping_add(1);
           current_child = Some((tmux::spawn_attach_session(&ctx.config, &task)?, child_gen));
         }
@@ -266,6 +268,7 @@ fn run_follow_loop(
       if let Some(ui) = overlay_ui.take() {
         ui.restore();
       }
+      tmux::prepare_session_for_attach(&ctx.config, &task);
       child_gen = child_gen.wrapping_add(1);
       current_child = Some((tmux::spawn_attach_session(&ctx.config, &task)?, child_gen));
       overlay_active = false;
@@ -330,10 +333,15 @@ fn check_tui_still_exists(
   ctx: &AppContext,
   target_id: u32,
   overlay_ui: &mut Option<OverlayUI>,
+  current_child: &mut Option<(Child, u64)>,
 ) -> Result<()> {
   if let Ok(items) = dutil::tui_list(ctx)
     && !items.iter().any(|i| i.tui_id == target_id)
   {
+    // Clean up child process before exiting
+    if let Some((mut ch, _)) = current_child.take() {
+      terminate_child(&mut ch);
+    }
     if let Some(ui) = overlay_ui.take() {
       ui.restore();
     }
@@ -393,13 +401,9 @@ fn handle_focus_change(
 }
 
 fn terminate_child(child: &mut Child) {
-  let pid = child.id();
-  let _ = std::process::Command::new("kill")
-    .arg("-TERM")
-    .arg(pid.to_string())
-    .status();
+  // Use SIGKILL to terminate immediately without giving tmux a chance to print messages
   let _ = child.kill();
-  std::thread::sleep(std::time::Duration::from_millis(100));
+  let _ = child.wait();
 }
 
 // Helpers for clean decisions when the tmux attach child exits

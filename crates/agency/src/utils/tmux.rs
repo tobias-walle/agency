@@ -234,6 +234,24 @@ pub fn spawn_attach_session(
   cmd.spawn()
 }
 
+/// Prepare a session for attachment by exiting copy-mode if active.
+/// This helps prevent scrollback position issues when switching between sessions.
+pub fn prepare_session_for_attach(cfg: &AgencyConfig, task: &TaskMeta) {
+  let name = session_name(task.id, &task.slug);
+  // Exit copy-mode if active (no-op if not in copy-mode)
+  // Suppress output since tmux prints "not in a mode" if not in copy-mode
+  let _ = std::process::Command::new("tmux")
+    .args(tmux_args_base(cfg))
+    .arg("send-keys")
+    .arg("-t")
+    .arg(&name)
+    .arg("-X")
+    .arg("cancel")
+    .stdout(std::process::Stdio::null())
+    .stderr(std::process::Stdio::null())
+    .status();
+}
+
 fn attach_cmd(cfg: &AgencyConfig, target_name: &str) -> std::process::Command {
   let mut tmux_cmd = std::process::Command::new("tmux");
   tmux_cmd
