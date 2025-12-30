@@ -1,3 +1,10 @@
+## [1.13.1](https://github.com/tobias-walle/agency/compare/v1.13.0...v1.13.1) (2025-12-30)
+
+
+### Bug Fixes
+
+* ensure daemon/tmux autostart completes before command execution ([a929417](https://github.com/tobias-walle/agency/commit/a929417a9f9e6a7156984080999973035a56ff96))
+
 # [1.13.0](https://github.com/tobias-walle/agency/compare/v1.12.0...v1.13.0) (2025-12-29)
 
 
