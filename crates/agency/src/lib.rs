@@ -10,10 +10,21 @@ pub mod tui;
 mod utils;
 
 use crate::config::{AgencyPaths, AppContext, global_config_exists, load_config};
-use crate::utils::tty::Tty;
 use crate::utils::daemon::ensure_running_and_latest_version;
 use crate::utils::git::resolve_main_workdir;
 use crate::utils::tmux::ensure_server as ensure_tmux_server;
+use crate::utils::tty::Tty;
+
+/// Categorizes how a command uses the daemon/tmux.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DaemonRequirement {
+  /// Command requires daemon/tmux; fail if autostart fails
+  Required,
+  /// Command can use daemon but has fallback; warn on autostart failure
+  Optional,
+  /// Command doesn't need daemon at all; skip autostart
+  None,
+}
 
 /// Agency - An AI agent manager and orchestrator in your command line.
 #[derive(Debug, Parser)]
@@ -261,7 +272,7 @@ pub fn parse() -> Cli {
 pub fn run() -> Result<()> {
   let cli = parse();
   let ctx = build_context()?;
-  autostart_daemon(&ctx, cli.command.as_ref());
+  autostart_daemon(&ctx, cli.command.as_ref())?;
   run_command(&ctx, cli)
 }
 
@@ -274,12 +285,70 @@ fn build_context() -> Result<AppContext> {
   Ok(AppContext { paths, config, tty })
 }
 
-fn autostart_daemon(ctx: &AppContext, cmd: Option<&Commands>) {
-  if matches!(cmd, Some(Commands::Daemon { .. }) | None) {
-    return;
+/// Determines whether a command requires daemon/tmux.
+#[allow(clippy::match_same_arms)] // Explicit per-command for compile-time exhaustiveness
+fn daemon_required(cmd: Option<&Commands>) -> DaemonRequirement {
+  match cmd {
+    // No command (run_default handles its own daemon logic)
+    None => DaemonRequirement::None,
+    // Commands that require daemon/tmux
+    Some(Commands::Tui {}) => DaemonRequirement::Required,
+    Some(Commands::Start { .. }) => DaemonRequirement::Required,
+    Some(Commands::Attach { .. }) => DaemonRequirement::Required,
+    Some(Commands::Stop { .. }) => DaemonRequirement::Required,
+    Some(Commands::Sessions {}) => DaemonRequirement::Required,
+    Some(Commands::Merge { .. }) => DaemonRequirement::Required,
+    Some(Commands::Complete { .. }) => DaemonRequirement::Required,
+    Some(Commands::Reset { .. }) => DaemonRequirement::Required,
+    Some(Commands::Rm { .. }) => DaemonRequirement::Required,
+    // New command only requires daemon when not a draft
+    Some(Commands::New { draft: false, .. }) => DaemonRequirement::Required,
+    Some(Commands::New { draft: true, .. }) => DaemonRequirement::None,
+    // Commands with fallback logic
+    Some(Commands::Tasks {}) => DaemonRequirement::Optional,
+    Some(Commands::Fzf {}) => DaemonRequirement::Optional,
+    // Commands that don't need daemon
+    Some(Commands::Setup {}) => DaemonRequirement::None,
+    Some(Commands::Init { .. }) => DaemonRequirement::None,
+    Some(Commands::Edit { .. }) => DaemonRequirement::None,
+    Some(Commands::Open { .. }) => DaemonRequirement::None,
+    Some(Commands::Shell { .. }) => DaemonRequirement::None,
+    Some(Commands::Exec { .. }) => DaemonRequirement::None,
+    Some(Commands::Path { .. }) => DaemonRequirement::None,
+    Some(Commands::Branch { .. }) => DaemonRequirement::None,
+    Some(Commands::Bootstrap { .. }) => DaemonRequirement::None,
+    Some(Commands::Config {}) => DaemonRequirement::None,
+    Some(Commands::Defaults {}) => DaemonRequirement::None,
+    Some(Commands::Gc {}) => DaemonRequirement::None,
+    Some(Commands::Daemon { .. }) => DaemonRequirement::None,
+    Some(Commands::Files { .. }) => DaemonRequirement::None,
+    Some(Commands::Info {}) => DaemonRequirement::None,
   }
-  let _ = ensure_running_and_latest_version(ctx);
-  let _ = ensure_tmux_server(&ctx.config);
+}
+
+/// Starts daemon/tmux if needed for the command.
+///
+/// # Errors
+///
+/// Returns an error if a required command cannot start daemon/tmux.
+fn autostart_daemon(ctx: &AppContext, cmd: Option<&Commands>) -> Result<()> {
+  match daemon_required(cmd) {
+    DaemonRequirement::None => Ok(()),
+    DaemonRequirement::Required => {
+      ensure_running_and_latest_version(ctx)?;
+      ensure_tmux_server(&ctx.config)?;
+      Ok(())
+    }
+    DaemonRequirement::Optional => {
+      if let Err(err) = ensure_running_and_latest_version(ctx) {
+        log_warn!("Daemon autostart failed: {err}");
+      }
+      if let Err(err) = ensure_tmux_server(&ctx.config) {
+        log_warn!("Tmux autostart failed: {err}");
+      }
+      Ok(())
+    }
+  }
 }
 
 #[allow(clippy::too_many_lines)]
@@ -398,9 +467,9 @@ fn run_default(ctx: &AppContext) -> Result<()> {
     }
     return Ok(());
   }
-  let _ = ensure_running_and_latest_version(ctx);
-  let _ = ensure_tmux_server(&ctx.config);
   if ctx.tty.is_interactive() {
+    ensure_running_and_latest_version(ctx)?;
+    ensure_tmux_server(&ctx.config)?;
     tui::run(ctx)
   } else {
     log_info!("Usage: agency <SUBCOMMAND>. Try 'agency --help'");

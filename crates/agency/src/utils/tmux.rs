@@ -86,6 +86,7 @@ pub fn is_server_running(cfg: &AgencyConfig) -> bool {
     .arg("has-session")
     .arg("-t")
     .arg(guard)
+    .stdout(std::process::Stdio::null())
     .stderr(std::process::Stdio::null())
     .status()
     .is_ok_and(|st| st.success())
