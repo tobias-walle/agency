@@ -1,3 +1,10 @@
+## [1.13.2](https://github.com/tobias-walle/agency/compare/v1.13.1...v1.13.2) (2026-01-01)
+
+
+### Bug Fixes
+
+* improve attach --follow session switching experience ([553bf79](https://github.com/tobias-walle/agency/commit/553bf79f978eb71a43595604d35c00753b2bc381))
+
 ## [1.13.1](https://github.com/tobias-walle/agency/compare/v1.13.0...v1.13.1) (2025-12-30)
 
 
