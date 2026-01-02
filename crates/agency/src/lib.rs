@@ -99,7 +99,7 @@ enum Commands {
     #[arg(long)]
     session: Option<u64>,
   },
-  /// Fast-forward merge task back to base and clean up
+  /// Fast-forward merge task back to base
   Merge {
     ident: String,
     /// Override base branch
@@ -464,9 +464,16 @@ fn run_command(ctx: &AppContext, cli: Cli) -> Result<()> {
       (Some(BootstrapCmd::Task { ident }), _) | (None, Some(ident)) => {
         commands::bootstrap::run(ctx, &ident)
       }
-      (Some(BootstrapCmd::Run { repo_root, worktree_dir, include, exclude, cmd }), _) => {
-        commands::bootstrap::run_internal(&repo_root, &worktree_dir, &include, &exclude, &cmd)
-      }
+      (
+        Some(BootstrapCmd::Run {
+          repo_root,
+          worktree_dir,
+          include,
+          exclude,
+          cmd,
+        }),
+        _,
+      ) => commands::bootstrap::run_internal(&repo_root, &worktree_dir, &include, &exclude, &cmd),
       (None, None) => anyhow::bail!("Bootstrap requires a task ID or slug"),
     },
     Some(Commands::Config {}) => commands::config::run(ctx),
