@@ -15,9 +15,14 @@ Agency is a command-line AI agent orchestrator that runs coding agents in isolat
 agency new <slug>                     # Create task, start session, attach immediately
 ag new <slug>                         # Short alias
 agency new <slug> -e                  # Open editor to write task description
-agency new <slug> "description"       # Provide description inline
 agency new <slug> -f spec.pdf         # Attach a file during creation
 agency new <slug> -f a.png -f b.pdf   # Attach multiple files
+
+# Provide description inline (use heredoc for multi-line)
+agency new <slug> <<'EOF'
+Your task description here.
+Can span multiple lines without escaping issues.
+EOF
 ```
 
 ### Create a Draft (No Session Yet)
@@ -93,9 +98,15 @@ E.g. the user created a plan that is not committed and asks you to delegate the 
 
 ```bash
 # Create multiple parallel tasks
-agency new --draft feature-auth "Implement user authentication"
-agency new --draft feature-api "Build REST API endpoints"
-agency new --draft fix-tests "Fix failing unit tests"
+agency new --draft feature-auth <<'EOF'
+Implement user authentication
+EOF
+agency new --draft feature-api <<'EOF'
+Build REST API endpoints
+EOF
+agency new --draft fix-tests <<'EOF'
+Fix failing unit tests
+EOF
 
 # Start all tasks
 agency start --no-attach feature-auth
@@ -103,9 +114,15 @@ agency start --no-attach feature-api
 agency start --no-attach fix-tests
 
 # Or start tasks on creation
-agency new --no-attach feature-auth "Implement user authentication"
-agency new --no-attach feature-api "Build REST API endpoints"
-agency new --no-attach fix-tests "Fix failing unit tests"
+agency new --no-attach feature-auth <<'EOF'
+Implement user authentication
+EOF
+agency new --no-attach feature-api <<'EOF'
+Build REST API endpoints
+EOF
+agency new --no-attach fix-tests <<'EOF'
+Fix failing unit tests
+EOF
 
 # Check status
 agency tasks

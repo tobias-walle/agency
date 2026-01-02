@@ -1,3 +1,5 @@
+use std::io::{IsTerminal as _, Read as _};
+
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 
@@ -269,6 +271,23 @@ pub fn parse() -> Cli {
   Cli::parse()
 }
 
+/// Reads description from stdin if stdin is piped (not a TTY).
+/// Returns None if stdin is a TTY or if the content is empty after trimming.
+fn read_description_from_stdin() -> Option<String> {
+  let stdin = std::io::stdin();
+  if stdin.is_terminal() {
+    return None;
+  }
+  let mut buf = String::new();
+  if stdin.lock().read_to_string(&mut buf).is_ok() {
+    let trimmed = buf.trim();
+    if !trimmed.is_empty() {
+      return Some(trimmed.to_string());
+    }
+  }
+  None
+}
+
 pub fn run() -> Result<()> {
   let cli = parse();
   let ctx = build_context()?;
@@ -367,7 +386,8 @@ fn run_command(ctx: &AppContext, cli: Cli) -> Result<()> {
       edit,
       files,
     }) => {
-      let desc = desc.or(description);
+      // Priority: positional arg > --description flag > stdin
+      let desc = desc.or(description).or_else(read_description_from_stdin);
       let desc = if draft || edit {
         desc
       } else {

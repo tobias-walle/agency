@@ -297,3 +297,104 @@ fn new_falls_back_to_main_on_detached_head_in_main_repo() -> Result<()> {
     Ok(())
   })
 }
+
+#[test]
+fn new_reads_description_from_stdin_when_no_arg() -> Result<()> {
+  TestEnv::run(|env| -> Result<()> {
+    env.init_repo()?;
+
+    let output = env
+      .agency()?
+      .args(["new", "--draft", "stdin-task"])
+      .write_stdin("Description from stdin")
+      .output()?;
+
+    assert!(output.status.success());
+
+    let (id, slug) = TestEnv::parse_new_task_output(&output.stdout)?;
+    let task_content = env.read_task_file(id, &slug)?;
+    assert!(
+      task_content.contains("Description from stdin"),
+      "task should contain stdin description: {task_content}"
+    );
+
+    Ok(())
+  })
+}
+
+#[test]
+fn new_prefers_arg_over_stdin() -> Result<()> {
+  TestEnv::run(|env| -> Result<()> {
+    env.init_repo()?;
+
+    let output = env
+      .agency()?
+      .args(["new", "--draft", "arg-over-stdin", "--description", "From argument"])
+      .write_stdin("From stdin")
+      .output()?;
+
+    assert!(output.status.success());
+
+    let (id, slug) = TestEnv::parse_new_task_output(&output.stdout)?;
+    let task_content = env.read_task_file(id, &slug)?;
+    assert!(
+      task_content.contains("From argument"),
+      "task should contain arg description: {task_content}"
+    );
+    assert!(
+      !task_content.contains("From stdin"),
+      "task should NOT contain stdin description: {task_content}"
+    );
+
+    Ok(())
+  })
+}
+
+#[test]
+fn new_ignores_empty_stdin() -> Result<()> {
+  TestEnv::run(|env| -> Result<()> {
+    env.init_repo()?;
+
+    let output = env
+      .agency()?
+      .args(["new", "--draft", "empty-stdin-task"])
+      .write_stdin("   \n  \n  ")
+      .output()?;
+
+    assert!(output.status.success());
+
+    let (id, slug) = TestEnv::parse_new_task_output(&output.stdout)?;
+    let task_content = env.read_task_file(id, &slug)?;
+    // Body should be empty (only front matter)
+    assert!(
+      task_content.ends_with("---\n"),
+      "task with empty stdin should have no body: {task_content}"
+    );
+
+    Ok(())
+  })
+}
+
+#[test]
+fn new_trims_stdin_description() -> Result<()> {
+  TestEnv::run(|env| -> Result<()> {
+    env.init_repo()?;
+
+    let output = env
+      .agency()?
+      .args(["new", "--draft", "trimmed-stdin"])
+      .write_stdin("\n  My description with whitespace  \n\n")
+      .output()?;
+
+    assert!(output.status.success());
+
+    let (id, slug) = TestEnv::parse_new_task_output(&output.stdout)?;
+    let task_content = env.read_task_file(id, &slug)?;
+    assert!(
+      task_content.contains("My description with whitespace"),
+      "task should contain trimmed description: {task_content}"
+    );
+
+    Ok(())
+  })
+}
