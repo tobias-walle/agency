@@ -1,3 +1,17 @@
+# [1.16.0](https://github.com/tobias-walle/agency/compare/v1.15.0...v1.16.0) (2026-01-02)
+
+
+### Bug Fixes
+
+* avoid persisting default shell and editor ([89e1c40](https://github.com/tobias-walle/agency/commit/89e1c40314668f734728fe28f06e01ee5cf3490c))
+* update help ([232afaa](https://github.com/tobias-walle/agency/commit/232afaadae21737449ed7358f94c4802c404f356))
+
+
+### Features
+
+* add note to agency info to not include tasks ids or references in the commit ([e907bb2](https://github.com/tobias-walle/agency/commit/e907bb2b3c1c32711ed69e94f6ac5f806c3480e1))
+* add skill install command ([c678eeb](https://github.com/tobias-walle/agency/commit/c678eebcbbce548dfa23a97d1a89ad354c6e13ed))
+
 # [1.15.0](https://github.com/tobias-walle/agency/compare/v1.14.0...v1.15.0) (2026-01-02)
 
 
