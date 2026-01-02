@@ -64,11 +64,12 @@ pub enum C2DControl {
     project: ProjectKey,
     pid: u32,
   },
-  /// Focus changes are delivered to subscribers; CLI should subscribe and then follow
+  /// Focus changes are delivered to subscribers; CLI should subscribe and then follow.
+  /// `task_id` is None when no task is selected (e.g., empty task list).
   TuiFocusTaskChange {
     project: ProjectKey,
     tui_id: u32,
-    task_id: u32,
+    task_id: Option<u32>,
   },
   /// Request to follow a specific TUI's focus
   TuiFollow {
@@ -120,11 +121,12 @@ pub enum D2CControl {
   TuiFollowFailed {
     message: String,
   },
-  /// Broadcast when a TUI's focused task changes
+  /// Broadcast when a TUI's focused task changes.
+  /// `task_id` is None when no task is selected (e.g., empty task list).
   TuiFocusTaskChanged {
     project: ProjectKey,
     tui_id: u32,
-    task_id: u32,
+    task_id: Option<u32>,
   },
   /// One-shot list of TUIs for project
   TuiList {
@@ -223,7 +225,7 @@ mod tests {
     let d = D2C::Control(D2CControl::TuiFocusTaskChanged {
       project: pk,
       tui_id: 2,
-      task_id: 42,
+      task_id: Some(42),
     });
     let bytes = bincode::encode_to_vec(&d, bincode::config::standard()).unwrap();
     let (decoded, _): (D2C, usize) =

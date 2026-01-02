@@ -138,10 +138,8 @@ impl AppState {
         })?;
         self.task_table.prune_pending_deletes();
         let cur_sel_id = self.task_table.selected_row().map(TaskRow::id);
-        if let (Some(prev), Some(cur)) = (prev_sel_id, cur_sel_id)
-          && prev != cur
-        {
-          emit_focus_change(ctx, self.task_table.tui_id, cur);
+        if prev_sel_id != cur_sel_id {
+          emit_focus_change(ctx, self.task_table.tui_id, cur_sel_id);
         }
       }
     }
@@ -158,10 +156,8 @@ impl AppState {
         })?;
         self.task_table.prune_pending_deletes();
         let cur_sel_id = self.task_table.selected_row().map(TaskRow::id);
-        if let (Some(prev), Some(cur)) = (prev_sel_id, cur_sel_id)
-          && prev != cur
-        {
-          emit_focus_change(ctx, self.task_table.tui_id, cur);
+        if prev_sel_id != cur_sel_id {
+          emit_focus_change(ctx, self.task_table.tui_id, cur_sel_id);
         }
       }
       UiEvent::Disconnected(err) => {
@@ -228,7 +224,7 @@ impl AppState {
     match action {
       task_table::Action::None => {}
       task_table::Action::SelectionChanged { id } => {
-        emit_focus_change(ctx, self.task_table.tui_id, *id);
+        emit_focus_change(ctx, self.task_table.tui_id, Some(*id));
       }
       task_table::Action::EditOrAttach { id, session } => {
         spawn_edit_or_attach(ctx, *id, *session);
@@ -381,11 +377,10 @@ fn ui_loop(
     state.task_table.tui_id = Some(id);
   }
 
-  // Send initial focus
-  if !state.sent_initial_focus
-    && let Some(cur) = state.task_table.selected_row()
-  {
-    emit_focus_change(ctx, state.task_table.tui_id, cur.id());
+  // Send initial focus (even if None for empty task list)
+  if !state.sent_initial_focus {
+    let task_id = state.task_table.selected_row().map(TaskRow::id);
+    emit_focus_change(ctx, state.task_table.tui_id, task_id);
     state.sent_initial_focus = true;
   }
 
@@ -849,7 +844,7 @@ fn subscribe_events(ctx: &AppContext) -> Result<Receiver<UiEvent>> {
   Ok(rx)
 }
 
-fn emit_focus_change(ctx: &AppContext, tui_id: Option<u32>, task_id: u32) {
+fn emit_focus_change(ctx: &AppContext, tui_id: Option<u32>, task_id: Option<u32>) {
   let Some(tid) = tui_id else { return };
   let Ok(repo) = open_main_repo(ctx.paths.root()) else {
     return;

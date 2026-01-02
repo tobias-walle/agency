@@ -11,12 +11,12 @@ use crate::utils::daemon::{get_project_state, send_start_bootstrap};
 use crate::utils::git::{open_main_repo, repo_workdir_or};
 use crate::utils::interactive;
 use crate::utils::session::{build_session_plan, start_session_for_task};
-use crate::utils::task::resolve_id_or_slug;
+use crate::utils::task::{TaskRef, read_task_content, resolve_id_or_slug};
 use crate::utils::tmux;
 use crossbeam_channel::unbounded;
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 mod overlay;
-use overlay::OverlayUI;
+use overlay::{OverlayMode, OverlayUI};
 use std::process::Child;
 
 pub fn run_with_task(ctx: &AppContext, ident: &str) -> Result<()> {
@@ -125,8 +125,8 @@ pub fn run_follow(ctx: &AppContext, tui_id_opt: Option<u32>) -> Result<()> {
       tui_id: target_id,
     }),
   )?;
-  // Receive success and optional immediate focus
-  let mut initial_focus: Option<u32> = None;
+  // Receive success and immediate focus (always sent, may be None for empty task list)
+  let mut initial_focus: Option<Option<u32>> = None; // None = not received, Some(None) = no task
   for _ in 0..2 {
     match read_frame::<_, D2C>(&mut follow_stream) {
       Ok(D2C::Control(D2CControl::TuiFocusTaskChanged { task_id, .. })) => {
@@ -143,8 +143,10 @@ pub fn run_follow(ctx: &AppContext, tui_id_opt: Option<u32>) -> Result<()> {
     && let Ok(items) = dutil::tui_list(ctx)
     && let Some(it) = items.into_iter().find(|i| i.tui_id == target_id)
   {
-    initial_focus = it.focused_task_id;
+    initial_focus = Some(it.focused_task_id);
   }
+  // Unwrap to Option<u32>, default to None if daemon didn't respond
+  let initial_focus = initial_focus.unwrap_or(None);
   // Child management and current focus
   // Track a generation counter to avoid races from late exits
   let mut current_child: Option<(Child, u64)> = None; // (tmux attach child, gen)
@@ -152,20 +154,19 @@ pub fn run_follow(ctx: &AppContext, tui_id_opt: Option<u32>) -> Result<()> {
   let mut overlay_active: bool = false; // inline overlay
   let mut overlay_task_id: Option<u32> = None;
   let mut current_task_id: Option<u32> = None;
-  if let Some(tid) = initial_focus {
-    let attach_target = handle_focus_change(
-      ctx,
-      &mut current_child,
-      &mut overlay_active,
-      &mut overlay_task_id,
-      &mut current_task_id,
-      tid,
-    )?;
-    if let Some(task) = attach_target {
-      tmux::prepare_session_for_attach(&ctx.config, &task);
-      child_gen = child_gen.wrapping_add(1);
-      current_child = Some((tmux::spawn_attach_session(&ctx.config, &task)?, child_gen));
-    }
+  // Handle initial focus (Some(id) = task selected, None = no tasks)
+  let attach_target = handle_focus_change(
+    ctx,
+    &mut current_child,
+    &mut overlay_active,
+    &mut overlay_task_id,
+    &mut current_task_id,
+    initial_focus,
+  )?;
+  if let Some(task) = attach_target {
+    tmux::prepare_session_for_attach(&ctx.config, &task);
+    child_gen = child_gen.wrapping_add(1);
+    current_child = Some((tmux::spawn_attach_session(&ctx.config, &task)?, child_gen));
   }
 
   // Overlay UI (ratatui) lifecycle
@@ -285,17 +286,38 @@ fn handle_overlay(
   if overlay_ui.is_none() {
     *overlay_ui = Some(OverlayUI::init()?);
   }
-  if let Some(ui) = overlay_ui.as_mut()
-    && let Ok(state) = dutil::get_project_state(ctx)
-    && let Some(tid) = *overlay_task_id
-  {
-    let slug = state
-      .tasks
-      .iter()
-      .find(|t| t.id == tid)
-      .map_or_else(|| format!("task-{tid}"), |t| t.slug.clone());
-    ui.draw(&slug, tid)?;
+
+  if let Some(ui) = overlay_ui.as_mut() {
+    match *overlay_task_id {
+      None => {
+        // No tasks mode
+        ui.draw(&OverlayMode::NoTasks)?;
+      }
+      Some(tid) => {
+        // No session mode (draft task)
+        let state = dutil::get_project_state(ctx)?;
+        let slug = state
+          .tasks
+          .iter()
+          .find(|t| t.id == tid)
+          .map_or_else(|| format!("task-{tid}"), |t| t.slug.clone());
+        // Read task description
+        let tref = TaskRef {
+          id: tid,
+          slug: slug.clone(),
+        };
+        let description = read_task_content(&ctx.paths, &tref)
+          .map(|c| c.body)
+          .unwrap_or_default();
+        ui.draw(&OverlayMode::NoSession {
+          task_id: tid,
+          slug: &slug,
+          description: &description,
+        })?;
+      }
+    }
   }
+
   while event::poll(std::time::Duration::from_millis(0))? {
     if let Event::Key(k) = event::read()?
       && k.kind != KeyEventKind::Repeat
@@ -306,6 +328,7 @@ fn handle_overlay(
         }
         return Ok(true);
       }
+      // 's' to start only works when there's a task selected
       if let KeyCode::Char('s') = k.code
         && let Some(task_id) = *overlay_task_id
       {
@@ -315,7 +338,7 @@ fn handle_overlay(
           .iter()
           .find(|t| t.id == task_id)
           .map_or_else(|| format!("task-{task_id}"), |t| t.slug.clone());
-        let tref = crate::utils::task::TaskRef { id: task_id, slug };
+        let tref = TaskRef { id: task_id, slug };
         let plan = build_session_plan(ctx, &tref)?;
         let bootstrap_request = plan.bootstrap_request.clone();
         // Send bootstrap request BEFORE starting session
@@ -371,23 +394,30 @@ fn handle_focus_change(
   overlay_active: &mut bool,
   overlay_task_id: &mut Option<u32>,
   current_task_id: &mut Option<u32>,
-  task_id: u32,
+  task_id: Option<u32>,
 ) -> anyhow::Result<Option<TaskMeta>> {
-  *current_task_id = Some(task_id);
-  // Decide attach vs overlay based on sessions
-  let state = dutil::get_project_state(ctx)?;
-  let has_session = state.sessions.iter().any(|s| s.task.id == task_id);
-  let task = TaskMeta {
-    id: task_id,
-    slug: state
-      .tasks
-      .iter()
-      .find(|t| t.id == task_id)
-      .map_or_else(|| format!("task-{task_id}"), |t| t.slug.clone()),
-  };
+  *current_task_id = task_id;
+  // Terminate existing child process
   if let Some((mut ch, _gen)) = current_child.take() {
     terminate_child(&mut ch);
   }
+  // Handle None = no task selected (empty task list)
+  let Some(tid) = task_id else {
+    *overlay_active = true;
+    *overlay_task_id = None; // None signals "no tasks" mode
+    return Ok(None);
+  };
+  // Decide attach vs overlay based on sessions
+  let state = dutil::get_project_state(ctx)?;
+  let has_session = state.sessions.iter().any(|s| s.task.id == tid);
+  let task = TaskMeta {
+    id: tid,
+    slug: state
+      .tasks
+      .iter()
+      .find(|t| t.id == tid)
+      .map_or_else(|| format!("task-{tid}"), |t| t.slug.clone()),
+  };
   if has_session {
     *overlay_active = false;
     *overlay_task_id = None;
@@ -395,7 +425,7 @@ fn handle_focus_change(
   } else {
     // Activate overlay mode; ratatui renderer handles display and input
     *overlay_active = true;
-    *overlay_task_id = Some(task_id);
+    *overlay_task_id = Some(tid);
     Ok(None)
   }
 }

@@ -273,16 +273,15 @@ impl SlimDaemon {
         &mut *stream,
         &D2C::Control(D2CControl::TuiFollowSucceeded { tui_id }),
       );
-      if let Some(task_id) = entry.focused_task_id {
-        let _ = write_frame(
-          &mut *stream,
-          &D2C::Control(D2CControl::TuiFocusTaskChanged {
-            project: project.clone(),
-            tui_id,
-            task_id,
-          }),
-        );
-      }
+      // Always send focus state (even if None for empty task list)
+      let _ = write_frame(
+        &mut *stream,
+        &D2C::Control(D2CControl::TuiFocusTaskChanged {
+          project: project.clone(),
+          tui_id,
+          task_id: entry.focused_task_id,
+        }),
+      );
     } else {
       let _ = write_frame(
         &mut *stream,
@@ -700,12 +699,12 @@ fn update_tui_focus(
   registry: &Arc<Mutex<HashMap<String, HashMap<u32, TuiEntry>>>>,
   project_root: &str,
   tui_id: u32,
-  task_id: u32,
+  task_id: Option<u32>,
 ) {
   if let Some(map) = registry.lock().get_mut(project_root)
     && let Some(entry) = map.get_mut(&tui_id)
   {
-    entry.focused_task_id = Some(task_id);
+    entry.focused_task_id = task_id;
     entry.last_seen_ms = now_ms();
   }
 }
@@ -752,7 +751,7 @@ fn broadcast_tui_focus(
   subs: &Arc<Mutex<Vec<Subscriber>>>,
   project: &ProjectKey,
   tui_id: u32,
-  task_id: u32,
+  task_id: Option<u32>,
 ) {
   let mut remove_idx = Vec::new();
   let mut subs_list = subs.lock();
@@ -854,7 +853,7 @@ mod tests {
     });
 
     // Send a focus change
-    broadcast_tui_focus(&subs, &pk, 3, 42);
+    broadcast_tui_focus(&subs, &pk, 3, Some(42));
 
     // Read the frame from the other end
     let msg: D2C = read_frame(&mut b).expect("frame");
@@ -866,7 +865,7 @@ mod tests {
       }) => {
         assert_eq!(project.repo_root, pk.repo_root);
         assert_eq!(tui_id, 3);
-        assert_eq!(task_id, 42);
+        assert_eq!(task_id, Some(42));
       }
       other @ D2C::Control(_) => panic!("unexpected: {other:?}"),
     }
