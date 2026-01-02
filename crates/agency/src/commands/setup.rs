@@ -1,12 +1,10 @@
 use std::collections::BTreeMap;
 use std::fs;
-use std::path::Path;
 
-use anyhow::{Context, Result, anyhow};
-use toml::Value as TomlValue;
+use anyhow::{Context, Result};
 use toml::value::Table as TomlTable;
 
-use crate::config::{self, AppContext};
+use crate::config::{self, AgencyConfig, AppContext};
 use crate::log_success;
 use crate::log_warn;
 use crate::texts;
@@ -14,14 +12,8 @@ use crate::utils::which;
 use crate::utils::wizard::{Choice, Wizard};
 
 pub fn run(ctx: &AppContext) -> Result<()> {
-  let config_path = config::global_config_path()?;
-  let config_display = config_path.display().to_string();
-  let mut table = read_existing_table(&config_path)?;
-
-  let existing_agent = table
-    .get("agent")
-    .and_then(|value| value.as_str())
-    .map(std::string::ToString::to_string);
+  let mut global = load_global_config()?;
+  let existing_agent = global.file.agent.clone();
 
   let wizard = Wizard::new();
   anstream::println!();
@@ -29,7 +21,7 @@ pub fn run(ctx: &AppContext) -> Result<()> {
   Wizard::print_logo();
   anstream::println!();
   anstream::println!();
-  let welcome = texts::setup::welcome_lines(&config_display);
+  let welcome = texts::setup::welcome_lines(&global.display);
   Wizard::info_lines(&welcome);
   anstream::println!();
 
@@ -43,108 +35,168 @@ pub fn run(ctx: &AppContext) -> Result<()> {
   anstream::println!();
 
   // Ask for preferred shell command (argv split via shell-words)
-  let shell_from_config = ctx.config.shell.clone();
-  let env_shell_argv: Option<Vec<String>> = if let Ok(sh) = std::env::var("SHELL") {
-    let trimmed = sh.trim();
-    if trimmed.is_empty() {
-      None
-    } else {
-      Some(vec![trimmed.to_string()])
-    }
-  } else {
-    None
-  };
+  let shell_defaults = shell_defaults(&ctx.config);
   let shell_prompt = texts::setup::shell_prompt();
-  // Use currently configured value (or env/SHELL, or /bin/sh) as default
-  let default_shell_argv: Vec<String> =
-    if let Some(value) = &shell_from_config && !value.is_empty() {
-      value.clone()
-    } else if let Some(env) = &env_shell_argv {
-      env.clone()
-    } else {
-      vec!["/bin/sh".to_string()]
-    };
-  let shell_argv = wizard.shell_words(&shell_prompt, &default_shell_argv)?;
+  let shell_argv = wizard.shell_words(&shell_prompt, &shell_defaults.prompt_default)?;
   anstream::println!();
 
   // Ask for preferred editor command (argv split via shell-words)
   let editor_prompt = texts::setup::editor_prompt();
-  let env_editor_argv: Option<Vec<String>> = if let Ok(ed) = std::env::var("EDITOR") {
-    let trimmed = ed.trim();
-    if trimmed.is_empty() {
-      None
-    } else if let Ok(tokens) = shell_words::split(trimmed) {
-      if tokens.is_empty() {
-        None
-      } else {
-        Some(tokens)
-      }
-    } else {
-      None
-    }
-  } else {
-    None
-  };
-  let default_editor_argv: Vec<String> = ctx.config.editor_argv();
-  let editor_argv = wizard.shell_words(&editor_prompt, &default_editor_argv)?;
+  let editor_defaults = editor_defaults(&ctx.config);
+  let editor_argv = wizard.shell_words(&editor_prompt, &editor_defaults.prompt_default)?;
   anstream::println!();
 
-  if let Some(parent) = config_path.parent() {
-    fs::create_dir_all(parent).with_context(|| format!("failed to create {}", parent.display()))?;
-  }
+  apply_agent_choice(&mut global.file, &default_agent);
+  apply_shell_choice(&mut global.file, &shell_defaults, &shell_argv);
+  apply_editor_choice(&mut global.file, &editor_defaults, &editor_argv);
+  write_global_config(&global)?;
 
-  let existed = config_path.exists();
-  table.insert(
-    "agent".to_string(),
-    TomlValue::String(default_agent.clone()),
-  );
-  if let Some(env_shell) = &env_shell_argv
-    && shell_argv == *env_shell
-  {
-    table.remove("shell");
+  if global.existed {
+    log_warn!("Updated existing config {}", global.path.display());
   } else {
-    table.insert(
-      "shell".to_string(),
-      TomlValue::Array(
-        shell_argv
-          .clone()
-          .into_iter()
-          .map(TomlValue::String)
-          .collect(),
-      ),
-    );
-  }
-  if let Some(env_editor) = &env_editor_argv
-    && editor_argv == *env_editor
-  {
-    table.remove("editor");
-  } else {
-    table.insert(
-      "editor".to_string(),
-      TomlValue::Array(
-        editor_argv
-          .clone()
-          .into_iter()
-          .map(TomlValue::String)
-          .collect(),
-      ),
-    );
-  }
-
-  let data = TomlValue::Table(table);
-  let serialized = toml::to_string_pretty(&data).context("failed to serialize config")?;
-  fs::write(&config_path, serialized)
-    .with_context(|| format!("failed to write {}", config_path.display()))?;
-
-  if existed {
-    log_warn!("Updated existing config {}", config_path.display());
-  } else {
-    log_success!("Created global config {}", config_path.display());
+    log_success!("Created global config {}", global.path.display());
   }
 
   let summary = texts::setup::summary_lines();
   Wizard::info_lines(&summary);
   Ok(())
+}
+
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+struct GlobalConfigFile {
+  #[serde(default)]
+  agent: Option<String>,
+  #[serde(default)]
+  shell: Option<Vec<String>>,
+  #[serde(default)]
+  editor: Option<Vec<String>>,
+  #[serde(flatten)]
+  extra: TomlTable,
+}
+
+#[derive(Debug)]
+struct GlobalConfigState {
+  path: std::path::PathBuf,
+  existed: bool,
+  display: String,
+  file: GlobalConfigFile,
+}
+
+fn load_global_config() -> Result<GlobalConfigState> {
+  let path = config::global_config_path()?;
+  let existed = path.exists();
+  let display = path.display().to_string();
+
+  let file = if existed {
+    let raw = fs::read_to_string(&path)
+      .with_context(|| format!("failed to read {}", path.display()))?;
+    if raw.trim().is_empty() {
+      GlobalConfigFile::default()
+    } else {
+      toml::from_str::<GlobalConfigFile>(&raw)
+        .with_context(|| format!("invalid TOML in {}", path.display()))?
+    }
+  } else {
+    GlobalConfigFile::default()
+  };
+
+  Ok(GlobalConfigState {
+    path,
+    existed,
+    display,
+    file,
+  })
+}
+
+fn write_global_config(state: &GlobalConfigState) -> Result<()> {
+  if let Some(parent) = state.path.parent() {
+    fs::create_dir_all(parent)
+      .with_context(|| format!("failed to create {}", parent.display()))?;
+  }
+
+  let serialized =
+    toml::to_string_pretty(&state.file).context("failed to serialize config")?;
+  fs::write(&state.path, serialized)
+    .with_context(|| format!("failed to write {}", state.path.display()))?;
+  Ok(())
+}
+
+#[derive(Debug)]
+struct ShellDefaults {
+  env: Option<Vec<String>>,
+  prompt_default: Vec<String>,
+}
+
+fn shell_defaults(cfg: &AgencyConfig) -> ShellDefaults {
+  let env_shell = std::env::var("SHELL")
+    .ok()
+    .and_then(|sh| {
+      let trimmed = sh.trim();
+      if trimmed.is_empty() {
+        None
+      } else {
+        Some(vec![trimmed.to_string()])
+      }
+    });
+
+  let prompt_default = if let Some(value) = &cfg.shell && !value.is_empty() {
+    value.clone()
+  } else if let Some(env) = &env_shell {
+    env.clone()
+  } else {
+    vec!["/bin/sh".to_string()]
+  };
+
+  ShellDefaults {
+    env: env_shell,
+    prompt_default,
+  }
+}
+
+#[derive(Debug)]
+struct EditorDefaults {
+  env: Option<Vec<String>>,
+  prompt_default: Vec<String>,
+}
+
+fn editor_defaults(cfg: &AgencyConfig) -> EditorDefaults {
+  let env_editor = config::editor_env_argv();
+  let prompt_default: Vec<String> = cfg.editor_argv();
+
+  EditorDefaults {
+    env: env_editor,
+    prompt_default,
+  }
+}
+
+fn apply_agent_choice(file: &mut GlobalConfigFile, agent: &str) {
+  file.agent = Some(agent.to_string());
+}
+
+fn apply_shell_choice(
+  file: &mut GlobalConfigFile,
+  defaults: &ShellDefaults,
+  selected: &[String],
+) {
+  if let Some(env) = &defaults.env && *selected == *env {
+    file.shell = None;
+    return;
+  }
+
+  file.shell = Some(selected.to_vec());
+}
+
+fn apply_editor_choice(
+  file: &mut GlobalConfigFile,
+  defaults: &EditorDefaults,
+  selected: &[String],
+) {
+  if let Some(env) = &defaults.env && *selected == *env {
+    file.editor = None;
+    return;
+  }
+
+  file.editor = Some(selected.to_vec());
 }
 
 fn agent_choices(agents: &BTreeMap<String, crate::config::AgentConfig>) -> (Vec<Choice>, bool) {
@@ -169,22 +221,4 @@ fn agent_choices(agents: &BTreeMap<String, crate::config::AgentConfig>) -> (Vec<
   let any_detected = choices.iter().any(|(detected, _)| *detected);
   let options = choices.into_iter().map(|(_, choice)| choice).collect();
   (options, any_detected)
-}
-
-fn read_existing_table(path: &Path) -> Result<TomlTable> {
-  if !path.exists() {
-    return Ok(TomlTable::new());
-  }
-  let raw =
-    fs::read_to_string(path).with_context(|| format!("failed to read {}", path.display()))?;
-  if raw.trim().is_empty() {
-    return Ok(TomlTable::new());
-  }
-  match toml::from_str::<TomlValue>(&raw)? {
-    TomlValue::Table(table) => Ok(table),
-    _ => Err(anyhow!(
-      "global config {} must be a TOML table",
-      path.display()
-    )),
-  }
 }

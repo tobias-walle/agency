@@ -108,17 +108,25 @@ impl AgencyConfig {
     {
       return v.clone();
     }
-    if let Ok(ed) = std::env::var("EDITOR") {
-      let ed = ed.trim();
-      if !ed.is_empty()
-        && let Ok(tokens) = shell_words::split(ed)
-        && !tokens.is_empty()
-      {
-        return tokens;
-      }
+    if let Some(tokens) = editor_env_argv() {
+      return tokens;
     }
     vec!["vi".to_string()]
   }
+}
+
+#[must_use]
+pub(crate) fn editor_env_argv() -> Option<Vec<String>> {
+  let raw = std::env::var("EDITOR").ok()?;
+  let trimmed = raw.trim();
+  if trimmed.is_empty() {
+    return None;
+  }
+  let tokens = shell_words::split(trimmed).ok()?;
+  if tokens.is_empty() {
+    return None;
+  }
+  Some(tokens)
 }
 
 // Helper to deduplicate string vectors while preserving the first occurrence
