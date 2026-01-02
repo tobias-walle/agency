@@ -1,3 +1,10 @@
+# [1.14.0](https://github.com/tobias-walle/agency/compare/v1.13.2...v1.14.0) (2026-01-02)
+
+
+### Features
+
+* allow reading task description from stdin for agency new ([c1e4a10](https://github.com/tobias-walle/agency/commit/c1e4a1005fdd2dff2f581f71baac883d1c87945d))
+
 ## [1.13.2](https://github.com/tobias-walle/agency/compare/v1.13.1...v1.13.2) (2026-01-01)
 
 
