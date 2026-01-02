@@ -14,7 +14,8 @@ pub const HELP_ITEMS: &[&str] = &[
   "Files: f",
   "Merge: m",
   "Complete: C",
-  "Open: o",
+  "Shell: o",
+  "Open: O",
   "Delete: X",
   "Quit: C-c",
 ];
