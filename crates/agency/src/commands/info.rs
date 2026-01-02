@@ -26,11 +26,13 @@ pub fn run(ctx: &AppContext) -> Result<()> {
 
   if files.is_empty() {
     println!("  No files attached.");
-    return Ok(());
+  } else {
+    let in_worktree = is_in_worktree(&ctx.paths);
+    print_files_table(&ctx.paths, &task, &files, in_worktree);
   }
 
-  let in_worktree = is_in_worktree(&ctx.paths);
-  print_files_table(&ctx.paths, &task, &files, in_worktree);
+  println!();
+  println!("Note: Do not reference agency task ID or slug in commit messages.");
 
   Ok(())
 }
