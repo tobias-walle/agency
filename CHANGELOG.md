@@ -1,3 +1,15 @@
+# [1.15.0](https://github.com/tobias-walle/agency/compare/v1.14.0...v1.15.0) (2026-01-02)
+
+
+### Bug Fixes
+
+* handle empty task list and show description in attach --follow ([00c4831](https://github.com/tobias-walle/agency/commit/00c4831a36d6f50bd50202343beee300a3622caa))
+
+
+### Features
+
+* improve tmux server handling and add daemon status command ([47da43e](https://github.com/tobias-walle/agency/commit/47da43e3015f0ae74a0871487e1608fa10c78cbd))
+
 # [1.14.0](https://github.com/tobias-walle/agency/compare/v1.13.2...v1.14.0) (2026-01-02)
 
 
