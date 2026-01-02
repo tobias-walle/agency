@@ -43,24 +43,48 @@ pub fn run(ctx: &AppContext) -> Result<()> {
   anstream::println!();
 
   // Ask for preferred shell command (argv split via shell-words)
+  let shell_from_config = ctx.config.shell.clone();
+  let env_shell_argv: Option<Vec<String>> = if let Ok(sh) = std::env::var("SHELL") {
+    let trimmed = sh.trim();
+    if trimmed.is_empty() {
+      None
+    } else {
+      Some(vec![trimmed.to_string()])
+    }
+  } else {
+    None
+  };
   let shell_prompt = texts::setup::shell_prompt();
   // Use currently configured value (or env/SHELL, or /bin/sh) as default
-  let default_shell_argv: Vec<String> = if let Some(v) = &ctx.config.shell
-    && !v.is_empty()
-  {
-    v.clone()
-  } else if let Ok(sh) = std::env::var("SHELL")
-    && !sh.trim().is_empty()
-  {
-    vec![sh]
-  } else {
-    vec!["/bin/sh".to_string()]
-  };
+  let default_shell_argv: Vec<String> =
+    if let Some(value) = &shell_from_config && !value.is_empty() {
+      value.clone()
+    } else if let Some(env) = &env_shell_argv {
+      env.clone()
+    } else {
+      vec!["/bin/sh".to_string()]
+    };
   let shell_argv = wizard.shell_words(&shell_prompt, &default_shell_argv)?;
   anstream::println!();
 
   // Ask for preferred editor command (argv split via shell-words)
   let editor_prompt = texts::setup::editor_prompt();
+  let env_editor_argv: Option<Vec<String>> = if let Ok(ed) = std::env::var("EDITOR") {
+    let trimmed = ed.trim();
+    if trimmed.is_empty() {
+      None
+    } else if let Ok(tokens) = shell_words::split(trimmed) {
+      if tokens.is_empty() {
+        None
+      } else {
+        Some(tokens)
+      }
+    } else {
+      None
+    }
+  } else {
+    None
+  };
   let default_editor_argv: Vec<String> = ctx.config.editor_argv();
   let editor_argv = wizard.shell_words(&editor_prompt, &default_editor_argv)?;
   anstream::println!();
@@ -74,14 +98,38 @@ pub fn run(ctx: &AppContext) -> Result<()> {
     "agent".to_string(),
     TomlValue::String(default_agent.clone()),
   );
-  table.insert(
-    "shell".to_string(),
-    TomlValue::Array(shell_argv.into_iter().map(TomlValue::String).collect()),
-  );
-  table.insert(
-    "editor".to_string(),
-    TomlValue::Array(editor_argv.into_iter().map(TomlValue::String).collect()),
-  );
+  if let Some(env_shell) = &env_shell_argv
+    && shell_argv == *env_shell
+  {
+    table.remove("shell");
+  } else {
+    table.insert(
+      "shell".to_string(),
+      TomlValue::Array(
+        shell_argv
+          .clone()
+          .into_iter()
+          .map(TomlValue::String)
+          .collect(),
+      ),
+    );
+  }
+  if let Some(env_editor) = &env_editor_argv
+    && editor_argv == *env_editor
+  {
+    table.remove("editor");
+  } else {
+    table.insert(
+      "editor".to_string(),
+      TomlValue::Array(
+        editor_argv
+          .clone()
+          .into_iter()
+          .map(TomlValue::String)
+          .collect(),
+      ),
+    );
+  }
 
   let data = TomlValue::Table(table);
   let serialized = toml::to_string_pretty(&data).context("failed to serialize config")?;

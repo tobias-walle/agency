@@ -34,6 +34,14 @@ fn setup_creates_global_config_via_wizard() -> Result<()> {
       !data.contains("keybindings"),
       "no keybinding overrides present by default: {data}"
     );
+    assert!(
+      data.contains("shell = [\"/bin/sh\"]"),
+      "shell default should be pinned when SHELL is unset: {data}"
+    );
+    assert!(
+      !data.contains("editor ="),
+      "default editor should not create override: {data}"
+    );
     Ok(())
   })
 }
@@ -73,6 +81,10 @@ include = ["scripts"]
     assert!(
       data.contains("[bootstrap]"),
       "unrelated keys must be preserved when rewriting config: {data}"
+    );
+    assert!(
+      !data.contains("editor ="),
+      "default editor should not create override: {data}"
     );
     Ok(())
   })
