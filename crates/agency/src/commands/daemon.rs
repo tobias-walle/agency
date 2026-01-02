@@ -52,7 +52,7 @@ pub fn start() -> Result<()> {
     if std::fs::metadata(&socket).is_ok() {
       info!("Started daemon at {}", socket.display());
       // Ensure tmux server is running
-      tmux::ensure_server(&cfg)?;
+      tmux::ensure_server_inherit_stderr(&cfg)?;
       return Ok(());
     }
     thread::sleep(Duration::from_millis(50));
@@ -161,7 +161,7 @@ pub fn restart(ctx: &AppContext, yes: bool) -> Result<()> {
   start()?;
 
   // Ensure tmux server is running (already handled by start(), but explicit for clarity)
-  tmux::ensure_server(&ctx.config)?;
+  tmux::ensure_server_inherit_stderr(&ctx.config)?;
 
   Ok(())
 }

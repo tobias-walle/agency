@@ -113,6 +113,16 @@ fn wait_for_server_ready(cfg: &AgencyConfig, timeout: Duration) -> Result<()> {
   anyhow::bail!("tmux server did not become ready within {timeout:?}: {last_stderr}");
 }
 
+fn guard_session_exited_immediately(cfg: &AgencyConfig) -> Result<()> {
+  let sock = tmux_socket_path(cfg);
+  anyhow::bail!(
+    "tmux guard session exited immediately after start. \
+This usually indicates a tmux configuration issue. \
+Try running `tmux -S {}` manually or temporarily disabling your tmux config.",
+    sock.display()
+  );
+}
+
 /// Ensure a dedicated tmux server is running on our socket by maintaining a
 /// hidden guard session.
 ///
@@ -126,16 +136,7 @@ pub fn ensure_server(cfg: &AgencyConfig) -> Result<()> {
   cleanup_stale_socket(cfg);
 
   // If guard session exists, server is already up
-  if std::process::Command::new("tmux")
-    .args(tmux_args_base(cfg))
-    .arg("has-session")
-    .arg("-t")
-    .arg(GUARD_SESSION)
-    .stdout(std::process::Stdio::null())
-    .stderr(std::process::Stdio::null())
-    .status()
-    .is_ok_and(|st| st.success())
-  {
+  if is_server_running(cfg) {
     return Ok(());
   }
 
@@ -151,16 +152,7 @@ pub fn ensure_server(cfg: &AgencyConfig) -> Result<()> {
 
   if !output.status.success() {
     // If new-session failed, recheck if guard exists (race condition)
-    if std::process::Command::new("tmux")
-      .args(tmux_args_base(cfg))
-      .arg("has-session")
-      .arg("-t")
-      .arg(GUARD_SESSION)
-      .stdout(std::process::Stdio::null())
-      .stderr(std::process::Stdio::null())
-      .status()
-      .is_ok_and(|st| st.success())
-    {
+    if is_server_running(cfg) {
       return Ok(());
     }
 
@@ -168,8 +160,65 @@ pub fn ensure_server(cfg: &AgencyConfig) -> Result<()> {
     anyhow::bail!("failed to create tmux guard session: {}", stderr.trim());
   }
 
+  if !is_server_running(cfg) {
+    return guard_session_exited_immediately(cfg);
+  }
+
   // Wait for the server to become responsive
   wait_for_server_ready(cfg, SERVER_READY_TIMEOUT)
+}
+
+/// Ensure tmux server is running and allow tmux stderr to pass through
+/// to the parent process. This is intended for explicit daemon start/restart
+/// commands to aid debugging, while other code paths keep tmux output hidden.
+///
+/// # Errors
+/// Returns an error if the socket directory cannot be created or the server fails to start.
+pub fn ensure_server_inherit_stderr(cfg: &AgencyConfig) -> Result<()> {
+  ensure_socket_directory(cfg)?;
+  cleanup_stale_socket(cfg);
+
+  if is_server_running(cfg) {
+    return Ok(());
+  }
+
+  let new_session_status = std::process::Command::new("tmux")
+    .args(tmux_args_base(cfg))
+    .arg("new-session")
+    .arg("-d")
+    .arg("-s")
+    .arg(GUARD_SESSION)
+    .stdout(std::process::Stdio::null())
+    .status()
+    .context("failed to spawn tmux new-session")?;
+  if !new_session_status.success() {
+    if is_server_running(cfg) {
+      return Ok(());
+    }
+    anyhow::bail!("failed to create tmux guard session");
+  }
+
+  if !is_server_running(cfg) {
+    return guard_session_exited_immediately(cfg);
+  }
+
+  let start = Instant::now();
+  let mut delay_ms = 10u64;
+  let max_delay_ms = 200u64;
+  while start.elapsed() < SERVER_READY_TIMEOUT {
+    let ready_status = std::process::Command::new("tmux")
+      .args(tmux_args_base(cfg))
+      .arg("list-sessions")
+      .stdout(std::process::Stdio::null())
+      .status();
+    if let Ok(status) = ready_status && status.success() {
+      return Ok(());
+    }
+    std::thread::sleep(Duration::from_millis(delay_ms));
+    delay_ms = (delay_ms * 2).min(max_delay_ms);
+  }
+
+  anyhow::bail!("tmux server did not become ready within {SERVER_READY_TIMEOUT:?}")
 }
 
 /// Check if the tmux server is running by checking for the guard session.
