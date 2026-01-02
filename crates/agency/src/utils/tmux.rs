@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
 
@@ -28,78 +29,209 @@ pub fn tmux_args_base(cfg: &AgencyConfig) -> Vec<String> {
   vec!["-S".to_string(), sock.display().to_string()]
 }
 
-/// Ensure a dedicated tmux server is running on our socket by maintaining a
-/// hidden guard session. Creates the socket directory (0700) if needed.
-pub fn ensure_server(cfg: &AgencyConfig) -> Result<()> {
+const GUARD_SESSION: &str = "__agency_guard__";
+const SERVER_READY_TIMEOUT: Duration = Duration::from_secs(2);
+
+/// Ensure the socket directory exists with proper permissions (0700).
+///
+/// # Errors
+/// Returns an error if the directory cannot be created or permissions cannot be set.
+fn ensure_socket_directory(cfg: &AgencyConfig) -> Result<()> {
   use std::os::unix::fs::PermissionsExt;
+
   let sock = tmux_socket_path(cfg);
-  if let Some(dir) = sock.parent() {
-    let _ = std::fs::create_dir_all(dir);
-    let _ = std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700));
+  let Some(dir) = sock.parent() else {
+    return Ok(());
+  };
+
+  std::fs::create_dir_all(dir)
+    .with_context(|| format!("failed to create socket directory: {}", dir.display()))?;
+
+  std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700))
+    .with_context(|| format!("failed to set permissions on socket directory: {}", dir.display()))?;
+
+  Ok(())
+}
+
+/// Remove stale socket file if it exists but the server isn't running.
+/// This is best-effort and won't fail if something goes wrong.
+fn cleanup_stale_socket(cfg: &AgencyConfig) {
+  let sock = tmux_socket_path(cfg);
+  if !sock.exists() {
+    return;
   }
-  let guard = "__agency_guard__";
-  // If guard exists, server is up
-  if let Ok(st) = std::process::Command::new("tmux")
+
+  // Try to check if server is responsive
+  let responsive = std::process::Command::new("tmux")
+    .args(tmux_args_base(cfg))
+    .arg("list-sessions")
+    .stdout(std::process::Stdio::null())
+    .stderr(std::process::Stdio::null())
+    .status()
+    .is_ok_and(|st| st.success());
+
+  if !responsive {
+    // Socket exists but server isn't responding - remove stale socket
+    let _ = std::fs::remove_file(&sock);
+  }
+}
+
+/// Wait for the tmux server to become responsive.
+///
+/// # Errors
+/// Returns an error with captured stderr if the server doesn't respond within the timeout.
+fn wait_for_server_ready(cfg: &AgencyConfig, timeout: Duration) -> Result<()> {
+  let start = Instant::now();
+  let mut delay_ms = 10u64;
+  let max_delay_ms = 200u64;
+  let mut last_stderr = String::new();
+
+  while start.elapsed() < timeout {
+    let output = std::process::Command::new("tmux")
+      .args(tmux_args_base(cfg))
+      .arg("list-sessions")
+      .stdout(std::process::Stdio::null())
+      .output();
+
+    match output {
+      Ok(out) if out.status.success() => return Ok(()),
+      Ok(out) => {
+        last_stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
+      }
+      Err(err) => {
+        last_stderr = err.to_string();
+      }
+    }
+
+    std::thread::sleep(Duration::from_millis(delay_ms));
+    delay_ms = (delay_ms * 2).min(max_delay_ms);
+  }
+
+  if last_stderr.is_empty() {
+    anyhow::bail!("tmux server did not become ready within {timeout:?}");
+  }
+  anyhow::bail!("tmux server did not become ready within {timeout:?}: {last_stderr}");
+}
+
+/// Ensure a dedicated tmux server is running on our socket by maintaining a
+/// hidden guard session.
+///
+/// # Errors
+/// Returns an error if the socket directory cannot be created or the server fails to start.
+pub fn ensure_server(cfg: &AgencyConfig) -> Result<()> {
+  // Create socket directory with proper permissions
+  ensure_socket_directory(cfg)?;
+
+  // Clean up stale socket if present
+  cleanup_stale_socket(cfg);
+
+  // If guard session exists, server is already up
+  if std::process::Command::new("tmux")
     .args(tmux_args_base(cfg))
     .arg("has-session")
     .arg("-t")
-    .arg(guard)
+    .arg(GUARD_SESSION)
+    .stdout(std::process::Stdio::null())
     .stderr(std::process::Stdio::null())
     .status()
-    && st.success()
+    .is_ok_and(|st| st.success())
   {
     return Ok(());
   }
+
   // Create a detached guard session (starts server if needed)
-  let create = std::process::Command::new("tmux")
+  let output = std::process::Command::new("tmux")
     .args(tmux_args_base(cfg))
     .arg("new-session")
     .arg("-d")
     .arg("-s")
-    .arg(guard)
-    .stderr(std::process::Stdio::null())
-    .status()
-    .context("tmux new-session (guard) failed")?;
-  if create.success() {
-    return Ok(());
+    .arg(GUARD_SESSION)
+    .output()
+    .context("failed to spawn tmux new-session")?;
+
+  if !output.status.success() {
+    // If new-session failed, recheck if guard exists (race condition)
+    if std::process::Command::new("tmux")
+      .args(tmux_args_base(cfg))
+      .arg("has-session")
+      .arg("-t")
+      .arg(GUARD_SESSION)
+      .stdout(std::process::Stdio::null())
+      .stderr(std::process::Stdio::null())
+      .status()
+      .is_ok_and(|st| st.success())
+    {
+      return Ok(());
+    }
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    anyhow::bail!("failed to create tmux guard session: {}", stderr.trim());
   }
-  // If new-session failed (could be duplicate during a race), recheck
-  if let Ok(st2) = std::process::Command::new("tmux")
-    .args(tmux_args_base(cfg))
-    .arg("has-session")
-    .arg("-t")
-    .arg(guard)
-    .stderr(std::process::Stdio::null())
-    .status()
-    && st2.success()
-  {
-    return Ok(());
-  }
-  anyhow::bail!("tmux server not reachable on configured socket")
+
+  // Wait for the server to become responsive
+  wait_for_server_ready(cfg, SERVER_READY_TIMEOUT)
 }
 
 /// Check if the tmux server is running by checking for the guard session.
 pub fn is_server_running(cfg: &AgencyConfig) -> bool {
-  let guard = "__agency_guard__";
   std::process::Command::new("tmux")
     .args(tmux_args_base(cfg))
     .arg("has-session")
     .arg("-t")
-    .arg(guard)
+    .arg(GUARD_SESSION)
     .stdout(std::process::Stdio::null())
     .stderr(std::process::Stdio::null())
     .status()
     .is_ok_and(|st| st.success())
 }
 
-/// Kill the tmux server on our socket. Silently ignores if server isn't running.
-pub fn kill_server(cfg: &AgencyConfig) {
-  // Suppress stderr to avoid confusing "no server running" messages
-  let _ = std::process::Command::new("tmux")
+/// Stop the tmux server on our socket.
+///
+/// # Errors
+/// Returns an error if the server fails to stop (when `wait` is true and server still responds).
+pub fn stop_server(cfg: &AgencyConfig, wait: bool) -> Result<()> {
+  let output = std::process::Command::new("tmux")
     .args(tmux_args_base(cfg))
     .arg("kill-server")
-    .stderr(std::process::Stdio::null())
-    .status();
+    .output()
+    .context("failed to run tmux kill-server")?;
+
+  // Ignore "no server running" errors - that's fine
+  if !output.status.success() {
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    if !stderr.contains("no server running") {
+      anyhow::bail!("tmux kill-server failed: {}", stderr.trim());
+    }
+  }
+
+  if !wait {
+    return Ok(());
+  }
+
+  // Wait for server to stop responding (more reliable than checking socket file)
+  let start = Instant::now();
+  let timeout = Duration::from_secs(5);
+
+  while start.elapsed() < timeout {
+    // Check if server is still responding
+    let still_running = std::process::Command::new("tmux")
+      .args(tmux_args_base(cfg))
+      .arg("list-sessions")
+      .stdout(std::process::Stdio::null())
+      .stderr(std::process::Stdio::null())
+      .status()
+      .is_ok_and(|st| st.success());
+
+    if !still_running {
+      // Server is down - clean up stale socket if present
+      let sock = tmux_socket_path(cfg);
+      let _ = std::fs::remove_file(&sock);
+      return Ok(());
+    }
+    std::thread::sleep(Duration::from_millis(50));
+  }
+
+  anyhow::bail!("tmux server still running after kill-server")
 }
 
 pub fn session_name(task_id: u32, slug: &str) -> String {
