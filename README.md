@@ -57,12 +57,17 @@ Teach your AI coding agent how to use Agency by installing the Agency skill. Onc
 /plugin install agency@agency
 ```
 
-### Codex CLI
+```bash
+# Alternative: install via Agency CLI
+agency skill install
+# When prompted, select: "Claude (~/.claude/skills)"
+```
+
+### Codex CLI and Others
 
 ```bash
-git clone --depth 1 https://github.com/tobias-walle/agency /tmp/agency && \
-  cp -r /tmp/agency/skills/agency ~/.codex/skills/ && \
-  rm -rf /tmp/agency
+agency skill install
+# When prompted, select: "Codex (~/.codex/skills)" or a custom path
 ```
 
 ## Configuration

@@ -159,6 +159,11 @@ enum Commands {
   Defaults {},
   /// Garbage-collect orphaned branches/worktrees (no task)
   Gc {},
+  /// Manage external CLI skills
+  Skill {
+    #[command(subcommand)]
+    cmd: SkillCmd,
+  },
   /// Daemon control commands
   Daemon {
     #[command(subcommand)]
@@ -171,6 +176,12 @@ enum Commands {
   },
   /// Show current task context and attached files
   Info {},
+}
+
+#[derive(Debug, Subcommand)]
+enum SkillCmd {
+  /// Install the Agency skill for external CLIs
+  Install {},
 }
 
 #[derive(Debug, Subcommand)]
@@ -348,6 +359,7 @@ fn daemon_required(cmd: Option<&Commands>) -> DaemonRequirement {
     Some(Commands::Daemon { .. }) => DaemonRequirement::None,
     Some(Commands::Files { .. }) => DaemonRequirement::None,
     Some(Commands::Info {}) => DaemonRequirement::None,
+    Some(Commands::Skill { .. }) => DaemonRequirement::None,
   }
 }
 
@@ -481,6 +493,9 @@ fn run_command(ctx: &AppContext, cli: Cli) -> Result<()> {
       FilesCmd::Edit { task, file } => commands::files::edit::run(ctx, &task, &file),
     },
     Some(Commands::Info {}) => commands::info::run(ctx),
+    Some(Commands::Skill { cmd }) => match cmd {
+      SkillCmd::Install {} => commands::skill::install::run(ctx),
+    },
     None => run_default(ctx),
   }
 }
