@@ -1,3 +1,12 @@
+# [1.17.0](https://github.com/tobias-walle/agency/compare/v1.16.1...v1.17.0) (2026-01-03)
+
+
+### Features
+
+* improve generated config usability ([278ab3e](https://github.com/tobias-walle/agency/commit/278ab3ea503467f61b6d06e8407ee3a23c2fecc8))
+* increment skill version ([c157283](https://github.com/tobias-walle/agency/commit/c157283156ad307261bdb987a93d6b4f698896d9))
+* swap shell/open TUI keybindings and add shell to help ([38cd417](https://github.com/tobias-walle/agency/commit/38cd4171d9f3f1963d6960420b2ca92bf4bde3bc))
+
 ## [1.16.1](https://github.com/tobias-walle/agency/compare/v1.16.0...v1.16.1) (2026-01-02)
 
 
