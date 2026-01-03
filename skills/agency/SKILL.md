@@ -43,6 +43,14 @@ ag tasks                       # Short alias
 
 Output columns: ID, SLUG, STATUS, UNCOMMITTED, COMMITS, BASE, AGENT
 
+**Status codes:**
+
+- **Draft** - Task file exists but not started (no worktree or session created yet)
+- **Stopped** - Worktree exists but session is not running (can be restarted with `agency start`)
+- **Running** - Agent is actively processing/generating output
+- **Idle** - Session exists but agent is waiting for input (task may be complete or paused)
+- **Exited** - Session has terminated (agent finished or crashed)
+
 ### Merge and Cleanup
 
 ```bash
@@ -87,12 +95,32 @@ agency info                              # Show task context and files (inside s
 
 When files are attached, agents can run `agency info` to get the context. Files are accessible insie task worktrees via `.agency/local/files/`.
 
-Just SHOULD use files:
+**You SHOULD attach files when:**
 
-- Then the user mentions relevant files associated with the tasks
-- Then there are relevant documents (like markdown plans) that are not version controlled or committed in the base branch of the task, they should be included like this.
+- The user mentions relevant files associated with the task
+- You have created plans, specifications, or design documents that are not committed to the repository
+- There are screenshots, diagrams, or reference materials relevant to the task
+- The task requires context that exists outside the codebase
 
-E.g. the user created a plan that is not committed and asks you to delegate the task to multiple agency tasks. Then you would attach the plan to each delegated task.
+**Example:** If you created a markdown plan and want to delegate work to multiple agency tasks, attach that plan to each task so the spawned agents have the full context.
+
+## When to Use Parallel Tasks
+
+**Only run tasks in parallel if they are truly independent.** Tasks that modify the same files or depend on each other's output will cause merge conflicts or broken code.
+
+**Good candidates for parallel tasks:**
+
+- Features in completely separate parts of the codebase
+- Independent bug fixes in different modules
+- Adding tests for unrelated functionality
+
+**Do NOT run in parallel:**
+
+- Task B depends on Task A's output (run sequentially instead)
+- Tasks that modify the same files or modules
+- Refactoring that touches shared code
+
+**When in doubt, run tasks sequentially.** Merge conflicts are painful to resolve and waste more time than running tasks one after another.
 
 ## Quick Workflow Example
 
