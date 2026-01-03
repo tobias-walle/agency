@@ -116,7 +116,15 @@ fn write_global_config(state: &GlobalConfigState) -> Result<()> {
 
   let serialized =
     toml::to_string_pretty(&state.file).context("failed to serialize config")?;
-  fs::write(&state.path, serialized)
+
+  // For new config files, append the commented template for discoverability
+  let content = if state.existed {
+    serialized
+  } else {
+    format!("{}\n{}", serialized.trim_end(), config::config_template())
+  };
+
+  fs::write(&state.path, content)
     .with_context(|| format!("failed to write {}", state.path.display()))?;
   Ok(())
 }

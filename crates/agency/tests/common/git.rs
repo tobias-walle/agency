@@ -120,7 +120,7 @@ impl TestEnv {
   }
 
   pub fn setup_git_repo(&self) -> anyhow::Result<()> {
-    let _ = git::init(self.path())?;
+    self.git_stdout(&["init"])?;
     Ok(())
   }
 

@@ -55,6 +55,8 @@ printf '%s\n' 'Automated test' >\"$file\"
         ("PATH", Some(path_value)),
         ("XDG_RUNTIME_DIR", Some(runtime_dir.display().to_string())),
         ("EDITOR", Some(editor_cmd.to_string())),
+        // Set SHELL empty to ensure tests get predictable defaults (/bin/sh fallback)
+        ("SHELL", Some(String::new())),
         ("AGENCY_NO_AUTOSTART", Some("1".to_string())),
         ("AGENCY_SOCKET_PATH", Some(uds_path.display().to_string())),
         (
@@ -179,6 +181,20 @@ printf '%s\n' 'Automated test' >\"$file\"
   pub fn agency(&self) -> Result<Command> {
     let mut cmd = Command::cargo_bin("agency")?;
     cmd.current_dir(self.path());
+    // Set isolated paths - these override any inherited values but don't clear other env vars
+    // which allows tests using with_vars to still work
+    cmd.env("HOME", self.path());
+    // Only set XDG_CONFIG_HOME if not already set (by with_vars in some tests)
+    if std::env::var("XDG_CONFIG_HOME").is_err() {
+      cmd.env("XDG_CONFIG_HOME", self.xdg_home_dir());
+    }
+    cmd.env("XDG_RUNTIME_DIR", self.runtime_dir());
+    // Set EDITOR fallback so default editor choice doesn't get saved (only if not set by test)
+    if std::env::var("EDITOR").is_err() {
+      cmd.env("EDITOR", "vi");
+    }
+    // Remove SHELL so tests get predictable /bin/sh fallback
+    cmd.env_remove("SHELL");
     Ok(cmd)
   }
 

@@ -8,6 +8,11 @@ use predicates::prelude::*;
 fn setup_creates_global_config_via_wizard() -> Result<()> {
   TestEnv::run(|env| -> Result<()> {
     let config_home = env.xdg_home_dir().to_path_buf();
+    // Initialize a git repo so agency doesn't find the parent agency repo
+    env.git().args(["init"]).status()?;
+    env.git().args(["config", "user.email", "test@test.com"]).status()?;
+    env.git().args(["config", "user.name", "Test"]).status()?;
+    env.git().args(["commit", "--allow-empty", "-m", "init"]).status()?;
     env.add_xdg_home_bin("claude", "#!/usr/bin/env bash\nexit 0\n")?;
 
     env
@@ -38,8 +43,12 @@ fn setup_creates_global_config_via_wizard() -> Result<()> {
       data.contains("shell = [\"/bin/sh\"]"),
       "shell default should be pinned when SHELL is unset: {data}"
     );
+    // Check that no uncommented editor line exists (template has commented # editor = ...)
+    let has_editor_setting = data
+      .lines()
+      .any(|line| line.trim_start().starts_with("editor ="));
     assert!(
-      !data.contains("editor ="),
+      !has_editor_setting,
       "default editor should not create override: {data}"
     );
     Ok(())
@@ -82,8 +91,12 @@ include = ["scripts"]
       data.contains("[bootstrap]"),
       "unrelated keys must be preserved when rewriting config: {data}"
     );
+    // Check that no uncommented editor line exists
+    let has_editor_setting = data
+      .lines()
+      .any(|line| line.trim_start().starts_with("editor ="));
     assert!(
-      !data.contains("editor ="),
+      !has_editor_setting,
       "default editor should not create override: {data}"
     );
     Ok(())

@@ -3,13 +3,38 @@ use std::path::{Path, PathBuf};
 
 use crate::utils::command::Command;
 use anyhow::{Context, Result};
+use owo_colors::OwoColorize as _;
 use serde::Deserialize;
 use std::collections::BTreeMap;
 use toml::Value as TomlValue;
 
+/// Known top-level config keys.
+const KNOWN_TOP_LEVEL_KEYS: &[&str] = &["agent", "agents", "daemon", "bootstrap", "shell", "editor"];
+
+/// Known keys within `[daemon]` section.
+const KNOWN_DAEMON_KEYS: &[&str] = &["socket_path", "tmux_socket_path"];
+
+/// Known keys within `[bootstrap]` section.
+const KNOWN_BOOTSTRAP_KEYS: &[&str] = &["include", "exclude", "cmd"];
+
+/// Known keys within each `[agents.<name>]` section.
+const KNOWN_AGENT_KEYS: &[&str] = &["cmd"];
+
 // Embed repository defaults
 const DEFAULT_TOML: &str =
   include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/defaults/agency.toml"));
+
+/// Embedded config template with all options commented out for documentation.
+const CONFIG_TEMPLATE: &str =
+  include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/defaults/agency.template.toml"));
+
+/// Returns the config template with all options commented out.
+///
+/// Use this when generating new config files to show users available options.
+#[must_use]
+pub fn config_template() -> &'static str {
+  CONFIG_TEMPLATE
+}
 
 /// Resolve the global config file path.
 ///
@@ -236,6 +261,76 @@ fn merge_values(base: &mut TomlValue, overlay: TomlValue, path: &str) {
   }
 }
 
+/// Warn about unknown keys in a parsed TOML config file.
+///
+/// Checks top-level keys and nested sections against known key lists.
+/// Unknown keys are logged as warnings to help users catch typos.
+fn warn_unknown_keys(val: &TomlValue, file_path: &Path) {
+  let TomlValue::Table(table) = val else {
+    return;
+  };
+
+  for key in table.keys() {
+    if !KNOWN_TOP_LEVEL_KEYS.contains(&key.as_str()) {
+      eprintln!(
+        "{}: unknown config key '{}' in {} (did you mean one of: {}?)",
+        "warning".yellow(),
+        key,
+        file_path.display(),
+        KNOWN_TOP_LEVEL_KEYS.join(", ")
+      );
+    }
+  }
+
+  if let Some(TomlValue::Table(daemon)) = table.get("daemon") {
+    for key in daemon.keys() {
+      if !KNOWN_DAEMON_KEYS.contains(&key.as_str()) {
+        eprintln!(
+          "{}: unknown config key 'daemon.{}' in {} (known keys: {})",
+          "warning".yellow(),
+          key,
+          file_path.display(),
+          KNOWN_DAEMON_KEYS.join(", ")
+        );
+      }
+    }
+  }
+
+  if let Some(TomlValue::Table(bootstrap)) = table.get("bootstrap") {
+    for key in bootstrap.keys() {
+      if !KNOWN_BOOTSTRAP_KEYS.contains(&key.as_str()) {
+        eprintln!(
+          "{}: unknown config key 'bootstrap.{}' in {} (known keys: {})",
+          "warning".yellow(),
+          key,
+          file_path.display(),
+          KNOWN_BOOTSTRAP_KEYS.join(", ")
+        );
+      }
+    }
+  }
+
+  if let Some(TomlValue::Table(agents)) = table.get("agents") {
+    for (agent_name, agent_val) in agents {
+      let TomlValue::Table(agent_table) = agent_val else {
+        continue;
+      };
+      for key in agent_table.keys() {
+        if !KNOWN_AGENT_KEYS.contains(&key.as_str()) {
+          eprintln!(
+            "{}: unknown config key 'agents.{}.{}' in {} (known keys: {})",
+            "warning".yellow(),
+            agent_name,
+            key,
+            file_path.display(),
+            KNOWN_AGENT_KEYS.join(", ")
+          );
+        }
+      }
+    }
+  }
+}
+
 /// Load and merge configuration from defaults, global, and project files.
 ///
 /// # Errors
@@ -253,6 +348,7 @@ pub fn load_config(cwd: &Path) -> Result<AgencyConfig> {
       .with_context(|| format!("failed to read {}", global_path.display()))?;
     let val: TomlValue = toml::from_str(&data)
       .with_context(|| format!("invalid TOML in {}", global_path.display()))?;
+    warn_unknown_keys(&val, &global_path);
     merge_values(&mut merged, val, "");
   }
 
@@ -263,6 +359,7 @@ pub fn load_config(cwd: &Path) -> Result<AgencyConfig> {
       .with_context(|| format!("failed to read {}", project_cfg.display()))?;
     let val: TomlValue = toml::from_str(&data)
       .with_context(|| format!("invalid TOML in {}", project_cfg.display()))?;
+    warn_unknown_keys(&val, &project_cfg);
     merge_values(&mut merged, val, "");
   }
 

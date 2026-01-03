@@ -3,7 +3,7 @@ use std::path::Path;
 
 use anyhow::{Context, Result};
 
-use crate::config::AppContext;
+use crate::config::{self, AppContext};
 use crate::log_info;
 use crate::utils::log::t;
 
@@ -61,17 +61,25 @@ pub fn run(ctx: &AppContext, agent: Option<&str>, yes: bool) -> Result<()> {
 }
 
 fn ensure_config(path: &Path, agent: Option<&str>) -> Result<()> {
+  let existed = path.exists();
   if let Some(a) = agent {
-    let content = if path.exists() {
+    let content = if existed {
       fs::read_to_string(path)?
     } else {
       String::new()
     };
     let mut doc = content.parse::<toml_edit::DocumentMut>()?;
     doc.insert("agent", toml_edit::value(a));
-    fs::write(path, doc.to_string()).with_context(|| format!("failed to write {}", path.display()))?;
-  } else if !path.exists() {
-    fs::write(path, b"").with_context(|| format!("failed to write {}", path.display()))?;
+    let mut output = doc.to_string();
+    // For new config files, append the commented template for discoverability
+    if !existed {
+      output = format!("{}\n{}", output.trim_end(), config::config_template());
+    }
+    fs::write(path, output).with_context(|| format!("failed to write {}", path.display()))?;
+  } else if !existed {
+    // Write the template for discoverability
+    fs::write(path, config::config_template())
+      .with_context(|| format!("failed to write {}", path.display()))?;
   }
   Ok(())
 }

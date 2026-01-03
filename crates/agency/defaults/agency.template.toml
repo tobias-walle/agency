@@ -1,0 +1,38 @@
+# Agency Configuration
+# See https://github.com/tobias-walle/agency for documentation
+
+# Default agent for new tasks. Can be overridden per task with --agent/-a
+# agent = "claude"
+
+# Shell command for `agency shell`. Defaults to $SHELL or /bin/sh
+# shell = ["zsh"]
+
+# Editor command for editing tasks. Defaults to $EDITOR or vi
+# editor = ["vim"]
+
+# Daemon configuration
+# [daemon]
+# socket_path = "/path/to/agency.sock"
+# tmux_socket_path = "/path/to/tmux.sock"
+
+# Bootstrap configuration for new worktrees
+# [bootstrap]
+# Command to run in newly created worktrees. Supports <root> placeholder.
+# cmd = ["<root>/.agency/setup.sh"]
+# Files and folders to copy to new worktrees (in addition to gitignored files)
+# include = []
+# Files and folders to never copy
+# exclude = [".git", ".agency"]
+
+# Agent configurations
+# [agents.claude]
+# cmd = ["claude", "$AGENCY_TASK"]
+
+# [agents.codex]
+# cmd = ["codex", "--add-dir", "$AGENCY_ROOT", "$AGENCY_TASK"]
+
+# [agents.gemini]
+# cmd = ["gemini", "$AGENCY_TASK"]
+
+# [agents.opencode]
+# cmd = ["opencode", "--prompt", "$AGENCY_TASK"]
