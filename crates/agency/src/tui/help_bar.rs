@@ -17,6 +17,7 @@ pub const HELP_ITEMS: &[&str] = &[
   "Shell: o",
   "Open: O",
   "Delete: X",
+  "Toggle Log: H",
   "Quit: C-c",
 ];
 

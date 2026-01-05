@@ -4,7 +4,9 @@ use std::time::{Duration, Instant};
 
 use anyhow::{Context, Error, Result};
 use crossbeam_channel::{Receiver, unbounded};
-use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
+use crossterm::event::{
+  self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEventKind, KeyModifiers,
+};
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
@@ -169,22 +171,30 @@ impl AppState {
     Ok(())
   }
 
-  fn draw(&self, f: &mut ratatui::Frame) {
+  fn draw(&mut self, f: &mut ratatui::Frame) {
     let help_items = self.help_items_for_mode();
     let help_lines = help_bar::layout_lines(help_items, f.area().width);
     let help_rows = help_lines.len().try_into().unwrap_or(1_u16).clamp(1, 3);
 
+    let terminal_height = f.area().height;
+    let log_height = self.command_log.effective_height(terminal_height, help_rows);
+
     let rects = ratatui::layout::Layout::vertical([
       Constraint::Fill(1),
-      Constraint::Length(7),
+      Constraint::Length(log_height),
       Constraint::Length(help_rows),
     ])
     .split(f.area());
 
+    // Store border Y position for mouse hit detection
+    self.command_log.set_border_y(rects[1].y);
+
     self
       .task_table
       .draw(f, rects[0], self.focus == Focus::Tasks);
-    self.command_log.draw(f, rects[1], self.focus == Focus::Log);
+    if log_height > 0 {
+      self.command_log.draw(f, rects[1], self.focus == Focus::Log);
+    }
     help_bar::draw_with_items(f, rects[2], help_items);
 
     if let Some(ref overlay) = self.input_overlay {
@@ -346,15 +356,24 @@ pub fn run(ctx: &AppContext) -> Result<()> {
 
   enable_raw_mode().context("enable raw mode")?;
   let mut stdout = io::stdout();
-  crossterm::execute!(stdout, crossterm::terminal::EnterAlternateScreen)
-    .context("enter alternate screen")?;
+  crossterm::execute!(
+    stdout,
+    crossterm::terminal::EnterAlternateScreen,
+    EnableMouseCapture
+  )
+  .context("enter alternate screen")?;
   let backend = CrosstermBackend::new(stdout);
   let mut terminal = Terminal::new(backend).context("create terminal")?;
 
   let res = ui_loop(&mut terminal, ctx);
 
   let out = terminal.backend_mut();
-  crossterm::execute!(out, crossterm::terminal::LeaveAlternateScreen).ok();
+  crossterm::execute!(
+    out,
+    DisableMouseCapture,
+    crossterm::terminal::LeaveAlternateScreen
+  )
+  .ok();
   disable_raw_mode().ok();
   restore_terminal_state();
   let _ = tui_unregister(ctx, std::process::id());
@@ -443,39 +462,45 @@ fn ui_loop(
       }
     }
 
-    // Handle key events
-    if event::poll(Duration::from_millis(150))?
-      && let Event::Key(key) = event::read()?
-    {
-      if key.kind == KeyEventKind::Repeat {
-        continue;
-      }
+    // Handle input events
+    if event::poll(Duration::from_millis(150))? {
+      match event::read()? {
+        Event::Key(key) => {
+          if key.kind == KeyEventKind::Repeat {
+            continue;
+          }
 
-      // Global quit
-      if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
-        break;
-      }
+          // Global quit
+          if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
+            break;
+          }
 
-      let mode = state.mode.clone();
-      match mode {
-        Mode::List => {
-          handle_list_mode(&mut state, ctx, key);
+          let mode = state.mode.clone();
+          match mode {
+            Mode::List => {
+              handle_list_mode(&mut state, ctx, key);
+            }
+            Mode::InputSlug => {
+              handle_input_mode(&mut state, ctx, key);
+            }
+            Mode::FilesOverlay(overlay) => {
+              handle_files_mode(&mut state, ctx, overlay, key);
+            }
+            Mode::FileInput(input) => {
+              handle_file_input_mode(&mut state, ctx, input, key);
+            }
+            Mode::SelectMenu(menu) => {
+              handle_menu_mode(&mut state, menu, key);
+            }
+            Mode::ConfirmDialog(dialog) => {
+              handle_confirm_mode(&mut state, ctx, dialog, key);
+            }
+          }
         }
-        Mode::InputSlug => {
-          handle_input_mode(&mut state, ctx, key);
+        Event::Mouse(mouse) => {
+          state.command_log.handle_mouse_event(mouse);
         }
-        Mode::FilesOverlay(overlay) => {
-          handle_files_mode(&mut state, ctx, overlay, key);
-        }
-        Mode::FileInput(input) => {
-          handle_file_input_mode(&mut state, ctx, input, key);
-        }
-        Mode::SelectMenu(menu) => {
-          handle_menu_mode(&mut state, menu, key);
-        }
-        Mode::ConfirmDialog(dialog) => {
-          handle_confirm_mode(&mut state, ctx, dialog, key);
-        }
+        _ => {}
       }
     }
   }
@@ -485,7 +510,7 @@ fn ui_loop(
 }
 
 fn handle_list_mode(state: &mut AppState, ctx: &AppContext, key: crossterm::event::KeyEvent) {
-  // Focus switching
+  // Focus switching and global commands
   match key.code {
     KeyCode::Char('1') => {
       state.focus = Focus::Tasks;
@@ -494,6 +519,15 @@ fn handle_list_mode(state: &mut AppState, ctx: &AppContext, key: crossterm::even
     }
     KeyCode::Char('2') => {
       state.focus = Focus::Log;
+      return;
+    }
+    KeyCode::Char('H') => {
+      // Toggle command log visibility
+      state.command_log.toggle_visibility();
+      // If hiding, switch focus to Tasks
+      if !state.command_log.is_visible() && state.focus == Focus::Log {
+        state.focus = Focus::Tasks;
+      }
       return;
     }
     _ => {}
