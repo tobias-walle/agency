@@ -1,3 +1,10 @@
+# [1.18.0](https://github.com/tobias-walle/agency/compare/v1.17.0...v1.18.0) (2026-01-05)
+
+
+### Features
+
+* make command log resizable and hideable ([abd854a](https://github.com/tobias-walle/agency/commit/abd854ad2c3a1e7c739bf60e8c211b6b5b3ff4a9))
+
 # [1.17.0](https://github.com/tobias-walle/agency/compare/v1.16.1...v1.17.0) (2026-01-03)
 
 
