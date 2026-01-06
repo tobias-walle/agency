@@ -7,7 +7,7 @@
     [
       "@semantic-release/exec",
       {
-        "prepareCmd": "cargo set-version --workspace ${nextRelease.version} && cargo update --workspace"
+        "prepareCmd": "cargo set-version --workspace ${nextRelease.version} && cargo update --workspace && jq --arg v \"${nextRelease.version}\" '.version = $v' .claude-plugin/plugin.json > .claude-plugin/plugin.json.tmp && mv .claude-plugin/plugin.json.tmp .claude-plugin/plugin.json"
       }
     ],
     ["@semantic-release/changelog", { "changelogFile": "CHANGELOG.md" }],
@@ -18,7 +18,8 @@
           "CHANGELOG.md",
           "crates/**/Cargo.toml",
           "Cargo.toml",
-          "Cargo.lock"
+          "Cargo.lock",
+          ".claude-plugin/plugin.json"
         ],
         "message": "chore(release): ${nextRelease.version}\n\n${nextRelease.notes}"
       }
