@@ -1,3 +1,6 @@
+//! Utility modules providing core infrastructure for Agency.
+//! Contains helpers for Git operations, tmux management, TTY handling, file operations, and other cross-cutting concerns.
+
 pub(crate) mod bootstrap;
 pub(crate) mod child;
 pub(crate) mod clipboard;

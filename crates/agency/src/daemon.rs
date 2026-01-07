@@ -1,3 +1,6 @@
+//! Daemon process that tracks and broadcasts project state.
+//! Manages tmux sessions, git metrics, bootstrap processes, and TUI registry while serving multiple CLI and TUI clients over Unix sockets.
+
 use crate::config::AgencyConfig;
 use crate::daemon_protocol::{
   BootstrapRequest, C2D, C2DControl, D2C, D2CControl, ProjectKey, SessionInfo, TaskInfo, TaskMeta,

@@ -1,3 +1,6 @@
+//! Terminal User Interface (TUI) components for Agency.
+//! Provides an interactive dashboard for managing tasks, sessions, and monitoring project state through a Ratatui-based interface.
+
 mod app;
 mod colors;
 mod command_log;

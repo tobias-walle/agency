@@ -1,3 +1,6 @@
+//! Command implementations for the Agency CLI.
+//! Each module corresponds to a CLI subcommand (e.g., start, stop, attach) and contains its execution logic.
+
 pub(crate) mod attach;
 pub(crate) mod bootstrap;
 pub(crate) mod branch;

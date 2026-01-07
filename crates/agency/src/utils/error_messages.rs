@@ -1,4 +1,5 @@
-/// Common error messages used across the codebase
+//! Common error messages used across the codebase.
+//! Centralizes error message strings to ensure consistency and simplify maintenance.
 
 // TTY-related errors
 pub(crate) const ATTACH_REQUIRES_TTY: &str =

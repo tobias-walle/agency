@@ -1,3 +1,6 @@
+//! Operation abstraction layer for TUI command execution.
+//! Defines a typed Operation enum that encapsulates CLI command logic, enabling the TUI to execute commands without duplicating implementation.
+
 use anyhow::Result;
 
 use crate::commands::{attach, complete, edit, merge, open, reset, rm, shell, start, stop};
