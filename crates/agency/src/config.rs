@@ -574,13 +574,15 @@ mod tests {
 
   #[test]
   fn get_agent_succeeds_when_agent_exists() {
-    let mut cfg = AgencyConfig::default();
-    cfg.agents.insert(
-      "claude".to_string(),
-      AgentConfig {
-        cmd: vec!["claude".to_string()],
-      },
-    );
+    let cfg = AgencyConfig {
+      agents: BTreeMap::from([(
+        "claude".to_string(),
+        AgentConfig {
+          cmd: vec!["claude".to_string()],
+        },
+      )]),
+      ..Default::default()
+    };
 
     let result = cfg.get_agent("claude");
     assert!(result.is_ok());
@@ -589,13 +591,15 @@ mod tests {
 
   #[test]
   fn get_agent_fails_when_agent_unknown() {
-    let mut cfg = AgencyConfig::default();
-    cfg.agents.insert(
-      "claude".to_string(),
-      AgentConfig {
-        cmd: vec!["claude".to_string()],
-      },
-    );
+    let cfg = AgencyConfig {
+      agents: BTreeMap::from([(
+        "claude".to_string(),
+        AgentConfig {
+          cmd: vec!["claude".to_string()],
+        },
+      )]),
+      ..Default::default()
+    };
 
     let result = cfg.get_agent("unknown");
     assert!(result.is_err());
@@ -606,12 +610,14 @@ mod tests {
 
   #[test]
   fn bootstrap_config_adds_hard_excludes() {
-    let mut cfg = AgencyConfig::default();
-    cfg.bootstrap = Some(BootstrapConfig {
-      include: vec![],
-      exclude: vec!["node_modules".to_string()],
-      cmd: vec![],
-    });
+    let cfg = AgencyConfig {
+      bootstrap: Some(BootstrapConfig {
+        include: vec![],
+        exclude: vec!["node_modules".to_string()],
+        cmd: vec![],
+      }),
+      ..Default::default()
+    };
 
     let result = cfg.bootstrap_config();
     assert!(result.exclude.contains(&".git".to_string()));
@@ -621,12 +627,14 @@ mod tests {
 
   #[test]
   fn bootstrap_config_deduplicates_includes() {
-    let mut cfg = AgencyConfig::default();
-    cfg.bootstrap = Some(BootstrapConfig {
-      include: vec!["file.txt".to_string(), "file.txt".to_string()],
-      exclude: vec![],
-      cmd: vec![],
-    });
+    let cfg = AgencyConfig {
+      bootstrap: Some(BootstrapConfig {
+        include: vec!["file.txt".to_string(), "file.txt".to_string()],
+        exclude: vec![],
+        cmd: vec![],
+      }),
+      ..Default::default()
+    };
 
     let result = cfg.bootstrap_config();
     assert_eq!(
@@ -641,16 +649,18 @@ mod tests {
 
   #[test]
   fn bootstrap_config_deduplicates_excludes() {
-    let mut cfg = AgencyConfig::default();
-    cfg.bootstrap = Some(BootstrapConfig {
-      include: vec![],
-      exclude: vec![
-        "node_modules".to_string(),
-        "node_modules".to_string(),
-        ".git".to_string(),
-      ],
-      cmd: vec![],
-    });
+    let cfg = AgencyConfig {
+      bootstrap: Some(BootstrapConfig {
+        include: vec![],
+        exclude: vec![
+          "node_modules".to_string(),
+          "node_modules".to_string(),
+          ".git".to_string(),
+        ],
+        cmd: vec![],
+      }),
+      ..Default::default()
+    };
 
     let result = cfg.bootstrap_config();
     assert_eq!(
