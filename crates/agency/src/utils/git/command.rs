@@ -74,3 +74,68 @@ pub fn stash_pop(workdir: &Path, stash_ref: &str) -> Result<()> {
 pub fn hard_reset_to_head_at(cwd: &Path) -> Result<()> {
   git(&["reset", "--hard"], cwd)
 }
+
+#[cfg(test)]
+mod tests {
+  use super::{hard_reset_to_head_at, stash_pop, stash_push};
+  use std::fs;
+
+  fn run_git(cwd: &std::path::Path, args: &[&str]) {
+    let status = std::process::Command::new("git")
+      .current_dir(cwd)
+      .args(args)
+      .status()
+      .expect("spawn git");
+    assert!(status.success(), "git {args:?} failed: {status:?}");
+  }
+
+  fn setup_test_repo() -> tempfile::TempDir {
+    let dir = tempfile::tempdir().expect("tmp");
+    let root = dir.path();
+    run_git(root, &["init"]);
+    run_git(root, &["config", "user.email", "test@example.com"]);
+    run_git(root, &["config", "user.name", "Tester"]);
+    run_git(root, &["config", "commit.gpgsign", "false"]);
+    fs::write(root.join("a.txt"), "one\n").unwrap();
+    run_git(root, &["add", "."]);
+    run_git(root, &["commit", "-m", "init"]);
+    dir
+  }
+
+  #[test]
+  fn stash_push_returns_none_when_no_changes() {
+    let dir = setup_test_repo();
+    let stash_ref = stash_push(dir.path(), "test stash").expect("stash");
+    assert!(stash_ref.is_none(), "expected None when no changes");
+  }
+
+  #[test]
+  fn stash_push_returns_ref_when_changes_present() {
+    let dir = setup_test_repo();
+    fs::write(dir.path().join("a.txt"), "modified\n").unwrap();
+    let stash_ref = stash_push(dir.path(), "test stash").expect("stash");
+    assert!(stash_ref.is_some(), "expected Some when changes present");
+    assert_eq!(stash_ref.unwrap(), "stash@{0}");
+  }
+
+  #[test]
+  fn stash_pop_restores_changes() {
+    let dir = setup_test_repo();
+    fs::write(dir.path().join("a.txt"), "modified\n").unwrap();
+    let stash_ref = stash_push(dir.path(), "test").expect("stash").unwrap();
+    let content_before = fs::read_to_string(dir.path().join("a.txt")).unwrap();
+    assert_eq!(content_before, "one\n", "stash should reset content");
+    stash_pop(dir.path(), &stash_ref).expect("pop");
+    let content_after = fs::read_to_string(dir.path().join("a.txt")).unwrap();
+    assert_eq!(content_after, "modified\n", "pop should restore content");
+  }
+
+  #[test]
+  fn hard_reset_to_head_at_discards_changes() {
+    let dir = setup_test_repo();
+    fs::write(dir.path().join("a.txt"), "modified\n").unwrap();
+    hard_reset_to_head_at(dir.path()).expect("reset");
+    let content = fs::read_to_string(dir.path().join("a.txt")).unwrap();
+    assert_eq!(content, "one\n", "reset should discard changes");
+  }
+}

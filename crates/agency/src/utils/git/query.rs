@@ -108,7 +108,9 @@ pub fn commits_ahead_at(repo_root: &Path, base: &str, branch: &str) -> Result<u6
 
 #[cfg(test)]
 mod tests {
-  use super::{commits_ahead_at, uncommitted_numstat_at};
+  use super::{
+    commits_ahead_at, is_fast_forward_at, rev_parse, uncommitted_numstat_at, worktree_is_clean_at,
+  };
   use std::fs;
 
   fn run_git(cwd: &std::path::Path, args: &[&str]) {
@@ -120,18 +122,23 @@ mod tests {
     assert!(status.success(), "git {args:?} failed: {status:?}");
   }
 
-  #[test]
-  fn uncommitted_numstat_reports_changes() {
+  fn setup_test_repo() -> tempfile::TempDir {
     let dir = tempfile::tempdir().expect("tmp");
     let root = dir.path();
     run_git(root, &["init"]);
     run_git(root, &["config", "user.email", "test@example.com"]);
     run_git(root, &["config", "user.name", "Tester"]);
+    run_git(root, &["config", "commit.gpgsign", "false"]);
     fs::write(root.join("a.txt"), "one\n").unwrap();
     run_git(root, &["add", "."]);
     run_git(root, &["commit", "-m", "init"]);
+    dir
+  }
 
-    // Modify: +2 lines, -0 lines (depending on diff algorithm)
+  #[test]
+  fn uncommitted_numstat_reports_changes() {
+    let dir = setup_test_repo();
+    let root = dir.path();
     fs::write(root.join("a.txt"), "one\ntwo\nthree\n").unwrap();
     let (a, d) = uncommitted_numstat_at(root).expect("numstat");
     assert!(a >= 1, "expected at least 1 addition, got {a}");
@@ -139,15 +146,17 @@ mod tests {
   }
 
   #[test]
+  fn uncommitted_numstat_reports_zero_for_clean_tree() {
+    let dir = setup_test_repo();
+    let (a, d) = uncommitted_numstat_at(dir.path()).expect("numstat");
+    assert_eq!(a, 0, "expected 0 additions");
+    assert_eq!(d, 0, "expected 0 deletions");
+  }
+
+  #[test]
   fn commits_ahead_counts_range() {
-    let dir = tempfile::tempdir().expect("tmp");
+    let dir = setup_test_repo();
     let root = dir.path();
-    run_git(root, &["init"]);
-    run_git(root, &["config", "user.email", "test@example.com"]);
-    run_git(root, &["config", "user.name", "Tester"]);
-    fs::write(root.join("a.txt"), "one\n").unwrap();
-    run_git(root, &["add", "."]);
-    run_git(root, &["commit", "-m", "init"]);
     run_git(root, &["checkout", "-b", "feature"]);
     fs::write(root.join("b.txt"), "two\n").unwrap();
     run_git(root, &["add", "."]);
@@ -156,5 +165,85 @@ mod tests {
       .or_else(|_| commits_ahead_at(root, "main", "feature"))
       .expect("count ahead");
     assert!(n >= 1, "expected at least 1 ahead, got {n}");
+  }
+
+  #[test]
+  fn is_fast_forward_at_true_when_ancestor() {
+    let dir = setup_test_repo();
+    let root = dir.path();
+    run_git(root, &["checkout", "-b", "feature"]);
+    fs::write(root.join("b.txt"), "two\n").unwrap();
+    run_git(root, &["add", "."]);
+    run_git(root, &["commit", "-m", "feat"]);
+    let base = if std::process::Command::new("git")
+      .current_dir(root)
+      .args(["rev-parse", "--verify", "main"])
+      .output()
+      .map(|o| o.status.success())
+      .unwrap_or(false)
+    {
+      "main"
+    } else {
+      "master"
+    };
+    let is_ff = is_fast_forward_at(root, base, "feature").expect("check ff");
+    assert!(is_ff, "expected fast-forward from {base} to feature");
+  }
+
+  #[test]
+  fn is_fast_forward_at_false_when_not_ancestor() {
+    let dir = setup_test_repo();
+    let root = dir.path();
+    run_git(root, &["checkout", "-b", "branch1"]);
+    fs::write(root.join("b.txt"), "b\n").unwrap();
+    run_git(root, &["add", "."]);
+    run_git(root, &["commit", "-m", "b1"]);
+    let base = if std::process::Command::new("git")
+      .current_dir(root)
+      .args(["rev-parse", "--verify", "main"])
+      .output()
+      .map(|o| o.status.success())
+      .unwrap_or(false)
+    {
+      "main"
+    } else {
+      "master"
+    };
+    run_git(root, &["checkout", base]);
+    run_git(root, &["checkout", "-b", "branch2"]);
+    fs::write(root.join("c.txt"), "c\n").unwrap();
+    run_git(root, &["add", "."]);
+    run_git(root, &["commit", "-m", "b2"]);
+    let is_ff = is_fast_forward_at(root, "branch2", "branch1").expect("check ff");
+    assert!(!is_ff, "expected no fast-forward between diverged branches");
+  }
+
+  #[test]
+  fn rev_parse_resolves_head() {
+    let dir = setup_test_repo();
+    let commit = rev_parse(dir.path(), "HEAD").expect("rev-parse HEAD");
+    assert_eq!(commit.len(), 40, "expected 40-char SHA");
+  }
+
+  #[test]
+  fn rev_parse_fails_for_invalid_ref() {
+    let dir = setup_test_repo();
+    let result = rev_parse(dir.path(), "nonexistent-ref");
+    assert!(result.is_err(), "expected error for invalid ref");
+  }
+
+  #[test]
+  fn worktree_is_clean_at_true_for_clean_tree() {
+    let dir = setup_test_repo();
+    let clean = worktree_is_clean_at(dir.path()).expect("check clean");
+    assert!(clean, "expected clean worktree");
+  }
+
+  #[test]
+  fn worktree_is_clean_at_false_for_modified_files() {
+    let dir = setup_test_repo();
+    fs::write(dir.path().join("a.txt"), "modified\n").unwrap();
+    let clean = worktree_is_clean_at(dir.path()).expect("check clean");
+    assert!(!clean, "expected dirty worktree with modifications");
   }
 }

@@ -109,6 +109,7 @@ mod tests {
     run_git(root_path, &["init"]);
     run_git(root_path, &["config", "user.email", "test@example.com"]);
     run_git(root_path, &["config", "user.name", "Tester"]);
+    run_git(root_path, &["config", "commit.gpgsign", "false"]);
     fs::write(root_path.join("README.md"), "ok\n").expect("write");
     run_git(root_path, &["add", "."]);
     run_git(root_path, &["commit", "-m", "init"]);
@@ -142,6 +143,7 @@ mod tests {
       &["config", "user.email", "test@example.com"],
     );
     run_git(main_repo.path(), &["config", "user.name", "Tester"]);
+    run_git(main_repo.path(), &["config", "commit.gpgsign", "false"]);
     fs::write(main_repo.path().join("README.md"), "ok\n").expect("write");
     run_git(main_repo.path(), &["add", "."]);
     run_git(main_repo.path(), &["commit", "-m", "init"]);
@@ -170,6 +172,7 @@ mod tests {
     run_git(root, &["init"]);
     run_git(root, &["config", "user.email", "test@example.com"]);
     run_git(root, &["config", "user.name", "Tester"]);
+    run_git(root, &["config", "commit.gpgsign", "false"]);
     fs::write(root.join("README.md"), "ok\n").expect("write");
     run_git(root, &["add", "."]);
     run_git(root, &["commit", "-m", "init"]);
@@ -182,5 +185,34 @@ mod tests {
     let got = got.canonicalize().unwrap_or(got);
     let want = root.canonicalize().unwrap_or_else(|_| PathBuf::from(root));
     assert_eq!(got, want);
+  }
+
+  #[test]
+  fn git_workdir_returns_toplevel() {
+    use super::git_workdir;
+    let dir = tempfile::tempdir().expect("tmp");
+    let root = dir.path();
+    run_git(root, &["init"]);
+    run_git(root, &["config", "user.email", "test@example.com"]);
+    run_git(root, &["config", "user.name", "Tester"]);
+    run_git(root, &["config", "commit.gpgsign", "false"]);
+    fs::write(root.join("README.md"), "test\n").unwrap();
+    run_git(root, &["add", "."]);
+    run_git(root, &["commit", "-m", "init"]);
+
+    let subdir = root.join("src");
+    fs::create_dir(&subdir).unwrap();
+
+    let workdir = git_workdir(&subdir).expect("workdir");
+    let want = root.canonicalize().unwrap_or_else(|_| PathBuf::from(root));
+    assert_eq!(workdir, want);
+  }
+
+  #[test]
+  fn git_workdir_fails_for_non_repo() {
+    use super::git_workdir;
+    let dir = tempfile::tempdir().expect("tmp");
+    let result = git_workdir(dir.path());
+    assert!(result.is_err(), "expected error for non-repo");
   }
 }

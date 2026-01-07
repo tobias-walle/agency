@@ -121,3 +121,119 @@ pub fn delete_branch_if_exists_at(cwd: &Path, name: &str) -> Result<bool> {
   git_cmd(&["branch", "-D", name], cwd)?;
   Ok(true)
 }
+
+#[cfg(test)]
+mod tests {
+  use super::{current_branch_name_at, delete_branch_if_exists_at, update_branch_ref_at};
+  use std::fs;
+
+  fn run_git(cwd: &std::path::Path, args: &[&str]) {
+    let status = std::process::Command::new("git")
+      .current_dir(cwd)
+      .args(args)
+      .status()
+      .expect("spawn git");
+    assert!(status.success(), "git {args:?} failed: {status:?}");
+  }
+
+  fn setup_test_repo() -> tempfile::TempDir {
+    let dir = tempfile::tempdir().expect("tmp");
+    let root = dir.path();
+    run_git(root, &["init"]);
+    run_git(root, &["config", "user.email", "test@example.com"]);
+    run_git(root, &["config", "user.name", "Tester"]);
+    run_git(root, &["config", "commit.gpgsign", "false"]);
+    fs::write(root.join("README.md"), "test\n").unwrap();
+    run_git(root, &["add", "."]);
+    run_git(root, &["commit", "-m", "init"]);
+    dir
+  }
+
+  #[test]
+  fn current_branch_name_at_returns_branch_name() {
+    let dir = setup_test_repo();
+    let branch = current_branch_name_at(dir.path()).expect("get branch");
+    assert!(branch.is_some());
+    let name = branch.unwrap();
+    assert!(name == "main" || name == "master");
+  }
+
+  #[test]
+  fn current_branch_name_at_returns_none_for_detached_head() {
+    let dir = setup_test_repo();
+    run_git(dir.path(), &["checkout", "--detach", "HEAD"]);
+    let branch = current_branch_name_at(dir.path()).expect("get branch");
+    assert!(branch.is_none(), "expected None for detached HEAD");
+  }
+
+  #[test]
+  fn current_branch_name_at_fails_for_non_repo() {
+    let dir = tempfile::tempdir().expect("tmp");
+    let result = current_branch_name_at(dir.path());
+    assert!(result.is_err(), "expected error for non-repo");
+  }
+
+  #[test]
+  fn delete_branch_if_exists_at_deletes_existing_branch() {
+    let dir = setup_test_repo();
+    run_git(dir.path(), &["checkout", "-b", "feature"]);
+    let default_branch = if std::process::Command::new("git")
+      .current_dir(dir.path())
+      .args(["rev-parse", "--verify", "main"])
+      .output()
+      .map(|o| o.status.success())
+      .unwrap_or(false)
+    {
+      "main"
+    } else {
+      "master"
+    };
+    run_git(dir.path(), &["checkout", default_branch]);
+    let deleted = delete_branch_if_exists_at(dir.path(), "feature").expect("delete");
+    assert!(deleted, "expected branch to be deleted");
+  }
+
+  #[test]
+  fn delete_branch_if_exists_at_returns_false_for_nonexistent() {
+    let dir = setup_test_repo();
+    let deleted = delete_branch_if_exists_at(dir.path(), "nonexistent").expect("delete");
+    assert!(!deleted, "expected false for nonexistent branch");
+  }
+
+  #[test]
+  fn update_branch_ref_at_updates_branch() {
+    let dir = setup_test_repo();
+    run_git(dir.path(), &["checkout", "-b", "feature"]);
+    fs::write(dir.path().join("new.txt"), "new\n").unwrap();
+    run_git(dir.path(), &["add", "."]);
+    run_git(dir.path(), &["commit", "-m", "new commit"]);
+    let feature_commit = std::process::Command::new("git")
+      .current_dir(dir.path())
+      .args(["rev-parse", "HEAD"])
+      .output()
+      .expect("rev-parse")
+      .stdout;
+    let feature_commit = String::from_utf8_lossy(&feature_commit).trim().to_string();
+    let default_branch = if std::process::Command::new("git")
+      .current_dir(dir.path())
+      .args(["rev-parse", "--verify", "main"])
+      .output()
+      .map(|o| o.status.success())
+      .unwrap_or(false)
+    {
+      "main"
+    } else {
+      "master"
+    };
+    run_git(dir.path(), &["checkout", default_branch]);
+    update_branch_ref_at(dir.path(), default_branch, &feature_commit).expect("update");
+    let default_commit = std::process::Command::new("git")
+      .current_dir(dir.path())
+      .args(["rev-parse", default_branch])
+      .output()
+      .expect("rev-parse")
+      .stdout;
+    let default_commit = String::from_utf8_lossy(&default_commit).trim().to_string();
+    assert_eq!(default_commit, feature_commit);
+  }
+}
