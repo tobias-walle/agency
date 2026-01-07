@@ -272,7 +272,19 @@ impl SlimDaemon {
         metrics: snap.metrics.clone(),
       }),
     );
-    let cloned = stream.try_clone().unwrap();
+    let cloned = match stream.try_clone() {
+      Ok(s) => s,
+      Err(err) => {
+        warn!("Failed to clone stream for subscriber: {err}");
+        let _ = write_frame(
+          stream,
+          &D2C::Control(D2CControl::Error {
+            message: format!("Failed to subscribe: {err}"),
+          }),
+        );
+        return;
+      }
+    };
     self.subscribers.lock().push(Subscriber {
       project: project.clone(),
       stream: cloned,
