@@ -1,4 +1,4 @@
-use crossterm::event::{KeyCode, KeyEvent};
+use crossterm::event::{KeyCode, KeyEvent, KeyEventKind};
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::prelude::Stylize;
 use ratatui::style::Color;
@@ -112,6 +112,10 @@ impl TextInputState {
   /// Note: This only handles basic text input keys (Esc, Enter, Backspace, Char).
   /// Callers can intercept other keys (like Ctrl+A) before calling this method.
   pub fn handle_key(&mut self, key: KeyEvent) -> TextInputOutcome {
+    if key.kind == KeyEventKind::Repeat {
+      return TextInputOutcome::Continue;
+    }
+
     match key.code {
       KeyCode::Esc => TextInputOutcome::Canceled,
       KeyCode::Enter => TextInputOutcome::Submit(self.input.clone()),
