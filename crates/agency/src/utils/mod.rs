@@ -14,6 +14,7 @@ pub mod log;
 pub mod opener;
 pub mod session;
 pub mod sessions;
+pub mod shell;
 pub mod status;
 pub mod task;
 pub mod task_columns;

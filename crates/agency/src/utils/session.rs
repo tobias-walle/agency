@@ -2,8 +2,8 @@ use anyhow::Result;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use crate::commands::shell::resolve_shell_argv;
 use crate::config::AppContext;
+use crate::utils::shell::resolve_shell_argv;
 use crate::daemon_protocol::{BootstrapRequest, TaskMeta};
 use crate::utils::bootstrap::create_worktree_for_task;
 use crate::utils::cmd::{CmdCtx, expand_argv};
