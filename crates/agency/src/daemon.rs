@@ -22,12 +22,18 @@ use std::time::Duration;
 
 pub fn run_daemon(socket_path: &Path, cfg: &AgencyConfig) -> Result<()> {
   info!("Starting daemon. Socket path: {}", socket_path.display());
-  if std::os::unix::net::UnixStream::connect(socket_path).is_ok() {
-    warn!("Daemon is already running");
-    return Ok(());
-  }
 
-  let listener = ensure_socket_dir_and_bind(socket_path)?;
+  let listener = match ensure_socket_dir_and_bind(socket_path) {
+    Ok(listener) => listener,
+    Err(err) => {
+      if is_address_in_use(&err) && UnixStream::connect(socket_path).is_ok() {
+        warn!("Daemon is already running");
+        return Ok(());
+      }
+      return Err(err);
+    }
+  };
+
   listener.set_nonblocking(true)?;
   let daemon = SlimDaemon::new(listener, cfg.clone(), socket_path.to_path_buf());
   daemon.run()
@@ -370,6 +376,12 @@ impl SlimDaemon {
       }
     }
   }
+}
+
+fn is_address_in_use(err: &anyhow::Error) -> bool {
+  err
+    .downcast_ref::<std::io::Error>()
+    .is_some_and(|e| e.kind() == std::io::ErrorKind::AddrInUse)
 }
 
 pub fn ensure_socket_dir_and_bind(path: &Path) -> anyhow::Result<UnixListener> {
