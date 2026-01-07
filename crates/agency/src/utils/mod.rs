@@ -7,6 +7,7 @@ pub mod context;
 pub mod daemon;
 pub mod editor;
 pub mod files;
+pub mod fzf;
 pub mod git;
 pub mod interactive;
 pub mod log;
