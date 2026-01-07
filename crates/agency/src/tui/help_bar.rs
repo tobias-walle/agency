@@ -47,11 +47,10 @@ pub const HELP_ITEMS_INPUT: &[&str] = &[
 /// Help items for command log pane.
 pub const HELP_ITEMS_LOG: &[&str] = &["Scroll: j/k"];
 
-/// Draw the help bar with custom items.
-pub fn draw_with_items(f: &mut ratatui::Frame, area: Rect, items: &[&str]) {
-  let mut lines = layout_lines(items, area.width);
-  lines = lines.into_iter().map(|ln| ln.fg(Color::Blue)).collect();
-  f.render_widget(Paragraph::new(lines).alignment(Alignment::Center), area);
+/// Draw the help bar with pre-computed lines.
+pub fn draw_with_lines(f: &mut ratatui::Frame, area: Rect, lines: &[Line<'_>]) {
+  let styled_lines: Vec<Line> = lines.iter().map(|ln| ln.clone().fg(Color::Blue)).collect();
+  f.render_widget(Paragraph::new(styled_lines).alignment(Alignment::Center), area);
 }
 
 /// Build help lines from discrete items without breaking an item across lines.

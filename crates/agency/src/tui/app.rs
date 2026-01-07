@@ -12,7 +12,7 @@ use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
 use ratatui::layout::{Constraint, Rect};
 use ratatui::style::{Color, Style};
-use ratatui::text::Span;
+use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 
 use super::command_log::CommandLogState;
@@ -119,6 +119,13 @@ enum SubscriptionStatus {
   Disconnected { since: Instant },
 }
 
+/// Cache for help bar layout to avoid recomputing on every frame.
+struct HelpBarCache {
+  items: &'static [&'static str],
+  width: u16,
+  lines: Vec<Line<'static>>,
+}
+
 /// Main application state composing all component states.
 struct AppState {
   task_table: TaskTableState,
@@ -130,6 +137,7 @@ struct AppState {
   sent_initial_focus: bool,
   subscription_status: SubscriptionStatus,
   events_rx: Option<Receiver<UiEvent>>,
+  help_bar_cache: Option<HelpBarCache>,
 }
 
 impl Default for AppState {
@@ -144,6 +152,7 @@ impl Default for AppState {
       sent_initial_focus: false,
       subscription_status: SubscriptionStatus::Connected,
       events_rx: None,
+      help_bar_cache: None,
     }
   }
 }
@@ -365,7 +374,19 @@ impl AppState {
 
   fn draw(&mut self, f: &mut ratatui::Frame) {
     let help_items = self.help_items_for_mode();
-    let help_lines = help_bar::layout_lines(help_items, f.area().width);
+    let width = f.area().width;
+
+    let needs_recompute = match &self.help_bar_cache {
+      Some(cache) => !std::ptr::eq(cache.items, help_items) || cache.width != width,
+      None => true,
+    };
+
+    if needs_recompute {
+      let lines = help_bar::layout_lines(help_items, width);
+      self.help_bar_cache = Some(HelpBarCache { items: help_items, width, lines });
+    }
+
+    let help_lines = &self.help_bar_cache.as_ref().unwrap().lines;
     let help_rows = help_lines.len().try_into().unwrap_or(1_u16).clamp(1, 3);
 
     let terminal_height = f.area().height;
@@ -387,7 +408,7 @@ impl AppState {
     if log_height > 0 {
       self.command_log.draw(f, rects[1], self.focus == Focus::Log);
     }
-    help_bar::draw_with_items(f, rects[2], help_items);
+    help_bar::draw_with_lines(f, rects[2], help_lines);
 
     if let Some(ref overlay) = self.input_overlay {
       overlay.draw(f, rects[0]);
