@@ -134,16 +134,7 @@ impl AppState {
         reinit_terminal(terminal)?;
         self.paused = false;
         let _ = ack.send(());
-        let prev_sel_id = self.task_table.selected_row().map(TaskRow::id);
-        self.refresh(ctx).map_err(|err| {
-          log_error!("{}", err);
-          err
-        })?;
-        self.task_table.prune_pending_deletes();
-        let cur_sel_id = self.task_table.selected_row().map(TaskRow::id);
-        if prev_sel_id != cur_sel_id {
-          emit_focus_change(ctx, self.task_table.tui_id, cur_sel_id);
-        }
+        self.refresh_with_focus_change(ctx)?;
       }
     }
     Ok(())
@@ -152,16 +143,7 @@ impl AppState {
   fn handle_daemon_event(&mut self, ctx: &AppContext, ev: UiEvent) -> Result<(), Error> {
     match ev {
       UiEvent::ProjectState => {
-        let prev_sel_id = self.task_table.selected_row().map(TaskRow::id);
-        self.refresh(ctx).map_err(|err| {
-          log_error!("{}", err);
-          err
-        })?;
-        self.task_table.prune_pending_deletes();
-        let cur_sel_id = self.task_table.selected_row().map(TaskRow::id);
-        if prev_sel_id != cur_sel_id {
-          emit_focus_change(ctx, self.task_table.tui_id, cur_sel_id);
-        }
+        self.refresh_with_focus_change(ctx)?;
       }
       UiEvent::Disconnected(err) => {
         log_info!("Daemon connection lost: {}", err);
@@ -354,6 +336,20 @@ impl AppState {
       })
       .collect();
     self.task_table.refresh(ctx, &snap.sessions, &git_metrics)?;
+    Ok(())
+  }
+
+  fn refresh_with_focus_change(&mut self, ctx: &AppContext) -> Result<()> {
+    let prev_sel_id = self.task_table.selected_row().map(TaskRow::id);
+    self.refresh(ctx).map_err(|err| {
+      log_error!("{}", err);
+      err
+    })?;
+    self.task_table.prune_pending_deletes();
+    let cur_sel_id = self.task_table.selected_row().map(TaskRow::id);
+    if prev_sel_id != cur_sel_id {
+      emit_focus_change(ctx, self.task_table.tui_id, cur_sel_id);
+    }
     Ok(())
   }
 }
