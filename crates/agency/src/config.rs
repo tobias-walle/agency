@@ -537,4 +537,451 @@ mod tests {
       },
     );
   }
+
+  #[test]
+  fn default_config_is_empty() {
+    let cfg = AgencyConfig::default();
+    assert!(cfg.agents.is_empty());
+    assert!(cfg.agent.is_none());
+    assert!(cfg.daemon.is_none());
+    assert!(cfg.bootstrap.is_none());
+    assert!(cfg.shell.is_none());
+    assert!(cfg.editor.is_none());
+  }
+
+  #[test]
+  fn agent_config_default_has_empty_cmd() {
+    let agent = AgentConfig::default();
+    assert!(agent.cmd.is_empty());
+  }
+
+  #[test]
+  fn agent_config_get_cmd_succeeds_with_valid_cmd() {
+    let agent = AgentConfig {
+      cmd: vec!["claude".to_string(), "$AGENCY_TASK".to_string()],
+    };
+    let result = agent.get_cmd("claude");
+    assert!(result.is_ok());
+  }
+
+  #[test]
+  fn agent_config_get_cmd_fails_with_empty_cmd() {
+    let agent = AgentConfig::default();
+    let result = agent.get_cmd("test");
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("not defined or empty"));
+  }
+
+  #[test]
+  fn get_agent_succeeds_when_agent_exists() {
+    let mut cfg = AgencyConfig::default();
+    cfg.agents.insert(
+      "claude".to_string(),
+      AgentConfig {
+        cmd: vec!["claude".to_string()],
+      },
+    );
+
+    let result = cfg.get_agent("claude");
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap().cmd, vec!["claude"]);
+  }
+
+  #[test]
+  fn get_agent_fails_when_agent_unknown() {
+    let mut cfg = AgencyConfig::default();
+    cfg.agents.insert(
+      "claude".to_string(),
+      AgentConfig {
+        cmd: vec!["claude".to_string()],
+      },
+    );
+
+    let result = cfg.get_agent("unknown");
+    assert!(result.is_err());
+    let err_msg = result.unwrap_err().to_string();
+    assert!(err_msg.contains("unknown agent: unknown"));
+    assert!(err_msg.contains("Known agents: claude"));
+  }
+
+  #[test]
+  fn bootstrap_config_adds_hard_excludes() {
+    let mut cfg = AgencyConfig::default();
+    cfg.bootstrap = Some(BootstrapConfig {
+      include: vec![],
+      exclude: vec!["node_modules".to_string()],
+      cmd: vec![],
+    });
+
+    let result = cfg.bootstrap_config();
+    assert!(result.exclude.contains(&".git".to_string()));
+    assert!(result.exclude.contains(&".agency".to_string()));
+    assert!(result.exclude.contains(&"node_modules".to_string()));
+  }
+
+  #[test]
+  fn bootstrap_config_deduplicates_includes() {
+    let mut cfg = AgencyConfig::default();
+    cfg.bootstrap = Some(BootstrapConfig {
+      include: vec!["file.txt".to_string(), "file.txt".to_string()],
+      exclude: vec![],
+      cmd: vec![],
+    });
+
+    let result = cfg.bootstrap_config();
+    assert_eq!(
+      result
+        .include
+        .iter()
+        .filter(|s| *s == "file.txt")
+        .count(),
+      1
+    );
+  }
+
+  #[test]
+  fn bootstrap_config_deduplicates_excludes() {
+    let mut cfg = AgencyConfig::default();
+    cfg.bootstrap = Some(BootstrapConfig {
+      include: vec![],
+      exclude: vec![
+        "node_modules".to_string(),
+        "node_modules".to_string(),
+        ".git".to_string(),
+      ],
+      cmd: vec![],
+    });
+
+    let result = cfg.bootstrap_config();
+    assert_eq!(
+      result
+        .exclude
+        .iter()
+        .filter(|s| *s == "node_modules")
+        .count(),
+      1
+    );
+    assert_eq!(result.exclude.iter().filter(|s| *s == ".git").count(), 1);
+  }
+
+  #[test]
+  fn bootstrap_config_uses_defaults_when_none() {
+    let cfg = AgencyConfig::default();
+    let result = cfg.bootstrap_config();
+    assert!(result.exclude.contains(&".git".to_string()));
+    assert!(result.exclude.contains(&".agency".to_string()));
+  }
+
+  #[test]
+  fn editor_argv_prefers_config() {
+    let cfg = AgencyConfig {
+      editor: Some(vec!["emacs".to_string(), "-nw".to_string()]),
+      ..Default::default()
+    };
+
+    with_vars([("EDITOR", Some("vim"))], || {
+      let result = cfg.editor_argv();
+      assert_eq!(result, vec!["emacs", "-nw"]);
+    });
+  }
+
+  #[test]
+  fn editor_argv_uses_env_when_config_empty() {
+    let cfg = AgencyConfig::default();
+    with_vars([("EDITOR", Some("nano -w"))], || {
+      let result = cfg.editor_argv();
+      assert_eq!(result, vec!["nano", "-w"]);
+    });
+  }
+
+  #[test]
+  fn editor_argv_falls_back_to_vi() {
+    let cfg = AgencyConfig::default();
+    with_vars([("EDITOR", None::<&str>)], || {
+      let result = cfg.editor_argv();
+      assert_eq!(result, vec!["vi"]);
+    });
+  }
+
+  #[test]
+  fn editor_argv_ignores_empty_config() {
+    let cfg = AgencyConfig {
+      editor: Some(vec![]),
+      ..Default::default()
+    };
+
+    with_vars([("EDITOR", Some("vim"))], || {
+      let result = cfg.editor_argv();
+      assert_eq!(result, vec!["vim"]);
+    });
+  }
+
+  #[test]
+  fn editor_env_argv_parses_simple_command() {
+    with_vars([("EDITOR", Some("vim"))], || {
+      let result = editor_env_argv();
+      assert_eq!(result, Some(vec!["vim".to_string()]));
+    });
+  }
+
+  #[test]
+  fn editor_env_argv_parses_command_with_args() {
+    with_vars([("EDITOR", Some("emacs -nw"))], || {
+      let result = editor_env_argv();
+      assert_eq!(result, Some(vec!["emacs".to_string(), "-nw".to_string()]));
+    });
+  }
+
+  #[test]
+  fn editor_env_argv_handles_missing_env() {
+    with_vars([("EDITOR", None::<&str>)], || {
+      let result = editor_env_argv();
+      assert_eq!(result, None);
+    });
+  }
+
+  #[test]
+  fn editor_env_argv_handles_empty_env() {
+    with_vars([("EDITOR", Some(""))], || {
+      let result = editor_env_argv();
+      assert_eq!(result, None);
+    });
+  }
+
+  #[test]
+  fn editor_env_argv_handles_whitespace_only() {
+    with_vars([("EDITOR", Some("   "))], || {
+      let result = editor_env_argv();
+      assert_eq!(result, None);
+    });
+  }
+
+  #[test]
+  fn dedup_keep_first_preserves_order() {
+    let mut items = vec![
+      "a".to_string(),
+      "b".to_string(),
+      "a".to_string(),
+      "c".to_string(),
+      "b".to_string(),
+    ];
+    dedup_keep_first(&mut items);
+    assert_eq!(items, vec!["a", "b", "c"]);
+  }
+
+  #[test]
+  fn dedup_keep_first_handles_empty() {
+    let mut items: Vec<String> = vec![];
+    dedup_keep_first(&mut items);
+    assert!(items.is_empty());
+  }
+
+  #[test]
+  fn dedup_keep_first_handles_no_duplicates() {
+    let mut items = vec!["a".to_string(), "b".to_string(), "c".to_string()];
+    dedup_keep_first(&mut items);
+    assert_eq!(items, vec!["a", "b", "c"]);
+  }
+
+  #[test]
+  fn merge_values_replaces_scalar() {
+    let mut base = toml::from_str::<TomlValue>("key = \"value1\"").unwrap();
+    let overlay = toml::from_str::<TomlValue>("key = \"value2\"").unwrap();
+    merge_values(&mut base, overlay, "");
+
+    let result: std::collections::BTreeMap<String, String> =
+      toml::from_str(&toml::to_string(&base).unwrap()).unwrap();
+    assert_eq!(result.get("key").unwrap(), "value2");
+  }
+
+  #[test]
+  fn merge_values_merges_tables() {
+    let mut base =
+      toml::from_str::<TomlValue>("a = 1\nb = 2").unwrap();
+    let overlay = toml::from_str::<TomlValue>("b = 3\nc = 4").unwrap();
+    merge_values(&mut base, overlay, "");
+
+    let result: std::collections::BTreeMap<String, i64> =
+      toml::from_str(&toml::to_string(&base).unwrap()).unwrap();
+    assert_eq!(result.get("a").unwrap(), &1);
+    assert_eq!(result.get("b").unwrap(), &3);
+    assert_eq!(result.get("c").unwrap(), &4);
+  }
+
+  #[test]
+  fn merge_values_appends_bootstrap_include_arrays() {
+    let mut base =
+      toml::from_str::<TomlValue>("[bootstrap]\ninclude = [\"a\", \"b\"]").unwrap();
+    let overlay = toml::from_str::<TomlValue>("[bootstrap]\ninclude = [\"c\"]").unwrap();
+    merge_values(&mut base, overlay, "");
+
+    let result: AgencyConfig = toml::from_str(&toml::to_string(&base).unwrap()).unwrap();
+    let bootstrap = result.bootstrap.unwrap();
+    assert_eq!(bootstrap.include, vec!["a", "b", "c"]);
+  }
+
+  #[test]
+  fn merge_values_appends_bootstrap_exclude_arrays() {
+    let mut base =
+      toml::from_str::<TomlValue>("[bootstrap]\nexclude = [\"x\", \"y\"]").unwrap();
+    let overlay = toml::from_str::<TomlValue>("[bootstrap]\nexclude = [\"z\"]").unwrap();
+    merge_values(&mut base, overlay, "");
+
+    let result: AgencyConfig = toml::from_str(&toml::to_string(&base).unwrap()).unwrap();
+    let bootstrap = result.bootstrap.unwrap();
+    assert_eq!(bootstrap.exclude, vec!["x", "y", "z"]);
+  }
+
+  #[test]
+  fn merge_values_deduplicates_bootstrap_arrays() {
+    let mut base =
+      toml::from_str::<TomlValue>("[bootstrap]\ninclude = [\"a\", \"b\"]").unwrap();
+    let overlay = toml::from_str::<TomlValue>("[bootstrap]\ninclude = [\"b\", \"c\"]").unwrap();
+    merge_values(&mut base, overlay, "");
+
+    let result: AgencyConfig = toml::from_str(&toml::to_string(&base).unwrap()).unwrap();
+    let bootstrap = result.bootstrap.unwrap();
+    assert_eq!(bootstrap.include, vec!["a", "b", "c"]);
+  }
+
+  #[test]
+  fn merge_values_replaces_non_bootstrap_arrays() {
+    let mut base = toml::from_str::<TomlValue>("[agents.test]\ncmd = [\"a\", \"b\"]").unwrap();
+    let overlay = toml::from_str::<TomlValue>("[agents.test]\ncmd = [\"c\"]").unwrap();
+    merge_values(&mut base, overlay, "");
+
+    let result: AgencyConfig = toml::from_str(&toml::to_string(&base).unwrap()).unwrap();
+    assert_eq!(result.agents.get("test").unwrap().cmd, vec!["c"]);
+  }
+
+  #[test]
+  fn merge_values_deeply_nested_tables() {
+    let mut base = toml::from_str::<TomlValue>("[daemon]\nsocket_path = \"/tmp/a\"").unwrap();
+    let overlay =
+      toml::from_str::<TomlValue>("[daemon]\ntmux_socket_path = \"/tmp/b\"").unwrap();
+    merge_values(&mut base, overlay, "");
+
+    let result: AgencyConfig = toml::from_str(&toml::to_string(&base).unwrap()).unwrap();
+    let daemon = result.daemon.unwrap();
+    assert_eq!(daemon.socket_path.unwrap(), "/tmp/a");
+    assert_eq!(daemon.tmux_socket_path.unwrap(), "/tmp/b");
+  }
+
+  #[test]
+  fn load_config_parses_defaults() {
+    let temp = tempfile::tempdir().unwrap();
+    let cfg = load_config(temp.path()).unwrap();
+
+    assert_eq!(cfg.agent.as_deref(), Some("claude"));
+    assert!(cfg.agents.contains_key("claude"));
+    assert!(cfg.agents.contains_key("codex"));
+    assert!(cfg.agents.contains_key("gemini"));
+    assert!(cfg.agents.contains_key("opencode"));
+  }
+
+  #[test]
+  fn load_config_merges_project_config() {
+    let temp = tempfile::tempdir().unwrap();
+    let agency_dir = temp.path().join(".agency");
+    std::fs::create_dir(&agency_dir).unwrap();
+
+    let project_config = agency_dir.join("agency.toml");
+    std::fs::write(
+      &project_config,
+      r#"
+agent = "custom"
+
+[agents.custom]
+cmd = ["custom-agent", "$AGENCY_TASK"]
+"#,
+    )
+    .unwrap();
+
+    let cfg = load_config(temp.path()).unwrap();
+
+    assert_eq!(cfg.agent.as_deref(), Some("custom"));
+    assert!(cfg.agents.contains_key("custom"));
+    assert!(cfg.agents.contains_key("claude"));
+  }
+
+  #[test]
+  fn load_config_project_overrides_defaults() {
+    let temp = tempfile::tempdir().unwrap();
+    let agency_dir = temp.path().join(".agency");
+    std::fs::create_dir(&agency_dir).unwrap();
+
+    let project_config = agency_dir.join("agency.toml");
+    std::fs::write(
+      &project_config,
+      r#"
+[agents.claude]
+cmd = ["custom-claude", "arg"]
+"#,
+    )
+    .unwrap();
+
+    let cfg = load_config(temp.path()).unwrap();
+
+    let claude = cfg.agents.get("claude").unwrap();
+    assert_eq!(claude.cmd, vec!["custom-claude", "arg"]);
+  }
+
+  #[test]
+  fn load_config_bootstrap_arrays_append_and_dedupe() {
+    let temp = tempfile::tempdir().unwrap();
+    let agency_dir = temp.path().join(".agency");
+    std::fs::create_dir(&agency_dir).unwrap();
+
+    let project_config = agency_dir.join("agency.toml");
+    std::fs::write(
+      &project_config,
+      r#"
+[bootstrap]
+include = ["local.txt"]
+exclude = [".git", "build"]
+"#,
+    )
+    .unwrap();
+
+    let cfg = load_config(temp.path()).unwrap();
+    let bootstrap = cfg.bootstrap.unwrap();
+
+    assert!(bootstrap.include.contains(&"local.txt".to_string()));
+    assert!(bootstrap.exclude.contains(&".git".to_string()));
+    assert!(bootstrap.exclude.contains(&".agency".to_string()));
+    assert!(bootstrap.exclude.contains(&"build".to_string()));
+    assert_eq!(
+      bootstrap.exclude.iter().filter(|e| *e == ".git").count(),
+      1
+    );
+  }
+
+  #[test]
+  fn daemon_config_default_has_none_values() {
+    let daemon = DaemonConfig::default();
+    assert!(daemon.socket_path.is_none());
+    assert!(daemon.tmux_socket_path.is_none());
+  }
+
+  #[test]
+  fn bootstrap_config_default_has_empty_vecs() {
+    let bootstrap = BootstrapConfig::default();
+    assert!(bootstrap.include.is_empty());
+    assert!(bootstrap.exclude.is_empty());
+    assert!(bootstrap.cmd.is_empty());
+  }
+
+  #[test]
+  fn agency_paths_accessors() {
+    let paths = AgencyPaths::new("/repo", "/repo/subdir");
+    assert_eq!(paths.root(), &PathBuf::from("/repo"));
+    assert_eq!(paths.cwd(), &PathBuf::from("/repo/subdir"));
+    assert_eq!(paths.tasks_dir(), PathBuf::from("/repo/.agency/tasks"));
+    assert_eq!(
+      paths.worktrees_dir(),
+      PathBuf::from("/repo/.agency/worktrees")
+    );
+    assert_eq!(paths.state_dir(), PathBuf::from("/repo/.agency/state"));
+    assert_eq!(paths.files_dir(), PathBuf::from("/repo/.agency/files"));
+  }
 }
