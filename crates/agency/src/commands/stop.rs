@@ -10,7 +10,7 @@ use crate::utils::task::resolve_id_or_slug;
 use crate::{log_info, log_success};
 // Use macros via module path
 
-pub fn run(ctx: &AppContext, ident: Option<&str>, session_id: Option<u64>) -> Result<()> {
+pub fn run(ctx: &AppContext, task_ident: Option<&str>, session_id: Option<u64>) -> Result<()> {
   let socket = compute_socket_path(&ctx.config);
   let mut stream = connect_daemon_socket(&socket)?;
 
@@ -35,8 +35,8 @@ pub fn run(ctx: &AppContext, ident: Option<&str>, session_id: Option<u64>) -> Re
     return Ok(());
   }
 
-  if let Some(task_ident) = ident {
-    let task = resolve_id_or_slug(&ctx.paths, task_ident)?;
+  if let Some(task_ident_str) = task_ident {
+    let task = resolve_id_or_slug(&ctx.paths, task_ident_str)?;
     let repo = open_main_repo(ctx.paths.root())?;
     let repo_root = repo_workdir_or(&repo, ctx.paths.root());
     let project = ProjectKey {

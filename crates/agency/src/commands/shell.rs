@@ -12,8 +12,8 @@ use crate::utils::session::build_task_env;
 use crate::utils::shell::resolve_shell_argv;
 use crate::utils::task::{read_task_content, resolve_id_or_slug, worktree_dir};
 
-pub fn run(ctx: &AppContext, ident: &str) -> Result<()> {
-  let tref = resolve_id_or_slug(&ctx.paths, ident)?;
+pub fn run(ctx: &AppContext, task_ident: &str) -> Result<()> {
+  let tref = resolve_id_or_slug(&ctx.paths, task_ident)?;
   let wt_dir = worktree_dir(&ctx.paths, &tref);
   if !wt_dir.exists() {
     bail!(

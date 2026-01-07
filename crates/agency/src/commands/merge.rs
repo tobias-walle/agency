@@ -21,9 +21,9 @@ pub struct MergeResult {
 }
 
 /// Run the merge command: rebase and fast-forward, but keep task intact.
-pub fn run(ctx: &AppContext, ident: &str, base_override: Option<&str>) -> Result<()> {
+pub fn run(ctx: &AppContext, task_ident: &str, base: Option<&str>) -> Result<()> {
   notify_after_task_change(ctx, || {
-    let result = perform_merge(ctx, ident, base_override)?;
+    let result = perform_merge(ctx, task_ident, base)?;
 
     log_success!(
       "Merge complete. Run `agency complete {}` to clean up the task.",
@@ -41,10 +41,10 @@ pub fn run(ctx: &AppContext, ident: &str, base_override: Option<&str>) -> Result
 /// Returns an error if the task is not found, rebase fails, or fast-forward is not possible.
 pub fn perform_merge(
   ctx: &AppContext,
-  ident: &str,
-  base_override: Option<&str>,
+  task_ident: &str,
+  base: Option<&str>,
 ) -> Result<MergeResult> {
-  let inputs = compute_merge_inputs(ctx, ident, base_override)?;
+  let inputs = compute_merge_inputs(ctx, task_ident, base)?;
 
   let (refresh_checked_out_base, needs_auto_stash) =
     assess_base_state(&inputs.repo_workdir, &inputs.base_branch)?;
@@ -93,10 +93,10 @@ struct MergeInputs {
 
 fn compute_merge_inputs(
   ctx: &AppContext,
-  ident: &str,
-  base_override: Option<&str>,
+  task_ident: &str,
+  base: Option<&str>,
 ) -> Result<MergeInputs> {
-  let task = resolve_id_or_slug(&ctx.paths, ident)?;
+  let task = resolve_id_or_slug(&ctx.paths, task_ident)?;
   let branch = branch_name(&task);
   let wt_dir = worktree_dir(&ctx.paths, &task);
   let file_path = task_file(&ctx.paths, &task);
@@ -109,7 +109,7 @@ fn compute_merge_inputs(
   let mut base_branch = fm_opt
     .and_then(|fm| fm.base_branch)
     .unwrap_or_else(|| "main".to_string());
-  if let Some(b) = base_override {
+  if let Some(b) = base {
     base_branch = b.to_string();
   }
   let repo_workdir = git_workdir(ctx.paths.root())?;

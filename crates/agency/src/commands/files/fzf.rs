@@ -6,8 +6,8 @@ use crate::utils::files::{display_path, list_files};
 use crate::utils::fzf::{parse_id_from_selection, run_fzf};
 use crate::utils::task::resolve_id_or_slug;
 
-pub fn run(ctx: &AppContext, ident: &str) -> Result<()> {
-  let task = resolve_id_or_slug(&ctx.paths, ident)?;
+pub fn run(ctx: &AppContext, task_ident: &str) -> Result<()> {
+  let task = resolve_id_or_slug(&ctx.paths, task_ident)?;
   let files = list_files(&ctx.paths, &task)?;
 
   if files.is_empty() {

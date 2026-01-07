@@ -7,8 +7,8 @@ use crate::utils::task::{
   edit_task_description, read_task_content, resolve_id_or_slug, write_task_content,
 };
 
-pub fn run(ctx: &AppContext, ident: &str) -> Result<()> {
-  let task = resolve_id_or_slug(&ctx.paths, ident)?;
+pub fn run(ctx: &AppContext, task_ident: &str) -> Result<()> {
+  let task = resolve_id_or_slug(&ctx.paths, task_ident)?;
   let mut content = read_task_content(&ctx.paths, &task)?;
   log_info!("Edit description {}", t::slug(&task.slug));
   if let Some(updated_body) = edit_task_description(

@@ -4,13 +4,13 @@ use crate::config::AgencyPaths;
 
 use super::metadata::TaskRef;
 
-pub fn resolve_id_or_slug(paths: &AgencyPaths, ident: &str) -> Result<TaskRef> {
+pub fn resolve_id_or_slug(paths: &AgencyPaths, task_ident: &str) -> Result<TaskRef> {
   let tasks = paths.tasks_dir();
   if !tasks.exists() {
     bail!("tasks dir not found at {}", tasks.display());
   }
-  if ident.chars().all(|c| c.is_ascii_digit()) {
-    let id: u32 = ident.parse().context("invalid id")?;
+  if task_ident.chars().all(|c| c.is_ascii_digit()) {
+    let id: u32 = task_ident.parse().context("invalid id")?;
     for entry in
       std::fs::read_dir(&tasks).with_context(|| format!("failed to read {}", tasks.display()))?
     {
@@ -21,9 +21,9 @@ pub fn resolve_id_or_slug(paths: &AgencyPaths, ident: &str) -> Result<TaskRef> {
         return Ok(tf);
       }
     }
-    bail!("task with id {ident} not found");
+    bail!("task with id {task_ident} not found");
   }
-  let slug = ident.to_string();
+  let slug = task_ident.to_string();
   for entry in
     std::fs::read_dir(&tasks).with_context(|| format!("failed to read {}", tasks.display()))?
   {
@@ -34,15 +34,15 @@ pub fn resolve_id_or_slug(paths: &AgencyPaths, ident: &str) -> Result<TaskRef> {
       return Ok(tf);
     }
   }
-  bail!("task with slug {ident} not found");
+  bail!("task with slug {task_ident} not found");
 }
 
 /// Resolve task identifier to a `TaskRef`, supporting `AGENCY_TASK_ID` env var fallback.
 ///
 /// # Errors
 /// Returns an error if the task cannot be resolved.
-pub fn resolve_task_ident(paths: &AgencyPaths, ident: Option<&str>) -> Result<TaskRef> {
-  if let Some(i) = ident {
+pub fn resolve_task_ident(paths: &AgencyPaths, task_ident: Option<&str>) -> Result<TaskRef> {
+  if let Some(i) = task_ident {
     resolve_id_or_slug(paths, i)
   } else {
     let id_env = std::env::var("AGENCY_TASK_ID")

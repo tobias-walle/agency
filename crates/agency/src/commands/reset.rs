@@ -10,8 +10,8 @@ use crate::utils::task::{branch_name, resolve_id_or_slug, worktree_dir};
 
 /// Reset a task's workspace by pruning its worktree and deleting its branch.
 /// Keeps the markdown file intact. Best-effort stop of running sessions first.
-pub fn run(ctx: &AppContext, ident: &str) -> Result<()> {
-  let tref = resolve_id_or_slug(&ctx.paths, ident)?;
+pub fn run(ctx: &AppContext, task_ident: &str) -> Result<()> {
+  let tref = resolve_id_or_slug(&ctx.paths, task_ident)?;
 
   // Best-effort stop of running sessions for this task
   let _ = stop_sessions_of_task(ctx, &tref);

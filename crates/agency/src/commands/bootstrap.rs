@@ -11,8 +11,8 @@ use crate::utils::task::{
 };
 
 /// User-facing bootstrap: prepares worktree and runs bootstrap for a task.
-pub fn run(ctx: &AppContext, ident: &str) -> Result<()> {
-  let task = resolve_id_or_slug(&ctx.paths, ident)?;
+pub fn run(ctx: &AppContext, task_ident: &str) -> Result<()> {
+  let task = resolve_id_or_slug(&ctx.paths, task_ident)?;
 
   // Resolve base from front matter or HEAD
   let tf_path = task_file(&ctx.paths, &task);

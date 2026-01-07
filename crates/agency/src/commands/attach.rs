@@ -19,7 +19,7 @@ mod overlay;
 use overlay::{OverlayMode, OverlayUI};
 use std::process::Child;
 
-pub fn run_with_task(ctx: &AppContext, ident: &str) -> Result<()> {
+pub fn run_with_task(ctx: &AppContext, task_ident: &str) -> Result<()> {
   if !ctx.tty.is_interactive() {
     anyhow::bail!("attach requires an interactive terminal (TTY). Run this command in an interactive shell or terminal.");
   }
@@ -30,7 +30,7 @@ pub fn run_with_task(ctx: &AppContext, ident: &str) -> Result<()> {
     .try_init();
 
   // Resolve task
-  let task = resolve_id_or_slug(&ctx.paths, ident)?;
+  let task = resolve_id_or_slug(&ctx.paths, task_ident)?;
 
   // Query existing sessions and join the latest for this task; error if none
   let entries = get_project_state(ctx)?.sessions;

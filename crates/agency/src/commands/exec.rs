@@ -8,9 +8,9 @@ use crate::utils::git::{open_main_repo, repo_workdir_or};
 use crate::utils::session::build_task_env;
 use crate::utils::task::{read_task_content, resolve_id_or_slug, worktree_dir};
 
-pub fn run(ctx: &AppContext, ident: &str, cmd: &[String]) -> Result<i32> {
+pub fn run(ctx: &AppContext, task_ident: &str, cmd: &[String]) -> Result<i32> {
   // Resolve task
-  let tref = resolve_id_or_slug(&ctx.paths, ident)?;
+  let tref = resolve_id_or_slug(&ctx.paths, task_ident)?;
   let wt_dir = worktree_dir(&ctx.paths, &tref);
 
   // Check worktree exists (mirror shell behavior)

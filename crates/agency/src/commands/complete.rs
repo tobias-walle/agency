@@ -13,8 +13,8 @@ use crate::{log_info, log_success, log_warn};
 /// # Errors
 /// Returns an error if the task cannot be resolved or cleanup fails.
 /// Merge errors are ignored if the task is already up-to-date with base.
-pub fn run(ctx: &AppContext, ident: Option<&str>, base: Option<&str>, yes: bool) -> Result<()> {
-  let task = resolve_task_ident(&ctx.paths, ident)?;
+pub fn run(ctx: &AppContext, task_ident: Option<&str>, base: Option<&str>, yes: bool) -> Result<()> {
+  let task = resolve_task_ident(&ctx.paths, task_ident)?;
   let ident_str = task.id.to_string();
 
   notify_after_task_change(ctx, || {
@@ -59,6 +59,6 @@ pub fn run(ctx: &AppContext, ident: Option<&str>, base: Option<&str>, yes: bool)
 ///
 /// # Errors
 /// Returns an error if the task cannot be resolved or cleanup fails.
-pub fn run_force(ctx: &AppContext, ident: &str, base: Option<&str>) -> Result<()> {
-  run(ctx, Some(ident), base, true)
+pub fn run_force(ctx: &AppContext, task_ident: &str, base: Option<&str>) -> Result<()> {
+  run(ctx, Some(task_ident), base, true)
 }

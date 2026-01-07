@@ -66,10 +66,10 @@ pub fn list_files(paths: &AgencyPaths, task: &TaskRef) -> Result<Vec<FileRef>> {
   Ok(out)
 }
 
-pub fn resolve_file(paths: &AgencyPaths, task: &TaskRef, ident: &str) -> Result<FileRef> {
+pub fn resolve_file(paths: &AgencyPaths, task: &TaskRef, file_ident: &str) -> Result<FileRef> {
   let files = list_files(paths, task)?;
 
-  if let Ok(id) = ident.parse::<u32>() {
+  if let Ok(id) = file_ident.parse::<u32>() {
     for file in &files {
       if file.id == id {
         return Ok(file.clone());
@@ -78,11 +78,11 @@ pub fn resolve_file(paths: &AgencyPaths, task: &TaskRef, ident: &str) -> Result<
     bail!("File {id} not found");
   }
 
-  let matches: Vec<&FileRef> = files.iter().filter(|f| f.name == ident).collect();
+  let matches: Vec<&FileRef> = files.iter().filter(|f| f.name == file_ident).collect();
   match matches.len() {
-    0 => bail!("File '{ident}' not found. Use ID or exact filename"),
+    0 => bail!("File '{file_ident}' not found. Use ID or exact filename"),
     1 => Ok(matches[0].clone()),
-    _ => bail!("Multiple files match '{ident}'. Use file ID instead"),
+    _ => bail!("Multiple files match '{file_ident}'. Use file ID instead"),
   }
 }
 

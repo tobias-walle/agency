@@ -8,9 +8,9 @@ use anyhow::Result;
 ///
 /// Performs the same preparation as `attach` (ensure branch/worktree, compute agent cmd),
 /// then optionally attaches to the daemon sending `OpenSession` with the real terminal size.
-pub fn run_with_attach(ctx: &AppContext, ident: &str, attach: bool) -> Result<()> {
+pub fn run_with_attach(ctx: &AppContext, task_ident: &str, attach: bool) -> Result<()> {
   // Resolve task
-  let task = resolve_id_or_slug(&ctx.paths, ident)?;
+  let task = resolve_id_or_slug(&ctx.paths, task_ident)?;
   // Fail when a session is already running for this task
   let existing = get_project_state(ctx)?
     .sessions
