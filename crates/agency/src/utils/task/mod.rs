@@ -6,17 +6,17 @@ mod resolution;
 mod slug;
 
 // Re-export all public items from submodules
-pub use cleanup::cleanup_task_artifacts;
-pub use content::{
+pub(crate) use cleanup::cleanup_task_artifacts;
+pub(crate) use content::{
   edit_task_description, parse_task_markdown, read_task_content, read_task_frontmatter,
   write_task_content,
 };
-pub use metadata::{
+pub(crate) use metadata::{
   agent_for_task, TaskContent, TaskFrontmatter, TaskFrontmatterExt, TaskRef,
 };
-pub use paths::{branch_name, task_file, worktree_dir, worktree_name};
-pub use resolution::{list_tasks, resolve_id_or_slug, resolve_task_ident};
-pub use slug::{compute_unique_slug, next_id, normalize_and_validate_slug};
+pub(crate) use paths::{branch_name, task_file, worktree_dir, worktree_name};
+pub(crate) use resolution::{list_tasks, resolve_id_or_slug, resolve_task_ident};
+pub(crate) use slug::{compute_unique_slug, next_id, normalize_and_validate_slug};
 
 #[cfg(test)]
 mod tests {

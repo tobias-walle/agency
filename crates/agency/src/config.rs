@@ -208,10 +208,10 @@ impl AgencyPaths {
 use crate::utils::tty::Tty;
 
 #[derive(Debug, Clone)]
-pub struct AppContext {
-  pub paths: AgencyPaths,
-  pub config: AgencyConfig,
-  pub tty: Tty,
+pub(crate) struct AppContext {
+  pub(crate) paths: AgencyPaths,
+  pub(crate) config: AgencyConfig,
+  pub(crate) tty: Tty,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]

@@ -2,32 +2,32 @@
 ///
 /// The `t` module stands for "tokens". Use these helpers to style
 /// specific values inside info messages consistently across the CLI.
-pub mod t {
+pub(crate) mod t {
   use std::fmt::Display;
 
   use owo_colors::OwoColorize as _;
-  pub fn id(value: impl Display) -> String {
+  pub(crate) fn id(value: impl Display) -> String {
     format!("{}", value.to_string().blue())
   }
 
-  pub fn path(p: impl Display) -> String {
+  pub(crate) fn path(p: impl Display) -> String {
     format!("{}", p.to_string().cyan())
   }
 
-  pub fn slug(slug: impl Display) -> String {
+  pub(crate) fn slug(slug: impl Display) -> String {
     format!("{}", slug.to_string().magenta())
   }
 
-  pub fn ok(s: impl Display) -> String {
+  pub(crate) fn ok(s: impl Display) -> String {
     format!("{}", s.to_string().green())
   }
 
-  pub fn warn(s: impl Display) -> String {
+  pub(crate) fn warn(s: impl Display) -> String {
     format!("{}", s.to_string().yellow())
   }
 
   #[allow(dead_code)]
-  pub fn err(s: impl Display) -> String {
+  pub(crate) fn err(s: impl Display) -> String {
     format!("{}", s.to_string().red())
   }
 }
@@ -41,7 +41,7 @@ use parking_lot::Mutex;
 
 #[allow(dead_code)]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum LogLevel {
+pub(crate) enum LogLevel {
   Info,
   Success,
   Warn,
@@ -49,7 +49,7 @@ pub enum LogLevel {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum LogEvent {
+pub(crate) enum LogEvent {
   /// Render a command preface line like "> agency ..."
   Command(String),
   /// A single log line preserving ANSI styling
@@ -58,16 +58,16 @@ pub enum LogEvent {
 
 static SINK: Mutex<Option<Sender<LogEvent>>> = Mutex::new(None);
 
-pub fn set_log_sink(sender: Sender<LogEvent>) {
+pub(crate) fn set_log_sink(sender: Sender<LogEvent>) {
   *SINK.lock() = Some(sender);
 }
 
-pub fn clear_log_sink() {
+pub(crate) fn clear_log_sink() {
   *SINK.lock() = None;
 }
 
 /// Returns true when a TUI log sink is currently registered
-pub fn is_sink_set() -> bool {
+pub(crate) fn is_sink_set() -> bool {
   SINK.lock().is_some()
 }
 

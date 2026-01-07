@@ -456,7 +456,7 @@ impl AppState {
 }
 
 /// Entry point for the TUI.
-pub fn run(ctx: &AppContext) -> Result<()> {
+pub(crate) fn run(ctx: &AppContext) -> Result<()> {
   if !io::stdout().is_terminal() {
     log_info!("TUI requires a TTY; try 'agency ps' or a real terminal");
     return Ok(());

@@ -8,7 +8,7 @@ pub mod config;
 pub mod daemon;
 pub mod daemon_protocol;
 mod texts;
-pub mod tui;
+pub(crate) mod tui;
 mod utils;
 
 use crate::config::{AgencyPaths, AppContext, global_config_exists, load_config};

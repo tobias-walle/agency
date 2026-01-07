@@ -10,14 +10,14 @@ use crate::log_info;
 /// Use it for all TTY checks and confirmations to ensure consistent behavior
 /// across interactive and non-interactive environments.
 #[derive(Debug, Clone)]
-pub struct Tty {
+pub(crate) struct Tty {
   is_interactive: bool,
 }
 
 impl Tty {
   /// Create a new Tty instance by checking stdin and stdout.
   #[must_use]
-  pub fn new() -> Self {
+  pub(crate) fn new() -> Self {
     let stdin_tty = io::stdin().is_terminal();
     let stdout_tty = io::stdout().is_terminal();
     Self {
@@ -27,7 +27,7 @@ impl Tty {
 
   /// Returns true if both stdin and stdout are connected to a TTY.
   #[must_use]
-  pub fn is_interactive(&self) -> bool {
+  pub(crate) fn is_interactive(&self) -> bool {
     self.is_interactive
   }
 
@@ -37,7 +37,7 @@ impl Tty {
   ///
   /// # Errors
   /// Returns an error with a descriptive message if not interactive.
-  pub fn require_interactive(&self) -> Result<()> {
+  pub(crate) fn require_interactive(&self) -> Result<()> {
     if self.is_interactive {
       Ok(())
     } else {
@@ -55,7 +55,7 @@ impl Tty {
   ///
   /// # Errors
   /// Returns an error if reading from stdin fails.
-  pub fn confirm(&self, prompt: &str, default: bool, yes_flag: bool) -> Result<bool> {
+  pub(crate) fn confirm(&self, prompt: &str, default: bool, yes_flag: bool) -> Result<bool> {
     if yes_flag {
       return Ok(true);
     }
@@ -99,7 +99,7 @@ fn prompt_confirm(prompt: &str, default: bool) -> Result<bool> {
 
 /// Check if stdin has data available to read (non-blocking).
 /// Returns true if stdin has data, false if empty/closed.
-pub fn stdin_has_data() -> bool {
+pub(crate) fn stdin_has_data() -> bool {
   use std::os::unix::io::AsRawFd;
 
   let stdin_fd = io::stdin().as_raw_fd();

@@ -5,14 +5,14 @@ use anyhow::{Result, bail};
 
 use crate::utils::which;
 
-pub const FZF_NOT_INSTALLED_ERROR: &str =
+pub(crate) const FZF_NOT_INSTALLED_ERROR: &str =
   "fzf is not installed. Install it from https://github.com/junegunn/fzf";
 
 /// Runs fzf with the given input and returns the selected line, or None if cancelled.
 ///
 /// # Errors
 /// Returns an error if fzf is not installed or fails to spawn or encounters an I/O error.
-pub fn run_fzf(input: &str) -> Result<Option<String>> {
+pub(crate) fn run_fzf(input: &str) -> Result<Option<String>> {
   if which::which("fzf").is_none() {
     bail!(FZF_NOT_INSTALLED_ERROR);
   }
@@ -47,7 +47,7 @@ pub fn run_fzf(input: &str) -> Result<Option<String>> {
 ///
 /// # Errors
 /// Returns an error if the ID cannot be parsed from the selection.
-pub fn parse_id_from_selection(selected: Option<String>, entity_type: &str) -> Result<u32> {
+pub(crate) fn parse_id_from_selection(selected: Option<String>, entity_type: &str) -> Result<u32> {
   let Some(selected) = selected else {
     std::process::exit(1);
   };

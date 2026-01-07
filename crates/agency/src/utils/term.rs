@@ -18,7 +18,7 @@ fn ansi_regex() -> &'static Regex {
 }
 
 /// Soft-clear viewport and disable extended keyboard modes.
-pub fn restore_terminal_state() {
+pub(crate) fn restore_terminal_state() {
   let mut stdout = io::stdout().lock();
   let _ = stdout.write_all(b"\x1b[999S\x1b[H");
   let _ = stdout.write_all(b"\x1b[>0u\x1b[?2004l\x1b[?1004l");
@@ -27,7 +27,7 @@ pub fn restore_terminal_state() {
 
 /// Print a simple ASCII table to stdout.
 /// Column widths are derived from headers and string lengths of rows.
-pub fn print_table(headers: &[&str], rows: &[Vec<String>]) {
+pub(crate) fn print_table(headers: &[&str], rows: &[Vec<String>]) {
   let cols = headers.len();
   // 1) Measure max width per column across header and values (visible length)
   let mut widths: Vec<usize> = headers.iter().map(|h| h.len()).collect();
@@ -68,7 +68,7 @@ pub fn print_table(headers: &[&str], rows: &[Vec<String>]) {
   }
 }
 
-pub fn strip_ansi_control_codes(input: &str) -> String {
+pub(crate) fn strip_ansi_control_codes(input: &str) -> String {
   ansi_regex().replace_all(input, "").into_owned()
 }
 

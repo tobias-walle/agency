@@ -11,4 +11,4 @@ mod task_input_overlay;
 mod task_table;
 mod text_input;
 
-pub use app::run;
+pub(crate) use app::run;

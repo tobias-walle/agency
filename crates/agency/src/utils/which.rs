@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 
 /// Resolve `program` to an executable path by walking PATH entries.
 #[must_use]
-pub fn which(program: &str) -> Option<PathBuf> {
+pub(crate) fn which(program: &str) -> Option<PathBuf> {
   let has_sep = program.contains(std::path::MAIN_SEPARATOR);
   if has_sep {
     let candidate = PathBuf::from(program);
@@ -21,7 +21,7 @@ pub fn which(program: &str) -> Option<PathBuf> {
 
 /// Returns true when `path` points to a regular executable file.
 #[must_use]
-pub fn is_executable(path: &Path) -> bool {
+pub(crate) fn is_executable(path: &Path) -> bool {
   if !path.is_file() {
     return false;
   }

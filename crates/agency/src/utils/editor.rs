@@ -8,7 +8,7 @@ use crate::config::AgencyConfig;
 
 /// Open a file or directory path using the configured editor.
 /// Falls back to $EDITOR or `vi` when not configured.
-pub fn open_path(cfg: &AgencyConfig, path: &Path, cwd: &Path) -> Result<()> {
+pub(crate) fn open_path(cfg: &AgencyConfig, path: &Path, cwd: &Path) -> Result<()> {
   let target = path
     .canonicalize()
     .unwrap_or_else(|_| path.to_path_buf())
