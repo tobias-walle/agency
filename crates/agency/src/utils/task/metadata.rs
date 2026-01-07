@@ -91,3 +91,139 @@ pub fn agent_for_task(cfg: &AgencyConfig, fm: Option<&TaskFrontmatter>) -> Optio
   }
   cfg.agent.clone()
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use std::path::PathBuf;
+
+  #[test]
+  fn task_ref_from_task_file_parses_valid() {
+    let path = PathBuf::from("/tmp/42-example-task.md");
+    let task = TaskRef::from_task_file(&path).expect("should parse");
+    assert_eq!(task.id, 42);
+    assert_eq!(task.slug, "example-task");
+  }
+
+  #[test]
+  fn task_ref_from_task_file_handles_single_digit_id() {
+    let path = PathBuf::from("/tmp/1-a.md");
+    let task = TaskRef::from_task_file(&path).expect("should parse");
+    assert_eq!(task.id, 1);
+    assert_eq!(task.slug, "a");
+  }
+
+  #[test]
+  fn task_ref_from_task_file_handles_large_id() {
+    let path = PathBuf::from("/tmp/999999-big-task.md");
+    let task = TaskRef::from_task_file(&path).expect("should parse");
+    assert_eq!(task.id, 999999);
+    assert_eq!(task.slug, "big-task");
+  }
+
+  #[test]
+  fn task_ref_from_task_file_rejects_missing_extension() {
+    let path = PathBuf::from("/tmp/5-task");
+    assert!(TaskRef::from_task_file(&path).is_none());
+  }
+
+  #[test]
+  fn task_ref_from_task_file_rejects_wrong_extension() {
+    let path = PathBuf::from("/tmp/5-task.txt");
+    assert!(TaskRef::from_task_file(&path).is_none());
+  }
+
+  #[test]
+  fn task_ref_from_task_file_rejects_missing_slug() {
+    let path = PathBuf::from("/tmp/5-.md");
+    assert!(TaskRef::from_task_file(&path).is_none());
+  }
+
+  #[test]
+  fn task_ref_from_task_file_rejects_missing_id() {
+    let path = PathBuf::from("/tmp/-task.md");
+    assert!(TaskRef::from_task_file(&path).is_none());
+  }
+
+  #[test]
+  fn task_ref_from_task_file_rejects_no_hyphen() {
+    let path = PathBuf::from("/tmp/5task.md");
+    assert!(TaskRef::from_task_file(&path).is_none());
+  }
+
+  #[test]
+  fn task_ref_from_task_file_rejects_invalid_id() {
+    let path = PathBuf::from("/tmp/abc-task.md");
+    assert!(TaskRef::from_task_file(&path).is_none());
+  }
+
+  #[test]
+  fn task_ref_from_task_file_handles_slug_with_numbers() {
+    let path = PathBuf::from("/tmp/10-task-v2-final.md");
+    let task = TaskRef::from_task_file(&path).expect("should parse");
+    assert_eq!(task.id, 10);
+    assert_eq!(task.slug, "task-v2-final");
+  }
+
+  #[test]
+  fn agent_for_task_prefers_frontmatter_agent() {
+    let cfg = AgencyConfig {
+      agent: Some("default-agent".to_string()),
+      ..Default::default()
+    };
+    let fm = TaskFrontmatter {
+      agent: Some("custom-agent".to_string()),
+      base_branch: None,
+    };
+    let result = agent_for_task(&cfg, Some(&fm));
+    assert_eq!(result, Some("custom-agent".to_string()));
+  }
+
+  #[test]
+  fn agent_for_task_falls_back_to_config_default() {
+    let cfg = AgencyConfig {
+      agent: Some("default-agent".to_string()),
+      ..Default::default()
+    };
+    let fm = TaskFrontmatter {
+      agent: None,
+      base_branch: None,
+    };
+    let result = agent_for_task(&cfg, Some(&fm));
+    assert_eq!(result, Some("default-agent".to_string()));
+  }
+
+  #[test]
+  fn agent_for_task_returns_none_when_both_missing() {
+    let cfg = AgencyConfig {
+      agent: None,
+      ..Default::default()
+    };
+    let fm = TaskFrontmatter {
+      agent: None,
+      base_branch: None,
+    };
+    let result = agent_for_task(&cfg, Some(&fm));
+    assert_eq!(result, None);
+  }
+
+  #[test]
+  fn agent_for_task_uses_config_when_no_frontmatter() {
+    let cfg = AgencyConfig {
+      agent: Some("default-agent".to_string()),
+      ..Default::default()
+    };
+    let result = agent_for_task(&cfg, None);
+    assert_eq!(result, Some("default-agent".to_string()));
+  }
+
+  #[test]
+  fn agent_for_task_returns_none_when_no_frontmatter_and_no_config() {
+    let cfg = AgencyConfig {
+      agent: None,
+      ..Default::default()
+    };
+    let result = agent_for_task(&cfg, None);
+    assert_eq!(result, None);
+  }
+}

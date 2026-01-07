@@ -112,3 +112,197 @@ pub fn normalize_and_validate_slug(input: &str) -> Result<String> {
   }
   Ok(trimmed)
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use std::fs;
+  use tempfile::TempDir;
+
+  #[test]
+  fn compute_unique_slug_returns_base_if_available() {
+    let dir = TempDir::new().expect("tmp");
+    let tasks = dir.path().join("tasks");
+    fs::create_dir_all(&tasks).unwrap();
+
+    let result = compute_unique_slug(&tasks, "alpha").expect("should succeed");
+    assert_eq!(result, "alpha");
+  }
+
+  #[test]
+  fn compute_unique_slug_appends_2_when_base_taken() {
+    let dir = TempDir::new().expect("tmp");
+    let tasks = dir.path().join("tasks");
+    fs::create_dir_all(&tasks).unwrap();
+    fs::write(tasks.join("1-alpha.md"), "test").unwrap();
+
+    let result = compute_unique_slug(&tasks, "alpha").expect("should succeed");
+    assert_eq!(result, "alpha2");
+  }
+
+  #[test]
+  fn compute_unique_slug_increments_existing_number() {
+    let dir = TempDir::new().expect("tmp");
+    let tasks = dir.path().join("tasks");
+    fs::create_dir_all(&tasks).unwrap();
+    fs::write(tasks.join("1-alpha2.md"), "test").unwrap();
+
+    let result = compute_unique_slug(&tasks, "alpha2").expect("should succeed");
+    assert_eq!(result, "alpha3");
+  }
+
+  #[test]
+  fn compute_unique_slug_finds_max_and_increments() {
+    let dir = TempDir::new().expect("tmp");
+    let tasks = dir.path().join("tasks");
+    fs::create_dir_all(&tasks).unwrap();
+    fs::write(tasks.join("1-alpha.md"), "test").unwrap();
+    fs::write(tasks.join("2-alpha2.md"), "test").unwrap();
+    fs::write(tasks.join("3-alpha3.md"), "test").unwrap();
+
+    let result = compute_unique_slug(&tasks, "alpha").expect("should succeed");
+    assert_eq!(result, "alpha4");
+  }
+
+  #[test]
+  fn compute_unique_slug_handles_gaps_in_sequence() {
+    let dir = TempDir::new().expect("tmp");
+    let tasks = dir.path().join("tasks");
+    fs::create_dir_all(&tasks).unwrap();
+    fs::write(tasks.join("1-alpha.md"), "test").unwrap();
+    fs::write(tasks.join("2-alpha5.md"), "test").unwrap();
+
+    let result = compute_unique_slug(&tasks, "alpha").expect("should succeed");
+    assert_eq!(result, "alpha6");
+  }
+
+  #[test]
+  fn compute_unique_slug_handles_prefix_only_match() {
+    let dir = TempDir::new().expect("tmp");
+    let tasks = dir.path().join("tasks");
+    fs::create_dir_all(&tasks).unwrap();
+    fs::write(tasks.join("1-alpha.md"), "test").unwrap();
+    fs::write(tasks.join("2-alphabeta.md"), "test").unwrap();
+
+    let result = compute_unique_slug(&tasks, "alpha").expect("should succeed");
+    assert_eq!(result, "alpha2");
+  }
+
+  #[test]
+  fn compute_unique_slug_works_with_empty_dir() {
+    let dir = TempDir::new().expect("tmp");
+    let tasks = dir.path().join("tasks");
+
+    let result = compute_unique_slug(&tasks, "beta").expect("should succeed");
+    assert_eq!(result, "beta");
+  }
+
+  #[test]
+  fn compute_unique_slug_ignores_non_md_files() {
+    let dir = TempDir::new().expect("tmp");
+    let tasks = dir.path().join("tasks");
+    fs::create_dir_all(&tasks).unwrap();
+    fs::write(tasks.join("1-gamma.txt"), "test").unwrap();
+    fs::write(tasks.join("gamma.md"), "test").unwrap();
+
+    let result = compute_unique_slug(&tasks, "gamma").expect("should succeed");
+    assert_eq!(result, "gamma");
+  }
+
+  #[test]
+  fn next_id_returns_1_for_empty_dir() {
+    let dir = TempDir::new().expect("tmp");
+    let tasks = dir.path().join("tasks");
+
+    let result = next_id(&tasks).expect("should succeed");
+    assert_eq!(result, 1);
+  }
+
+  #[test]
+  fn next_id_returns_max_plus_one() {
+    let dir = TempDir::new().expect("tmp");
+    let tasks = dir.path().join("tasks");
+    fs::create_dir_all(&tasks).unwrap();
+    fs::write(tasks.join("1-alpha.md"), "test").unwrap();
+    fs::write(tasks.join("3-beta.md"), "test").unwrap();
+    fs::write(tasks.join("2-gamma.md"), "test").unwrap();
+
+    let result = next_id(&tasks).expect("should succeed");
+    assert_eq!(result, 4);
+  }
+
+  #[test]
+  fn next_id_ignores_non_task_files() {
+    let dir = TempDir::new().expect("tmp");
+    let tasks = dir.path().join("tasks");
+    fs::create_dir_all(&tasks).unwrap();
+    fs::write(tasks.join("5-task.md"), "test").unwrap();
+    fs::write(tasks.join("999-invalid.txt"), "test").unwrap();
+    fs::write(tasks.join("not-a-task.md"), "test").unwrap();
+
+    let result = next_id(&tasks).expect("should succeed");
+    assert_eq!(result, 6);
+  }
+
+  #[test]
+  fn normalize_and_validate_slug_handles_unicode() {
+    assert_eq!(
+      normalize_and_validate_slug("café").unwrap(),
+      "café"
+    );
+    assert_eq!(
+      normalize_and_validate_slug("naïve-approach").unwrap(),
+      "naïve-approach"
+    );
+  }
+
+  #[test]
+  fn normalize_and_validate_slug_trims_hyphens() {
+    assert_eq!(
+      normalize_and_validate_slug("-alpha-").unwrap(),
+      "alpha"
+    );
+    assert_eq!(
+      normalize_and_validate_slug("--beta--").unwrap(),
+      "beta"
+    );
+  }
+
+  #[test]
+  fn normalize_and_validate_slug_collapses_multiple_hyphens() {
+    assert_eq!(
+      normalize_and_validate_slug("foo---bar").unwrap(),
+      "foo-bar"
+    );
+    assert_eq!(
+      normalize_and_validate_slug("a____b").unwrap(),
+      "a-b"
+    );
+  }
+
+  #[test]
+  fn normalize_and_validate_slug_rejects_leading_digit() {
+    assert!(normalize_and_validate_slug("9lives").is_err());
+    assert!(normalize_and_validate_slug("42answer").is_err());
+  }
+
+  #[test]
+  fn normalize_and_validate_slug_accepts_trailing_numbers() {
+    assert_eq!(
+      normalize_and_validate_slug("task123").unwrap(),
+      "task123"
+    );
+  }
+
+  #[test]
+  fn normalize_and_validate_slug_handles_special_chars() {
+    assert_eq!(
+      normalize_and_validate_slug("fix@bug#123").unwrap(),
+      "fix-bug-123"
+    );
+    assert_eq!(
+      normalize_and_validate_slug("task (v2)").unwrap(),
+      "task-v2"
+    );
+  }
+}
