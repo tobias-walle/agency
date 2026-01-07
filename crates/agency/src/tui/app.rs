@@ -53,6 +53,49 @@ pub enum Focus {
 }
 
 /// Current UI mode.
+///
+/// # Mode State Machine
+///
+/// The TUI operates as a state machine with the following valid transitions:
+///
+/// ```text
+///                        ┌─────────────┐
+///                   ┌───►│    List     │◄────┐
+///                   │    │  (default)  │     │
+///                   │    └─────┬───────┘     │
+///                   │          │             │
+///          cancel/  │          │ new/files/  │ cancel/
+///          submit   │          │ confirm     │ confirm
+///                   │          ▼             │
+///                   │    ┌─────────────┐     │
+///                   ├────│ InputSlug/  │─────┤
+///                   │    │ Files/      │     │
+///                   │    │ Confirm     │     │
+///                   │    └─────┬───────┘     │
+///                   │          │             │
+///                   │          │ agent/      │
+///                   │          │ add file    │
+///                   │          ▼             │
+///                   │    ┌─────────────┐     │
+///                   └────│ SelectMenu/ │─────┘
+///                        │ FileInput   │
+///                        └─────────────┘
+/// ```
+///
+/// Valid transitions:
+/// - List → InputSlug (create new task)
+/// - List → FilesOverlay (view files)
+/// - List → ConfirmDialog (confirm action)
+/// - InputSlug → List (cancel or submit)
+/// - InputSlug → SelectMenu (choose agent)
+/// - SelectMenu → InputSlug (select or cancel)
+/// - FilesOverlay → List (cancel)
+/// - FilesOverlay → FileInput (add file)
+/// - FileInput → FilesOverlay (cancel or submit)
+/// - ConfirmDialog → List (cancel or confirm)
+///
+/// Use the helper methods on `AppState` to perform mode transitions to ensure
+/// proper state management and validation.
 #[derive(Clone, Debug, Default)]
 pub enum Mode {
   #[default]
@@ -106,6 +149,71 @@ impl Default for AppState {
 }
 
 impl AppState {
+  // ============================================================================
+  // Mode Transition Helpers
+  // ============================================================================
+  //
+  // These methods provide a structured way to transition between modes,
+  // ensuring state is properly initialized and cleaned up. All mode transitions
+  // should use these helpers instead of directly assigning to `self.mode`.
+
+  /// Return to List mode from any other mode.
+  fn exit_to_list_mode(&mut self) {
+    self.mode = Mode::List;
+    self.input_overlay = None;
+  }
+
+  /// Enter InputSlug mode to create a new task.
+  ///
+  /// Valid from: List
+  fn enter_input_mode(&mut self, ctx: &AppContext, start_and_attach: bool) {
+    self.input_overlay = Some(InputOverlayState::new(start_and_attach, ctx));
+    self.mode = Mode::InputSlug;
+  }
+
+  /// Enter FilesOverlay mode to view files for a task.
+  ///
+  /// Valid from: List, FileInput
+  fn enter_files_overlay(&mut self, ctx: &AppContext, task: TaskRef) {
+    let overlay = FilesOverlayState::new(&ctx.paths, task);
+    self.mode = Mode::FilesOverlay(overlay);
+  }
+
+  /// Enter FileInput mode to add a file.
+  ///
+  /// Valid from: FilesOverlay
+  fn enter_file_input(&mut self, task: TaskRef) {
+    let input = FileInputState::new(task);
+    self.mode = Mode::FileInput(input);
+  }
+
+  /// Enter SelectMenu mode to choose an agent.
+  ///
+  /// Valid from: InputSlug
+  fn enter_select_menu(&mut self, title: &str, items: Vec<String>, selected: usize) {
+    let menu = SelectMenuState::new(title, items, selected);
+    self.mode = Mode::SelectMenu(menu);
+  }
+
+  /// Enter ConfirmDialog mode to confirm an action.
+  ///
+  /// Valid from: List
+  fn enter_confirm_dialog(&mut self, title: &str, message: &str, action: ConfirmAction) {
+    let dialog = ConfirmDialogState::new(title, message, action);
+    self.mode = Mode::ConfirmDialog(dialog);
+  }
+
+  /// Return to InputSlug mode from SelectMenu.
+  ///
+  /// Valid from: SelectMenu
+  fn return_to_input_mode(&mut self) {
+    self.mode = Mode::InputSlug;
+  }
+
+  // ============================================================================
+  // End Mode Transition Helpers
+  // ============================================================================
+
   fn help_items_for_mode(&self) -> &'static [&'static str] {
     match self.mode {
       Mode::InputSlug | Mode::SelectMenu(_) => HELP_ITEMS_INPUT,
@@ -324,8 +432,7 @@ impl AppState {
         spawn_edit_or_attach(ctx, *id, *session);
       }
       task_table::Action::NewTask { start_and_attach } => {
-        self.input_overlay = Some(InputOverlayState::new(*start_and_attach, ctx));
-        self.mode = Mode::InputSlug;
+        self.enter_input_mode(ctx, *start_and_attach);
       }
       task_table::Action::StartTask { id } => {
         let id_str = id.to_string();
@@ -367,12 +474,11 @@ impl AppState {
         });
       }
       task_table::Action::CompleteTask { id } => {
-        let dialog = ConfirmDialogState::new(
+        self.enter_confirm_dialog(
           "Complete Task",
           "Merge into base and delete task?",
           ConfirmAction::CompleteTask { id: *id },
         );
-        self.mode = Mode::ConfirmDialog(dialog);
       }
       task_table::Action::OpenTask { id } => {
         let op = Operation::Open {
@@ -414,8 +520,7 @@ impl AppState {
         });
       }
       task_table::Action::OpenFilesOverlay { task } => {
-        let overlay = FilesOverlayState::new(&ctx.paths, task.clone());
-        self.mode = Mode::FilesOverlay(overlay);
+        self.enter_files_overlay(ctx, task.clone());
       }
     }
   }
@@ -587,7 +692,7 @@ fn handle_list_mode(state: &mut AppState, ctx: &AppContext, key: crossterm::even
 
 fn handle_input_mode(state: &mut AppState, ctx: &AppContext, key: crossterm::event::KeyEvent) {
   let Some(ref mut overlay) = state.input_overlay else {
-    state.mode = Mode::List;
+    state.exit_to_list_mode();
     return;
   };
 
@@ -595,8 +700,7 @@ fn handle_input_mode(state: &mut AppState, ctx: &AppContext, key: crossterm::eve
   match action {
     task_input_overlay::Action::None => {}
     task_input_overlay::Action::Cancel => {
-      state.mode = Mode::List;
-      state.input_overlay = None;
+      state.exit_to_list_mode();
     }
     task_input_overlay::Action::OpenAgentMenu => {
       let mut items: Vec<String> = ctx.config.agents.keys().cloned().collect();
@@ -606,8 +710,7 @@ fn handle_input_mode(state: &mut AppState, ctx: &AppContext, key: crossterm::eve
         .as_ref()
         .and_then(|cur| items.iter().position(|s| s == cur))
         .unwrap_or(0);
-      let menu = SelectMenuState::new("Select agent", items, pre);
-      state.mode = Mode::SelectMenu(menu);
+      state.enter_select_menu("Select agent", items, pre);
     }
     task_input_overlay::Action::Submit {
       slug,
@@ -644,8 +747,7 @@ fn handle_input_mode(state: &mut AppState, ctx: &AppContext, key: crossterm::eve
           }
         });
       }
-      state.mode = Mode::List;
-      state.input_overlay = None;
+      state.exit_to_list_mode();
       let _ = state.refresh(ctx);
     }
   }
@@ -661,7 +763,7 @@ fn handle_menu_mode(
       state.mode = Mode::SelectMenu(menu);
     }
     MenuOutcome::Canceled => {
-      state.mode = Mode::InputSlug;
+      state.return_to_input_mode();
     }
     MenuOutcome::Selected(idx) => {
       if idx < menu.items.len()
@@ -669,7 +771,7 @@ fn handle_menu_mode(
       {
         overlay.set_agent(menu.items[idx].clone());
       }
-      state.mode = Mode::InputSlug;
+      state.return_to_input_mode();
     }
   }
 }
@@ -685,7 +787,7 @@ fn handle_confirm_mode(
       state.mode = Mode::ConfirmDialog(dialog);
     }
     ConfirmOutcome::Canceled => {
-      state.mode = Mode::List;
+      state.exit_to_list_mode();
     }
     ConfirmOutcome::Confirmed => {
       state
@@ -693,7 +795,7 @@ fn handle_confirm_mode(
         .push(LogEvent::Command(dialog.action.command_log()));
       state.task_table.mark_pending_delete(dialog.action.task_id());
       execute_confirm_action(ctx, &dialog.action);
-      state.mode = Mode::List;
+      state.exit_to_list_mode();
     }
   }
 }
@@ -709,7 +811,7 @@ fn handle_files_mode(
       state.mode = Mode::FilesOverlay(overlay);
     }
     FilesOutcome::Canceled => {
-      state.mode = Mode::List;
+      state.exit_to_list_mode();
     }
     FilesOutcome::OpenFile(file) => {
       let path = crate::utils::files::file_path(&ctx.paths, &overlay.task, &file);
@@ -753,8 +855,8 @@ fn handle_files_mode(
       state.mode = Mode::FilesOverlay(overlay);
     }
     FilesOutcome::AddFile => {
-      let input = FileInputState::new(overlay.task.clone());
-      state.mode = Mode::FileInput(input);
+      let task = overlay.task.clone();
+      state.enter_file_input(task);
     }
   }
 }
@@ -770,9 +872,8 @@ fn handle_file_input_mode(
       state.mode = Mode::FileInput(input);
     }
     FileInputAction::Cancel => {
-      // Return to files overlay
-      let overlay = FilesOverlayState::new(&ctx.paths, input.task);
-      state.mode = Mode::FilesOverlay(overlay);
+      let task = input.task.clone();
+      state.enter_files_overlay(ctx, task);
     }
     FileInputAction::Submit { path } => {
       state.command_log.push(LogEvent::Command(format!(
@@ -790,9 +891,7 @@ fn handle_file_input_mode(
           log_error!("Failed to add file: {}", err);
         }
       }
-      // Return to files overlay with refreshed list
-      let overlay = FilesOverlayState::new(&ctx.paths, task);
-      state.mode = Mode::FilesOverlay(overlay);
+      state.enter_files_overlay(ctx, task);
     }
   }
 }
