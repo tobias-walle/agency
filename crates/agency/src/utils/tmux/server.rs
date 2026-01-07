@@ -3,6 +3,7 @@ use std::time::{Duration, Instant};
 use anyhow::{Context, Result};
 
 use crate::config::AgencyConfig;
+use crate::utils::error_messages;
 
 use super::common::{tmux_args_base, tmux_socket_path, GUARD_SESSION, SERVER_READY_TIMEOUT};
 
@@ -82,9 +83,12 @@ fn wait_for_server_ready(cfg: &AgencyConfig, timeout: Duration) -> Result<()> {
   }
 
   if last_stderr.is_empty() {
-    anyhow::bail!("tmux server did not become ready within {timeout:?}");
+    anyhow::bail!(error_messages::tmux_server_not_ready(format!("{timeout:?}")));
   }
-  anyhow::bail!("tmux server did not become ready within {timeout:?}: {last_stderr}");
+  anyhow::bail!(error_messages::tmux_server_not_ready_with_stderr(
+    format!("{timeout:?}"),
+    last_stderr
+  ));
 }
 
 fn guard_session_exited_immediately(cfg: &AgencyConfig) -> Result<()> {
@@ -192,7 +196,9 @@ pub fn ensure_server_inherit_stderr(cfg: &AgencyConfig) -> Result<()> {
     delay_ms = (delay_ms * 2).min(max_delay_ms);
   }
 
-  anyhow::bail!("tmux server did not become ready within {SERVER_READY_TIMEOUT:?}")
+  anyhow::bail!(error_messages::tmux_server_not_ready(format!(
+    "{SERVER_READY_TIMEOUT:?}"
+  )))
 }
 
 /// Check if the tmux server is running by checking for the guard session.

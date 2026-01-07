@@ -8,6 +8,7 @@ use crate::config::{AppContext, BootstrapConfig};
 use crate::log_info;
 use crate::log_warn;
 use crate::utils::child::run_child_process;
+use super::error_messages;
 use crate::utils::cmd::{CmdCtx, expand_argv};
 use crate::utils::files::{files_dir_for_task, local_files_path};
 use crate::utils::task::TaskRef;
@@ -324,7 +325,10 @@ fn run_git_check_ignore_batch(root_workdir: &Path, rel_paths: &[&str]) -> Result
     .with_context(|| "failed to wait for git check-ignore")?;
   // exit 1 => no matches; treat as empty
   if !out.status.success() && out.status.code() != Some(1) {
-    anyhow::bail!("git check-ignore failed: status={}", out.status);
+    anyhow::bail!(error_messages::git_command_failed(
+      "check-ignore",
+      out.status
+    ));
   }
   let stdout = String::from_utf8_lossy(&out.stdout);
   Ok(

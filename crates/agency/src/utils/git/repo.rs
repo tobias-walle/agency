@@ -4,6 +4,8 @@ use anyhow::{Context, Result};
 
 use gix as git;
 
+use crate::utils::error_messages;
+
 /// Resolve the main repository workdir for any given `cwd`.
 ///
 /// - When `cwd` is inside a linked worktree, returns the main repo's workdir.
@@ -63,10 +65,10 @@ pub fn git_workdir(cwd: &Path) -> Result<PathBuf> {
     .wait_with_output()
     .with_context(|| "failed to wait for git rev-parse --show-toplevel")?;
   if !out.status.success() {
-    anyhow::bail!(
-      "git rev-parse --show-toplevel failed: status={}",
+    anyhow::bail!(error_messages::git_command_failed(
+      "rev-parse --show-toplevel",
       out.status
-    );
+    ));
   }
   Ok(PathBuf::from(
     String::from_utf8_lossy(&out.stdout).trim().to_string(),

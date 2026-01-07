@@ -4,6 +4,7 @@ use crate::daemon_protocol::{
   TaskMetrics, TuiListItem, read_frame, write_frame,
 };
 use crate::log_warn;
+use crate::utils::error_messages;
 use crate::utils::git::{open_main_repo, repo_workdir_or};
 use crate::utils::task::TaskRef;
 use anyhow::{Context, Result, anyhow, bail};
@@ -154,7 +155,7 @@ pub fn get_project_state(ctx: &AppContext) -> anyhow::Result<ProjectState> {
       metrics,
     }),
     Ok(D2C::Control(D2CControl::Error { message })) => bail!("{message}"),
-    Ok(_) => bail!("Protocol error: Expected ProjectState reply"),
+    Ok(_) => bail!(error_messages::PROTOCOL_ERROR_EXPECTED_PROJECT_STATE),
     Err(err) => Err(err),
   }
 }
@@ -175,7 +176,7 @@ pub fn tui_register(ctx: &AppContext, pid: u32) -> anyhow::Result<u32> {
   match read_frame::<_, D2C>(&mut stream)? {
     D2C::Control(D2CControl::TuiRegistered { tui_id }) => Ok(tui_id),
     D2C::Control(D2CControl::Error { message }) => anyhow::bail!(message),
-    D2C::Control(_) => anyhow::bail!("Protocol error: expected TuiRegistered reply"),
+    D2C::Control(_) => anyhow::bail!(error_messages::PROTOCOL_ERROR_EXPECTED_TUI_REGISTERED),
   }
 }
 
@@ -201,7 +202,7 @@ pub fn tui_list(ctx: &AppContext) -> anyhow::Result<Vec<TuiListItem>> {
   match read_frame::<_, D2C>(&mut stream)? {
     D2C::Control(D2CControl::TuiList { items }) => Ok(items),
     D2C::Control(D2CControl::Error { message }) => anyhow::bail!(message),
-    D2C::Control(_) => anyhow::bail!("Protocol error: expected TuiList reply"),
+    D2C::Control(_) => anyhow::bail!(error_messages::PROTOCOL_ERROR_EXPECTED_TUI_LIST),
   }
 }
 

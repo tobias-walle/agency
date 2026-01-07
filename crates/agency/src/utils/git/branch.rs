@@ -6,6 +6,7 @@ use gix as git;
 use gix::refs::transaction::PreviousValue;
 
 use crate::config::AppContext;
+use crate::utils::error_messages;
 
 use super::command::git as git_cmd;
 use super::query::rev_parse;
@@ -90,10 +91,10 @@ pub fn current_branch_name_at(cwd: &Path) -> Result<Option<String>> {
   if out.status.code() == Some(1) {
     return Ok(None);
   }
-  anyhow::bail!(
-    "git symbolic-ref --short HEAD failed: status={}",
+  anyhow::bail!(error_messages::git_command_failed(
+    "symbolic-ref --short HEAD",
     out.status
-  );
+  ));
 }
 
 /// Update a local branch ref to point at `new_commit` within `cwd`.
@@ -116,7 +117,10 @@ pub fn delete_branch_if_exists_at(cwd: &Path, name: &str) -> Result<bool> {
     return Ok(false);
   }
   if !status.success() {
-    anyhow::bail!("git show-ref --verify failed: status={status}");
+    anyhow::bail!(error_messages::git_command_failed(
+      "show-ref --verify",
+      status
+    ));
   }
   git_cmd(&["branch", "-D", name], cwd)?;
   Ok(true)

@@ -6,6 +6,7 @@ pub(crate) mod command;
 pub(crate) mod context;
 pub(crate) mod daemon;
 pub(crate) mod editor;
+pub(crate) mod error_messages;
 pub(crate) mod files;
 pub(crate) mod fzf;
 pub(crate) mod git;

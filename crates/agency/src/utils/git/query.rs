@@ -2,6 +2,8 @@ use std::path::Path;
 
 use anyhow::{Context, Result};
 
+use crate::utils::error_messages;
+
 /// Like `is_fast_forward` but operates directly on a working directory path.
 pub fn is_fast_forward_at(cwd: &Path, base: &str, task_branch: &str) -> Result<bool> {
   let status = std::process::Command::new("git")
@@ -17,7 +19,10 @@ pub fn is_fast_forward_at(cwd: &Path, base: &str, task_branch: &str) -> Result<b
   if status.code() == Some(1) {
     return Ok(false);
   }
-  anyhow::bail!("git merge-base --is-ancestor failed: status={status}");
+  anyhow::bail!(error_messages::git_command_failed(
+    "merge-base --is-ancestor",
+    status
+  ));
 }
 
 pub fn rev_parse(cwd: &Path, rev: &str) -> Result<String> {
@@ -32,7 +37,7 @@ pub fn rev_parse(cwd: &Path, rev: &str) -> Result<String> {
     .wait_with_output()
     .with_context(|| "failed to wait for git rev-parse")?;
   if !out.status.success() {
-    anyhow::bail!("git rev-parse failed: status={}", out.status);
+    anyhow::bail!(error_messages::git_command_failed("rev-parse", out.status));
   }
   Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
 }
@@ -51,7 +56,10 @@ pub fn worktree_is_clean_at(cwd: &Path) -> Result<bool> {
     .wait_with_output()
     .with_context(|| "failed to wait for git status --porcelain")?;
   if !out.status.success() {
-    anyhow::bail!("git status --porcelain failed: status={}", out.status);
+    anyhow::bail!(error_messages::git_command_failed(
+      "status --porcelain",
+      out.status
+    ));
   }
   Ok(String::from_utf8_lossy(&out.stdout).trim().is_empty())
 }
@@ -69,7 +77,10 @@ pub fn uncommitted_numstat_at(workdir: &Path) -> Result<(u64, u64)> {
     .wait_with_output()
     .with_context(|| "failed to wait for git diff --numstat")?;
   if !out.status.success() {
-    anyhow::bail!("git diff --numstat failed: status={}", out.status);
+    anyhow::bail!(error_messages::git_command_failed(
+      "diff --numstat",
+      out.status
+    ));
   }
   let mut add: u64 = 0;
   let mut del: u64 = 0;
@@ -99,7 +110,10 @@ pub fn commits_ahead_at(repo_root: &Path, base: &str, branch: &str) -> Result<u6
     .wait_with_output()
     .with_context(|| "failed to wait for git rev-list --count")?;
   if !out.status.success() {
-    anyhow::bail!("git rev-list --count failed: status={}", out.status);
+    anyhow::bail!(error_messages::git_command_failed(
+      "rev-list --count",
+      out.status
+    ));
   }
   let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
   let n = s.parse::<u64>().unwrap_or(0);

@@ -3,6 +3,7 @@ use std::collections::HashSet;
 use anyhow::{Context, Result, bail};
 
 use crate::config::AppContext;
+use crate::utils::error_messages;
 use crate::utils::git::{delete_branch_if_exists, open_main_repo, prune_worktree_if_exists};
 use crate::utils::log::t;
 use crate::utils::task::list_tasks;
@@ -21,7 +22,10 @@ fn list_agency_branches(repo: &gix::Repository) -> Result<Vec<String>> {
     .output()
     .with_context(|| "failed to run git for-each-ref")?;
   if !out.status.success() {
-    bail!("git for-each-ref failed: status={}", out.status);
+    bail!(error_messages::git_command_failed(
+      "for-each-ref",
+      out.status
+    ));
   }
   let stdout = String::from_utf8_lossy(&out.stdout);
   let mut names = Vec::new();

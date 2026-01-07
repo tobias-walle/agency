@@ -5,6 +5,7 @@ use crate::utils::interactive;
 use anyhow::{Context, Result, bail};
 
 use crate::config::AgencyConfig;
+use super::error_messages;
 
 /// Open a file or directory path using the configured editor.
 /// Falls back to $EDITOR or `vi` when not configured.
@@ -29,7 +30,7 @@ pub(crate) fn open_path(cfg: &AgencyConfig, path: &Path, cwd: &Path) -> Result<(
       .status()
       .with_context(|| format!("failed to spawn editor program: {program}"))?;
     if !status.success() {
-      bail!("editor exited with non-zero status");
+      bail!(error_messages::EDITOR_NON_ZERO_EXIT);
     }
     Ok(())
   })

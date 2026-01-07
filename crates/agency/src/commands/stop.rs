@@ -5,6 +5,7 @@ use crate::daemon_protocol::{
   C2D, C2DControl, D2C, D2CControl, ProjectKey, read_frame, write_frame,
 };
 use crate::utils::daemon::connect_daemon_socket;
+use crate::utils::error_messages;
 use crate::utils::git::{open_main_repo, repo_workdir_or};
 use crate::utils::task::resolve_id_or_slug;
 use crate::{log_info, log_success};
@@ -25,7 +26,7 @@ pub fn run(ctx: &AppContext, task_ident: Option<&str>, session_id: Option<u64>) 
         log_success!("Stopped session {}", sid);
       }
       Ok(D2C::Control(D2CControl::Error { message })) => {
-        anyhow::bail!("Daemon error: {message}");
+        anyhow::bail!(error_messages::daemon_error(message));
       }
       _ => {
         // Silent success if protocol differs; keep user informed
@@ -61,7 +62,7 @@ pub fn run(ctx: &AppContext, task_ident: Option<&str>, session_id: Option<u64>) 
         );
       }
       Ok(D2C::Control(D2CControl::Error { message })) => {
-        anyhow::bail!("Daemon error: {message}");
+        anyhow::bail!(error_messages::daemon_error(message));
       }
       _ => {
         log_info!("Requested stop for task {}-{}", task.id, task.slug);

@@ -8,6 +8,7 @@ use crate::daemon_protocol::{
 };
 use crate::utils::daemon as dutil;
 use crate::utils::daemon::{get_project_state, send_start_bootstrap};
+use crate::utils::error_messages;
 use crate::utils::git::{open_main_repo, repo_workdir_or};
 use crate::utils::interactive;
 use crate::utils::session::{build_session_plan, start_session_for_task};
@@ -21,7 +22,7 @@ use std::process::Child;
 
 pub fn run_with_task(ctx: &AppContext, task_ident: &str) -> Result<()> {
   if !ctx.tty.is_interactive() {
-    anyhow::bail!("attach requires an interactive terminal (TTY). Run this command in an interactive shell or terminal.");
+    anyhow::bail!(error_messages::ATTACH_REQUIRES_TTY);
   }
 
   // Initialize env_logger similar to pty-demo main
@@ -67,7 +68,7 @@ pub fn run_with_task(ctx: &AppContext, task_ident: &str) -> Result<()> {
 
 pub fn run_join_session(ctx: &AppContext, session_id: u64) -> Result<()> {
   if !ctx.tty.is_interactive() {
-    anyhow::bail!("attach requires an interactive terminal (TTY). Run this command in an interactive shell or terminal.");
+    anyhow::bail!(error_messages::ATTACH_REQUIRES_TTY);
   }
 
   let entries = get_project_state(ctx)?.sessions;
@@ -79,7 +80,7 @@ pub fn run_join_session(ctx: &AppContext, session_id: u64) -> Result<()> {
 
 pub fn run_follow(ctx: &AppContext, tui_id_opt: Option<u32>) -> Result<()> {
   if !ctx.tty.is_interactive() {
-    anyhow::bail!("attach --follow requires an interactive terminal (TTY). Run this command in an interactive shell or terminal.");
+    anyhow::bail!(error_messages::ATTACH_FOLLOW_REQUIRES_TTY);
   }
 
   // Resolve project key

@@ -4,6 +4,7 @@ use anyhow::{Context, Result, bail};
 
 use crate::config::AppContext;
 use crate::log_info;
+use crate::utils::error_messages;
 use crate::utils::files::has_files;
 use crate::utils::git::{open_main_repo, repo_workdir_or};
 use crate::utils::interactive;
@@ -16,12 +17,7 @@ pub fn run(ctx: &AppContext, task_ident: &str) -> Result<()> {
   let tref = resolve_id_or_slug(&ctx.paths, task_ident)?;
   let wt_dir = worktree_dir(&ctx.paths, &tref);
   if !wt_dir.exists() {
-    bail!(
-      "worktree not found at {}. Run `agency bootstrap {}` or `agency start {}` first",
-      wt_dir.display(),
-      tref.id,
-      tref.id
-    );
+    bail!(error_messages::worktree_not_found(wt_dir.display(), tref.id));
   }
 
   let shell_argv = resolve_shell_argv(&ctx.config);
@@ -53,7 +49,7 @@ pub fn run(ctx: &AppContext, task_ident: &str) -> Result<()> {
       .status()
       .with_context(|| format!("failed to spawn shell program: {shell_program}"))?;
     if !status.success() {
-      bail!("shell exited with non-zero status");
+      bail!(error_messages::SHELL_NON_ZERO_EXIT);
     }
     Ok(())
   })

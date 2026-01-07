@@ -3,6 +3,8 @@ use std::process::Command;
 
 use anyhow::{Result, bail};
 
+use super::error_messages;
+
 /// Open a file or directory with the system default application.
 ///
 /// # Errors
@@ -18,7 +20,7 @@ pub fn open_with_default(path: &Path) -> Result<()> {
   {
     let status = Command::new("open").arg(&path_str).status()?;
     if !status.success() {
-      bail!("open exited with non-zero status");
+      bail!(error_messages::OPEN_NON_ZERO_EXIT);
     }
     Ok(())
   }
@@ -28,7 +30,7 @@ pub fn open_with_default(path: &Path) -> Result<()> {
     let status = Command::new("xdg-open").arg(&path_str).status();
     match status {
       Ok(s) if s.success() => Ok(()),
-      Ok(_) => bail!("xdg-open exited with non-zero status"),
+      Ok(_) => bail!(error_messages::XDG_OPEN_NON_ZERO_EXIT),
       Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
         bail!("xdg-open not found. Install xdg-utils package")
       }

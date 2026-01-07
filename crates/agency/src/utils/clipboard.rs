@@ -2,6 +2,8 @@ use std::process::Command;
 
 use anyhow::{Result, bail};
 
+use super::error_messages;
+
 /// Read image data from the system clipboard.
 ///
 /// # Errors
@@ -54,7 +56,7 @@ fn read_image_macos() -> Result<Vec<u8>> {
   let stdout = String::from_utf8_lossy(&output.stdout);
   if !output.status.success() || stdout.contains("error:") {
     let _ = std::fs::remove_file(&temp_path_buf);
-    bail!("No image in clipboard. Copy an image first");
+    bail!(error_messages::NO_IMAGE_IN_CLIPBOARD);
   }
 
   let mut file = std::fs::File::open(&temp_path_buf)?;
@@ -63,7 +65,7 @@ fn read_image_macos() -> Result<Vec<u8>> {
   let _ = std::fs::remove_file(&temp_path_buf);
 
   if data.is_empty() {
-    bail!("No image in clipboard. Copy an image first");
+    bail!(error_messages::NO_IMAGE_IN_CLIPBOARD);
   }
 
   Ok(data)
@@ -88,7 +90,7 @@ fn read_image_linux() -> Result<Vec<u8>> {
   };
 
   if !output.status.success() || output.stdout.is_empty() {
-    bail!("No image in clipboard. Copy an image first");
+    bail!(error_messages::NO_IMAGE_IN_CLIPBOARD);
   }
 
   Ok(output.stdout)
