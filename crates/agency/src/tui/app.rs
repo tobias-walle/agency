@@ -118,6 +118,107 @@ impl AppState {
     }
   }
 
+  fn process_log_events(&mut self, log_rx: &Receiver<LogEvent>) {
+    while let Ok(ev) = log_rx.try_recv() {
+      self.command_log.push(ev);
+    }
+  }
+
+  fn process_interactive_requests(
+    &mut self,
+    terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>,
+    ctx: &AppContext,
+    irx: &Receiver<InteractiveReq>,
+  ) -> Result<()> {
+    while let Ok(req) = irx.try_recv() {
+      self.handle_interactive_req(terminal, ctx, req)?;
+    }
+    Ok(())
+  }
+
+  fn process_daemon_events(&mut self, ctx: &AppContext) -> Result<()> {
+    let Some(rx) = self.events_rx.take() else {
+      return Ok(());
+    };
+
+    while let Ok(ev) = rx.try_recv() {
+      self.handle_daemon_event(ctx, ev)?;
+    }
+
+    if self.events_rx.is_none()
+      && matches!(self.subscription_status, SubscriptionStatus::Connected)
+    {
+      self.events_rx = Some(rx);
+    }
+
+    Ok(())
+  }
+
+  fn attempt_reconnection(&mut self, ctx: &AppContext) {
+    let SubscriptionStatus::Disconnected { since } = self.subscription_status else {
+      return;
+    };
+
+    if since.elapsed() <= Duration::from_secs(2) {
+      return;
+    }
+
+    if let Ok(rx) = subscribe_events(ctx) {
+      self.events_rx = Some(rx);
+      self.subscription_status = SubscriptionStatus::Connected;
+      self.refresh(ctx).ok();
+      log_info!("Reconnected to daemon");
+    } else {
+      self.subscription_status = SubscriptionStatus::Disconnected { since: Instant::now() };
+    }
+  }
+
+  fn handle_terminal_events(&mut self, ctx: &AppContext) -> Result<bool> {
+    if !event::poll(Duration::from_millis(150))? {
+      return Ok(true);
+    }
+
+    match event::read()? {
+      Event::Key(key) => {
+        if key.kind == KeyEventKind::Repeat {
+          return Ok(true);
+        }
+
+        if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
+          return Ok(false);
+        }
+
+        let mode = self.mode.clone();
+        match mode {
+          Mode::List => {
+            handle_list_mode(self, ctx, key);
+          }
+          Mode::InputSlug => {
+            handle_input_mode(self, ctx, key);
+          }
+          Mode::FilesOverlay(overlay) => {
+            handle_files_mode(self, ctx, overlay, key);
+          }
+          Mode::FileInput(input) => {
+            handle_file_input_mode(self, ctx, input, key);
+          }
+          Mode::SelectMenu(menu) => {
+            handle_menu_mode(self, menu, key);
+          }
+          Mode::ConfirmDialog(dialog) => {
+            handle_confirm_mode(self, ctx, dialog, key);
+          }
+        }
+      }
+      Event::Mouse(mouse) => {
+        self.command_log.handle_mouse_event(mouse);
+      }
+      _ => {}
+    }
+
+    Ok(true)
+  }
+
   fn handle_interactive_req(
     &mut self,
     terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>,
@@ -426,14 +527,8 @@ fn ui_loop(
   register_interactive_sender(itx);
 
   loop {
-    // Drain routed logs
-    while let Ok(ev) = log_rx.try_recv() {
-      state.command_log.push(ev);
-    }
-
-    while let Ok(req) = irx.try_recv() {
-      state.handle_interactive_req(terminal, ctx, req)?;
-    }
+    state.process_log_events(&log_rx);
+    state.process_interactive_requests(terminal, ctx, &irx)?;
 
     if state.paused {
       std::thread::sleep(Duration::from_millis(50));
@@ -441,76 +536,13 @@ fn ui_loop(
     }
 
     state.task_table.prune_pending_deletes();
-
     terminal.draw(|f| state.draw(f))?;
 
-    if let Some(rx) = state.events_rx.take() {
-      while let Ok(ev) = rx.try_recv() {
-        state.handle_daemon_event(ctx, ev)?;
-      }
-      // Put receiver back if still connected (not set to None by disconnect handler)
-      if state.events_rx.is_none()
-        && matches!(state.subscription_status, SubscriptionStatus::Connected)
-      {
-        state.events_rx = Some(rx);
-      }
-    }
+    state.process_daemon_events(ctx)?;
+    state.attempt_reconnection(ctx);
 
-    // Attempt reconnection if disconnected
-    if let SubscriptionStatus::Disconnected { since } = state.subscription_status
-      && since.elapsed() > Duration::from_secs(2)
-    {
-      if let Ok(rx) = subscribe_events(ctx) {
-        state.events_rx = Some(rx);
-        state.subscription_status = SubscriptionStatus::Connected;
-        state.refresh(ctx).ok();
-        log_info!("Reconnected to daemon");
-      } else {
-        // Reset timer to avoid spamming connection attempts
-        state.subscription_status = SubscriptionStatus::Disconnected { since: Instant::now() };
-      }
-    }
-
-    // Handle input events
-    if event::poll(Duration::from_millis(150))? {
-      match event::read()? {
-        Event::Key(key) => {
-          if key.kind == KeyEventKind::Repeat {
-            continue;
-          }
-
-          // Global quit
-          if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
-            break;
-          }
-
-          let mode = state.mode.clone();
-          match mode {
-            Mode::List => {
-              handle_list_mode(&mut state, ctx, key);
-            }
-            Mode::InputSlug => {
-              handle_input_mode(&mut state, ctx, key);
-            }
-            Mode::FilesOverlay(overlay) => {
-              handle_files_mode(&mut state, ctx, overlay, key);
-            }
-            Mode::FileInput(input) => {
-              handle_file_input_mode(&mut state, ctx, input, key);
-            }
-            Mode::SelectMenu(menu) => {
-              handle_menu_mode(&mut state, menu, key);
-            }
-            Mode::ConfirmDialog(dialog) => {
-              handle_confirm_mode(&mut state, ctx, dialog, key);
-            }
-          }
-        }
-        Event::Mouse(mouse) => {
-          state.command_log.handle_mouse_event(mouse);
-        }
-        _ => {}
-      }
+    if !state.handle_terminal_events(ctx)? {
+      break;
     }
   }
 
