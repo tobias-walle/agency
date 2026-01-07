@@ -25,7 +25,8 @@ use super::help_bar::{
 use super::task_input_overlay::{self, InputOverlayState};
 use super::select_menu::{MenuOutcome, SelectMenuState};
 use super::task_table::{self, TaskTableState};
-use crate::commands::{attach, complete, edit, merge, new, open, reset, rm, shell, start, stop};
+use crate::commands::new;
+use crate::commands::operations::{Operation, execute as execute_operation};
 use crate::utils::files::{FileRef, add_file, add_file_from_bytes, files_dir_for_task};
 use crate::utils::opener::open_with_default;
 use crate::config::{AppContext, compute_socket_path};
@@ -245,33 +246,39 @@ impl AppState {
       }
       task_table::Action::StartTask { id } => {
         let id_str = id.to_string();
-        self.command_log.push(LogEvent::Command(format!(
-          "agency start --no-attach {id_str}"
-        )));
+        let op = Operation::Start {
+          task: id_str.clone(),
+          attach: false,
+        };
+        self.command_log.push(LogEvent::Command(op.cli_command()));
         spawn_cmd(ctx, move |ctx| {
-          if let Err(err) = start::run_with_attach(&ctx, &id_str, false) {
+          if let Err(err) = execute_operation(&ctx, &op) {
             log_error!("Start failed: {}", err);
           }
         });
       }
       task_table::Action::StopTask { id } => {
-        let id = *id;
-        self
-          .command_log
-          .push(LogEvent::Command(format!("agency stop --task {id}")));
+        let id_str = id.to_string();
+        let op = Operation::Stop {
+          task: Some(id_str.clone()),
+          session_id: None,
+        };
+        self.command_log.push(LogEvent::Command(op.cli_command()));
         spawn_cmd(ctx, move |ctx| {
-          if let Err(err) = stop::run(&ctx, Some(&id.to_string()), None) {
+          if let Err(err) = execute_operation(&ctx, &op) {
             log_error!("Stop failed: {}", err);
           }
         });
       }
       task_table::Action::MergeTask { id } => {
         let id_str = id.to_string();
-        self
-          .command_log
-          .push(LogEvent::Command(format!("agency merge {id_str}")));
+        let op = Operation::Merge {
+          task: id_str.clone(),
+          base: None,
+        };
+        self.command_log.push(LogEvent::Command(op.cli_command()));
         spawn_cmd(ctx, move |ctx| {
-          if let Err(err) = merge::run(&ctx, &id_str, None) {
+          if let Err(err) = execute_operation(&ctx, &op) {
             log_error!("Merge failed: {}", err);
           }
         });
@@ -285,34 +292,40 @@ impl AppState {
         self.mode = Mode::ConfirmDialog(dialog);
       }
       task_table::Action::OpenTask { id } => {
-        let id = *id;
+        let op = Operation::Open {
+          task: id.to_string(),
+        };
         spawn_cmd(ctx, move |ctx| {
-          let _ = open::run(&ctx, &id.to_string());
+          let _ = execute_operation(&ctx, &op);
         });
       }
       task_table::Action::ShellTask { id } => {
-        let id = *id;
+        let op = Operation::Shell {
+          task: id.to_string(),
+        };
         spawn_cmd(ctx, move |ctx| {
-          let _ = shell::run(&ctx, &id.to_string());
+          let _ = execute_operation(&ctx, &op);
         });
       }
       task_table::Action::DeleteTask { id } => {
-        let id = *id;
-        self
-          .command_log
-          .push(LogEvent::Command(format!("agency rm {id}")));
-        self.task_table.mark_pending_delete(id);
+        let id_str = id.to_string();
+        let op = Operation::Remove {
+          task: id_str.clone(),
+        };
+        self.command_log.push(LogEvent::Command(op.cli_command()));
+        self.task_table.mark_pending_delete(*id);
         spawn_cmd(ctx, move |ctx| {
-          let _ = rm::run_force(&ctx, &id.to_string());
+          let _ = execute_operation(&ctx, &op);
         });
       }
       task_table::Action::ResetTask { id } => {
-        let id = *id;
-        self
-          .command_log
-          .push(LogEvent::Command(format!("agency reset {id}")));
+        let id_str = id.to_string();
+        let op = Operation::Reset {
+          task: id_str.clone(),
+        };
+        self.command_log.push(LogEvent::Command(op.cli_command()));
         spawn_cmd(ctx, move |ctx| {
-          if let Err(err) = reset::run(&ctx, &id.to_string()) {
+          if let Err(err) = execute_operation(&ctx, &op) {
             log_error!("Reset failed: {}", err);
           }
         });
@@ -582,7 +595,11 @@ fn handle_input_mode(state: &mut AppState, ctx: &AppContext, key: crossterm::eve
           move || match new::run(&ctx, &slug, agent.as_deref(), Some(""), false, &[]) {
             Ok(created) => {
               let id_str = created.id.to_string();
-              if let Err(err) = start::run_with_attach(&ctx, &id_str, true) {
+              let op = Operation::Start {
+                task: id_str.clone(),
+                attach: true,
+              };
+              if let Err(err) = execute_operation(&ctx, &op) {
                 log_error!("Start+attach failed: {}", err);
               }
             }
@@ -756,8 +773,12 @@ fn execute_confirm_action(ctx: &AppContext, action: &ConfirmAction) {
   match *action {
     ConfirmAction::CompleteTask { id } => {
       let id_str = id.to_string();
+      let op = Operation::Complete {
+        task: id_str.clone(),
+        base: None,
+      };
       spawn_cmd(ctx, move |ctx| {
-        if let Err(err) = complete::run_force(&ctx, &id_str, None) {
+        if let Err(err) = execute_operation(&ctx, &op) {
           log_error!("Complete failed: {}", err);
         }
       });
@@ -804,9 +825,13 @@ fn spawn_edit_or_attach(ctx: &AppContext, id: u32, session: Option<u64>) {
   let ctx = ctx.clone();
   std::thread::spawn(move || {
     if let Some(sid) = session {
-      let _ = attach::run_join_session(&ctx, sid);
+      let op = Operation::Attach { session_id: sid };
+      let _ = execute_operation(&ctx, &op);
     } else {
-      let _ = edit::run(&ctx, &id.to_string());
+      let op = Operation::Edit {
+        task: id.to_string(),
+      };
+      let _ = execute_operation(&ctx, &op);
     }
   });
 }
