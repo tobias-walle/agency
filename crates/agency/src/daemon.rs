@@ -8,7 +8,7 @@ use crate::utils::git::{
 };
 use crate::utils::task::{TaskRef, branch_name, list_tasks, read_task_frontmatter, worktree_dir};
 use crate::utils::tmux::list_sessions_for_project as tmux_list;
-use anyhow::Result;
+use anyhow::{Context, Result};
 use log::{error, info, warn};
 use parking_lot::Mutex;
 use std::collections::HashMap;
@@ -20,6 +20,14 @@ use std::process::Child;
 use std::sync::Arc;
 use std::time::Duration;
 
+/// Starts the daemon and runs the main event loop.
+///
+/// # Errors
+/// Returns an error if:
+/// - Socket directory cannot be created or permissions cannot be set
+/// - Socket binding fails (unless another daemon is already running)
+/// - Setting socket to non-blocking mode fails
+/// - The daemon event loop encounters unrecoverable errors
 pub fn run_daemon(socket_path: &Path, cfg: &AgencyConfig) -> Result<()> {
   info!("Starting daemon. Socket path: {}", socket_path.display());
 
@@ -29,6 +37,12 @@ pub fn run_daemon(socket_path: &Path, cfg: &AgencyConfig) -> Result<()> {
       if is_address_in_use(&err) && UnixStream::connect(socket_path).is_ok() {
         warn!("Daemon is already running");
         return Ok(());
+      }
+      if is_address_in_use(&err) {
+        return Err(err).context(
+          "Socket address in use but connection failed (likely stale socket). \
+           Try removing the socket file manually or check for zombie processes",
+        );
       }
       return Err(err);
     }
@@ -384,10 +398,19 @@ fn is_address_in_use(err: &anyhow::Error) -> bool {
     .is_some_and(|e| e.kind() == std::io::ErrorKind::AddrInUse)
 }
 
+/// Ensures the socket directory exists with correct permissions and binds to the socket path.
+///
+/// # Errors
+/// Returns an error if:
+/// - Socket directory cannot be created
+/// - Directory permissions cannot be set to 0o700
+/// - Socket binding fails (e.g., address already in use, permission denied)
 pub fn ensure_socket_dir_and_bind(path: &Path) -> anyhow::Result<UnixListener> {
   if let Some(dir) = path.parent() {
-    let _ = fs::create_dir_all(dir);
-    let _ = fs::set_permissions(dir, fs::Permissions::from_mode(0o700));
+    fs::create_dir_all(dir)
+      .with_context(|| format!("Failed to create socket directory: {}", dir.display()))?;
+    fs::set_permissions(dir, fs::Permissions::from_mode(0o700))
+      .with_context(|| format!("Failed to set permissions on socket directory: {}", dir.display()))?;
   }
   if path.exists() {
     // Best-effort remove stale
