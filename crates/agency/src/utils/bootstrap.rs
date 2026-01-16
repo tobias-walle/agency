@@ -2,6 +2,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
+use glob::glob;
 use reflink_copy::reflink_or_copy;
 
 use crate::config::{AppContext, BootstrapConfig};
@@ -44,23 +45,45 @@ pub fn bootstrap_worktree(
   // Copy remaining large files (small ones were already copied synchronously)
   copy_gitignored_root_files(root_workdir, dst_worktree, cfg, None)?;
 
-  // Copy explicitly included directories
-  let entries = discover_root_entries(root_workdir)?;
-  for entry in entries {
-    let Ok(file_type) = entry.file_type() else {
-      continue;
-    };
-    if !file_type.is_dir() {
-      continue;
+  // Copy explicitly included files and directories using glob patterns
+  for pattern in &cfg.include {
+    let pattern_path = root_workdir.join(pattern);
+    let pattern_str = pattern_path.to_string_lossy().to_string();
+
+    let mut matched_any = false;
+    let paths = glob(&pattern_str)
+      .with_context(|| format!("invalid glob pattern: {pattern}"))?;
+
+    for path_result in paths {
+      let path = path_result.with_context(|| format!("glob error for pattern: {pattern}"))?;
+
+      // Extract the name relative to root_workdir
+      let name = path
+        .strip_prefix(root_workdir)
+        .unwrap_or(&path)
+        .to_string_lossy()
+        .to_string();
+
+      if is_excluded(&name, cfg) {
+        continue;
+      }
+
+      matched_any = true;
+
+      let metadata = fs::metadata(&path)
+        .with_context(|| format!("failed to read metadata for {}", path.display()))?;
+
+      if metadata.is_file() {
+        let dst_file = dst_worktree.join(&name);
+        copy_included_file(&path, &dst_file)?;
+      } else if metadata.is_dir() {
+        let dst_dir = dst_worktree.join(&name);
+        copy_dir_tree(&path, &dst_dir)?;
+      }
     }
-    let name = entry.file_name().to_string_lossy().to_string();
-    if is_excluded(&name, cfg) {
-      continue;
-    }
-    // Only copy directories when explicitly included
-    if cfg.include.iter().any(|inc| inc == &name) {
-      let dst_dir = dst_worktree.join(&name);
-      copy_dir_tree(&entry.path(), &dst_dir)?;
+
+    if !matched_any {
+      log_warn!("Bootstrap include pattern '{}' matched no files", pattern);
     }
   }
 
@@ -139,6 +162,32 @@ fn copy_gitignored_root_files(
   }
 
   Ok(())
+}
+
+/// Copy a single included file to the worktree.
+///
+/// # Errors
+///
+/// Returns an error if the file cannot be read or copied.
+fn copy_included_file(src: &Path, dst: &Path) -> Result<()> {
+  let size = fs::metadata(src)
+    .with_context(|| format!("stat {}", src.display()))?
+    .len();
+
+  if size > MAX_BOOTSTRAP_FILE_BYTES {
+    log_warn!(
+      "Skipping file {} ({}MB > 10MB limit)",
+      src.display(),
+      size / (1024 * 1024)
+    );
+    return Ok(());
+  }
+
+  if dst.exists() {
+    return Ok(());
+  }
+
+  copy_file(src, dst)
 }
 
 /// Result from creating a worktree.

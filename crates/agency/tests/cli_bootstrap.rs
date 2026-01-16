@@ -54,6 +54,7 @@ fn new_bootstrap_respects_config_includes_and_excludes() -> Result<()> {
     std::fs::write(env.path().join(".env"), "KEY=VALUE\n")?;
     std::fs::write(env.path().join(".env.local"), "LOCAL=1\n")?;
     std::fs::write(env.path().join("secrets.txt"), "secret\n")?;
+    std::fs::write(env.path().join("build.sh"), "#!/bin/bash\necho build\n")?;
     std::fs::create_dir_all(env.path().join(".venv"))?;
     std::fs::write(env.path().join(".venv").join("pkg.txt"), "x\n")?;
     std::fs::create_dir_all(env.path().join(".direnv"))?;
@@ -63,7 +64,7 @@ fn new_bootstrap_respects_config_includes_and_excludes() -> Result<()> {
     std::fs::create_dir_all(&proj_cfg_dir)?;
     std::fs::write(
       proj_cfg_dir.join("agency.toml"),
-      "[bootstrap]\ninclude=[\".venv\"]\n",
+      "[bootstrap]\ninclude=[\".venv\", \"build.sh\"]\n",
     )?;
 
     let xdg_root = common::test_env::tmp_root().join("xdg-config");
@@ -82,6 +83,7 @@ fn new_bootstrap_respects_config_includes_and_excludes() -> Result<()> {
         let wt = env.worktree_dir_path(id, &slug);
         assert!(wt.join(".env").is_file());
         assert!(wt.join("secrets.txt").is_file());
+        assert!(wt.join("build.sh").is_file());
         assert!(wt.join(".venv").is_dir());
         assert!(wt.join(".venv").join("pkg.txt").is_file());
         assert!(wt.join(".direnv").is_dir());
@@ -91,6 +93,70 @@ fn new_bootstrap_respects_config_includes_and_excludes() -> Result<()> {
         assert!(!wt.join(".agency/agency.toml").exists());
       },
     );
+
+    Ok(())
+  })
+}
+
+#[test]
+fn bootstrap_includes_glob_patterns() -> Result<()> {
+  TestEnv::run(|env| -> Result<()> {
+    env.init_repo()?;
+
+    // Create multiple patch files and a build script
+    std::fs::write(env.path().join("fix1.patch"), "patch content 1\n")?;
+    std::fs::write(env.path().join("fix2.patch"), "patch content 2\n")?;
+    std::fs::write(env.path().join("feature.patch"), "patch content 3\n")?;
+    std::fs::write(env.path().join("build.sh"), "#!/bin/bash\necho build\n")?;
+    std::fs::write(env.path().join("readme.txt"), "readme\n")?;
+
+    let proj_cfg_dir = env.path().join(".agency");
+    std::fs::create_dir_all(&proj_cfg_dir)?;
+    std::fs::write(
+      proj_cfg_dir.join("agency.toml"),
+      "[bootstrap]\ninclude=[\"*.patch\", \"build.*\"]\n",
+    )?;
+
+    let (id, slug) = env.new_task("bootstrap-glob", &[])?;
+    env.bootstrap_task(id)?;
+    let wt = env.worktree_dir_path(id, &slug);
+
+    // All .patch files should be copied
+    assert!(wt.join("fix1.patch").is_file());
+    assert!(wt.join("fix2.patch").is_file());
+    assert!(wt.join("feature.patch").is_file());
+
+    // build.* pattern should match build.sh
+    assert!(wt.join("build.sh").is_file());
+
+    // readme.txt should not be copied (not in include list)
+    assert!(!wt.join("readme.txt").exists());
+
+    Ok(())
+  })
+}
+
+#[test]
+fn bootstrap_warns_on_no_glob_matches() -> Result<()> {
+  TestEnv::run(|env| -> Result<()> {
+    env.init_repo()?;
+
+    std::fs::write(env.path().join("readme.txt"), "readme\n")?;
+
+    let proj_cfg_dir = env.path().join(".agency");
+    std::fs::create_dir_all(&proj_cfg_dir)?;
+    std::fs::write(
+      proj_cfg_dir.join("agency.toml"),
+      "[bootstrap]\ninclude=[\"*.nonexistent\"]\n",
+    )?;
+
+    let (id, _slug) = env.new_task("bootstrap-nowarn", &[])?;
+    // Bootstrap should succeed even if pattern matches nothing
+    env.bootstrap_task(id)?;
+
+    // Note: We can't easily capture logs in this test environment,
+    // but the bootstrap should complete without errors.
+    // The warning would be visible in the daemon logs.
 
     Ok(())
   })
