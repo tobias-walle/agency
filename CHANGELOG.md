@@ -1,3 +1,10 @@
+# [1.19.0](https://github.com/tobias-walle/agency/compare/v1.18.0...v1.19.0) (2026-01-16)
+
+
+### Features
+
+* support glob patterns in bootstrap include list ([1df58f4](https://github.com/tobias-walle/agency/commit/1df58f4c514cd4016d8d31d3183a50eccb90c575))
+
 # [1.18.0](https://github.com/tobias-walle/agency/compare/v1.17.0...v1.18.0) (2026-01-05)
 
 
