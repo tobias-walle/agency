@@ -26,3 +26,6 @@ cmd = ["gemini", "$AGENCY_TASK"]
 
 [agents.opencode]
 cmd = ["opencode", "--prompt", "$AGENCY_TASK"]
+
+[agents.pi]
+cmd = ["pi", "$AGENCY_TASK"]
