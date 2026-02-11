@@ -4,8 +4,8 @@ use std::path::{Path, PathBuf};
 
 use crate::commands::shell::resolve_shell_argv;
 use crate::config::AppContext;
-use crate::daemon_protocol::{BootstrapRequest, TaskMeta};
-use crate::utils::bootstrap::create_worktree_for_task;
+use crate::daemon_protocol::TaskMeta;
+use crate::utils::bootstrap::{create_worktree_for_task, run_bootstrap_cmd_with_env};
 use crate::utils::cmd::{CmdCtx, expand_argv};
 use crate::utils::command::as_shell_command;
 use crate::utils::files::has_files;
@@ -52,8 +52,6 @@ pub struct SessionPlan {
   pub agent_args: Vec<String>,
   pub env_map: HashMap<String, String>,
   pub shell_argv: Vec<String>,
-  /// If set, bootstrap should be run in the background for this task.
-  pub bootstrap_request: Option<BootstrapRequest>,
 }
 
 pub fn build_session_plan(ctx: &AppContext, task: &TaskRef) -> Result<SessionPlan> {
@@ -118,21 +116,12 @@ pub fn build_session_plan(ctx: &AppContext, task: &TaskRef) -> Result<SessionPla
     slug: task.slug.clone(),
   };
 
-  // Build bootstrap request for new worktrees
-  let bootstrap_request = if wt_result.is_new {
+  // Run bootstrap command synchronously for new worktrees
+  // (file copying already happened in create_worktree_for_task)
+  if wt_result.is_new {
     let bcfg = ctx.config.bootstrap_config();
-    Some(BootstrapRequest {
-      repo_root: repo_root.display().to_string(),
-      worktree_dir: worktree_dir.display().to_string(),
-      task_meta: task_meta.clone(),
-      bootstrap_include: bcfg.include.clone(),
-      bootstrap_exclude: bcfg.exclude.clone(),
-      bootstrap_cmd: bcfg.cmd.clone(),
-      env_vars: env_map.clone(),
-    })
-  } else {
-    None
-  };
+    run_bootstrap_cmd_with_env(&repo_root, &worktree_dir, &bcfg, &env_map);
+  }
 
   Ok(SessionPlan {
     task_meta,
@@ -142,7 +131,6 @@ pub fn build_session_plan(ctx: &AppContext, task: &TaskRef) -> Result<SessionPla
     agent_args,
     env_map,
     shell_argv,
-    bootstrap_request,
   })
 }
 

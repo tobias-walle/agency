@@ -1,7 +1,6 @@
 use anyhow::{Context, Result};
 use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::io::{Read, Write};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Encode, Decode)]
@@ -89,11 +88,6 @@ pub enum C2DControl {
     project: ProjectKey,
     task_id: u32,
     slug: String,
-  },
-  /// Start bootstrap process in the background for a task
-  StartBootstrap {
-    project: ProjectKey,
-    request: BootstrapRequest,
   },
   Shutdown,
   Ping {
@@ -189,19 +183,6 @@ pub struct TuiListItem {
   pub tui_id: u32,
   pub pid: u32,
   pub focused_task_id: Option<u32>,
-}
-
-/// Request for starting bootstrap in the background.
-/// Contains all data needed to run `bootstrap_worktree` and `run_bootstrap_cmd`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Encode, Decode)]
-pub struct BootstrapRequest {
-  pub repo_root: String,
-  pub worktree_dir: String,
-  pub task_meta: TaskMeta,
-  pub bootstrap_include: Vec<String>,
-  pub bootstrap_exclude: Vec<String>,
-  pub bootstrap_cmd: Vec<String>,
-  pub env_vars: HashMap<String, String>,
 }
 
 #[cfg(test)]

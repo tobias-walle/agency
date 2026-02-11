@@ -1,9 +1,8 @@
 use std::collections::HashMap;
-use std::path::Path;
 
 use anyhow::{Context, Result};
 
-use crate::config::{AppContext, BootstrapConfig};
+use crate::config::AppContext;
 use crate::utils::bootstrap::{create_worktree_for_task, run_bootstrap_in_worktree};
 use crate::utils::git::{ensure_branch_at, open_main_repo, repo_workdir_or, rev_parse};
 use crate::utils::task::{
@@ -31,40 +30,14 @@ pub fn run(ctx: &AppContext, ident: &str) -> Result<()> {
   }
   let _ = ensure_branch_at(&repo, &branch, &base)?;
 
-  // Create worktree (fast)
+  // Create worktree and copy bootstrap files
   let wt_result = create_worktree_for_task(ctx, &repo, &task, &branch)?;
 
-  // Run bootstrap synchronously (this is the user-facing command)
+  // Run bootstrap command synchronously
   let repo_root = repo_workdir_or(&repo, ctx.paths.root());
   let bcfg = ctx.config.bootstrap_config();
   let env_vars: HashMap<String, String> = std::env::vars().collect();
   run_bootstrap_in_worktree(&repo_root, &wt_result.worktree_dir, &bcfg, &env_vars)?;
-
-  Ok(())
-}
-
-/// Internal bootstrap: run by daemon as a child process.
-/// This function is called with pre-computed paths and config.
-pub fn run_internal(
-  repo_root: &str,
-  worktree_dir: &str,
-  include: &[String],
-  exclude: &[String],
-  cmd: &[String],
-) -> Result<()> {
-  let repo_root = Path::new(repo_root);
-  let worktree_dir = Path::new(worktree_dir);
-
-  let bcfg = BootstrapConfig {
-    include: include.to_vec(),
-    exclude: exclude.to_vec(),
-    cmd: cmd.to_vec(),
-  };
-
-  // Collect environment variables passed by the daemon
-  let env_vars: HashMap<String, String> = std::env::vars().collect();
-
-  run_bootstrap_in_worktree(repo_root, worktree_dir, &bcfg, &env_vars)?;
 
   Ok(())
 }

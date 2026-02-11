@@ -211,20 +211,6 @@ enum DaemonCmd {
 enum BootstrapCmd {
   /// Run bootstrap for a specific task (default when ident provided)
   Task { ident: String },
-  /// Internal: run bootstrap in worktree (called by daemon)
-  #[command(hide = true)]
-  Run {
-    #[arg(long)]
-    repo_root: String,
-    #[arg(long)]
-    worktree_dir: String,
-    #[arg(long = "include", action = clap::ArgAction::Append)]
-    include: Vec<String>,
-    #[arg(long = "exclude", action = clap::ArgAction::Append)]
-    exclude: Vec<String>,
-    #[arg(long = "cmd", action = clap::ArgAction::Append)]
-    cmd: Vec<String>,
-  },
 }
 
 #[derive(Debug, Subcommand)]
@@ -464,16 +450,6 @@ fn run_command(ctx: &AppContext, cli: Cli) -> Result<()> {
       (Some(BootstrapCmd::Task { ident }), _) | (None, Some(ident)) => {
         commands::bootstrap::run(ctx, &ident)
       }
-      (
-        Some(BootstrapCmd::Run {
-          repo_root,
-          worktree_dir,
-          include,
-          exclude,
-          cmd,
-        }),
-        _,
-      ) => commands::bootstrap::run_internal(&repo_root, &worktree_dir, &include, &exclude, &cmd),
       (None, None) => anyhow::bail!("Bootstrap requires a task ID or slug"),
     },
     Some(Commands::Config {}) => commands::config::run(ctx),

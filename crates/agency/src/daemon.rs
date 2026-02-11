@@ -1,7 +1,7 @@
 use crate::config::AgencyConfig;
 use crate::daemon_protocol::{
-  BootstrapRequest, C2D, C2DControl, D2C, D2CControl, ProjectKey, SessionInfo, TaskInfo, TaskMeta,
-  TaskMetrics, read_frame, write_frame,
+  C2D, C2DControl, D2C, D2CControl, ProjectKey, SessionInfo, TaskInfo, TaskMeta, TaskMetrics,
+  read_frame, write_frame,
 };
 use crate::utils::git::{
   commits_ahead_at, current_branch_name_at, git_workdir, uncommitted_numstat_at,
@@ -16,7 +16,6 @@ use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
-use std::process::Child;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -33,9 +32,6 @@ pub fn run_daemon(socket_path: &Path, cfg: &AgencyConfig) -> Result<()> {
   daemon.run()
 }
 
-/// Key for bootstrap processes: (`task_id`, slug)
-type BootstrapKey = (u32, String);
-
 pub struct SlimDaemon {
   listener: UnixListener,
   cfg: AgencyConfig,
@@ -46,8 +42,6 @@ pub struct SlimDaemon {
   socket_path: PathBuf,
   // Per-project TUI registry: id -> entry
   tui_registry: Arc<Mutex<HashMap<String, HashMap<u32, TuiEntry>>>>,
-  // Active bootstrap processes: (project_root, task_id, slug) -> Child
-  bootstrap_procs: Arc<Mutex<HashMap<(String, BootstrapKey), Child>>>,
 }
 
 struct Subscriber {
@@ -66,14 +60,12 @@ impl SlimDaemon {
       last_snapshot: Arc::new(Mutex::new(HashMap::new())),
       socket_path,
       tui_registry: Arc::new(Mutex::new(HashMap::new())),
-      bootstrap_procs: Arc::new(Mutex::new(HashMap::new())),
     }
   }
 
   fn snapshot_for(&self, project: &ProjectKey) -> ProjectSnapshot {
     let prev = self.last_snapshot.lock().get(&project.repo_root).cloned();
-    let bootstrap_tasks = get_bootstrap_tasks(&self.bootstrap_procs, &project.repo_root);
-    build_project_snapshot(&self.cfg, project, prev.as_ref(), &bootstrap_tasks)
+    build_project_snapshot(&self.cfg, project, prev.as_ref())
   }
 
   fn update_cache_and_broadcast(&self, project: &ProjectKey, snap: &ProjectSnapshot) {
@@ -90,7 +82,6 @@ impl SlimDaemon {
     let cfg = self.cfg.clone();
     let cache = self.last_snapshot.clone();
     let registry = self.tui_registry.clone();
-    let bootstrap_procs = self.bootstrap_procs.clone();
     std::thread::Builder::new()
       .name("daemon-poller".to_string())
       .spawn(move || {
@@ -98,14 +89,10 @@ impl SlimDaemon {
         loop {
           std::thread::sleep(Duration::from_millis(1000));
 
-          // Reap completed bootstrap processes
-          reap_completed_bootstraps(&bootstrap_procs);
-
           let targets: Vec<ProjectKey> = subs.lock().iter().map(|s| s.project.clone()).collect();
           for pk in targets {
             let prev = cache.lock().get(&pk.repo_root).cloned();
-            let bootstrap_tasks = get_bootstrap_tasks(&bootstrap_procs, &pk.repo_root);
-            let new_snap = build_project_snapshot(&cfg, &pk, prev.as_ref(), &bootstrap_tasks);
+            let new_snap = build_project_snapshot(&cfg, &pk, prev.as_ref());
             let mut cache_guard = cache.lock();
             let changed = cache_guard.get(&pk.repo_root) != Some(&new_snap);
             if changed {
@@ -191,13 +178,6 @@ impl SlimDaemon {
         slug,
       })) => {
         self.handle_stop_task(stream, &project, task_id, &slug);
-      }
-      Ok(C2D::Control(C2DControl::StartBootstrap { project, request })) => {
-        info!(
-          "Received StartBootstrap for task {}-{} in project {}",
-          request.task_meta.id, request.task_meta.slug, project.repo_root
-        );
-        self.handle_start_bootstrap(stream, &project, &request);
       }
       Ok(C2D::Control(C2DControl::Shutdown)) => {
         self
@@ -318,9 +298,6 @@ impl SlimDaemon {
     task_id: u32,
     slug: &str,
   ) {
-    // Kill any running bootstrap process for this task
-    kill_bootstrap(&self.bootstrap_procs, &project.repo_root, task_id, slug);
-
     let list = tmux_list(&self.cfg, Path::new(&project.repo_root)).unwrap_or_default();
     let mut stopped = 0usize;
     for si in list {
@@ -332,44 +309,6 @@ impl SlimDaemon {
     let _ = write_frame(&mut *stream, &D2C::Control(D2CControl::Ack { stopped }));
   }
 
-  fn handle_start_bootstrap(
-    &self,
-    stream: &mut UnixStream,
-    project: &ProjectKey,
-    request: &BootstrapRequest,
-  ) {
-    let key = (
-      project.repo_root.clone(),
-      (request.task_meta.id, request.task_meta.slug.clone()),
-    );
-
-    // Check if bootstrap is already running for this task
-    if self.bootstrap_procs.lock().contains_key(&key) {
-      let _ = write_frame(&mut *stream, &D2C::Control(D2CControl::Ack { stopped: 0 }));
-      return;
-    }
-
-    // Spawn bootstrap as a child process
-    match spawn_bootstrap_process(request) {
-      Ok(child) => {
-        self.bootstrap_procs.lock().insert(key, child);
-        info!(
-          "Started bootstrap for task {}-{}",
-          request.task_meta.id, request.task_meta.slug
-        );
-        let _ = write_frame(&mut *stream, &D2C::Control(D2CControl::Ack { stopped: 0 }));
-      }
-      Err(err) => {
-        warn!("Failed to start bootstrap: {err}");
-        let _ = write_frame(
-          &mut *stream,
-          &D2C::Control(D2CControl::Error {
-            message: format!("Failed to start bootstrap: {err}"),
-          }),
-        );
-      }
-    }
-  }
 }
 
 pub fn ensure_socket_dir_and_bind(path: &Path) -> anyhow::Result<UnixListener> {
@@ -400,115 +339,14 @@ fn now_ms() -> u64 {
   u64::try_from(dur.as_millis()).unwrap_or(u64::MAX)
 }
 
-/// Get the set of (`task_id`, slug) pairs with active bootstrap processes for a project.
-fn get_bootstrap_tasks(
-  bootstrap_procs: &Arc<Mutex<HashMap<(String, BootstrapKey), Child>>>,
-  project_root: &str,
-) -> std::collections::HashSet<BootstrapKey> {
-  bootstrap_procs
-    .lock()
-    .keys()
-    .filter(|(root, _)| root == project_root)
-    .map(|(_, key)| key.clone())
-    .collect()
-}
-
-/// Reap completed bootstrap processes (remove from map).
-fn reap_completed_bootstraps(
-  bootstrap_procs: &Arc<Mutex<HashMap<(String, BootstrapKey), Child>>>,
-) {
-  let mut guard = bootstrap_procs.lock();
-  let mut to_remove = Vec::new();
-  for (key, child) in guard.iter_mut() {
-    if let Ok(Some(status)) = child.try_wait() {
-      if status.success() {
-        info!(
-          "Bootstrap completed for task {}-{}",
-          key.1 .0, key.1 .1
-        );
-      } else {
-        warn!(
-          "Bootstrap exited with status {} for task {}-{}",
-          status, key.1 .0, key.1 .1
-        );
-      }
-      to_remove.push(key.clone());
-    }
-  }
-  for key in to_remove {
-    guard.remove(&key);
-  }
-}
-
-/// Kill a bootstrap process for a specific task.
-fn kill_bootstrap(
-  bootstrap_procs: &Arc<Mutex<HashMap<(String, BootstrapKey), Child>>>,
-  project_root: &str,
-  task_id: u32,
-  slug: &str,
-) {
-  let key = (project_root.to_string(), (task_id, slug.to_string()));
-  if let Some(mut child) = bootstrap_procs.lock().remove(&key) {
-    info!("Killing bootstrap for task {task_id}-{slug}");
-    let _ = child.kill();
-    let _ = child.wait();
-  }
-}
-
-/// Spawn a bootstrap process using the agency CLI.
-fn spawn_bootstrap_process(request: &BootstrapRequest) -> Result<Child> {
-  use std::process::{Command, Stdio};
-
-  // Get the current executable path to call agency bootstrap subcommand
-  let exe = std::env::current_exe()?;
-
-  // Build environment with the request's env_vars
-  let mut cmd = Command::new(&exe);
-  cmd
-    .arg("bootstrap")
-    .arg("run")
-    .arg("--repo-root")
-    .arg(&request.repo_root)
-    .arg("--worktree-dir")
-    .arg(&request.worktree_dir)
-    .stdin(Stdio::null())
-    .stdout(Stdio::null())
-    .stderr(Stdio::null());
-
-  // Add bootstrap config as arguments
-  for inc in &request.bootstrap_include {
-    cmd.arg("--include").arg(inc);
-  }
-  for exc in &request.bootstrap_exclude {
-    cmd.arg("--exclude").arg(exc);
-  }
-  for c in &request.bootstrap_cmd {
-    cmd.arg("--cmd").arg(c);
-  }
-
-  // Set environment variables
-  cmd.envs(&request.env_vars);
-
-  cmd.spawn().map_err(Into::into)
-}
-
 fn build_project_snapshot(
   cfg: &crate::config::AgencyConfig,
   project: &ProjectKey,
   prev: Option<&ProjectSnapshot>,
-  bootstrap_tasks: &std::collections::HashSet<BootstrapKey>,
 ) -> ProjectSnapshot {
   let root = Path::new(&project.repo_root);
   // Sessions from tmux
-  let mut sessions = tmux_list(cfg, root).unwrap_or_default();
-
-  // Override status to "Bootstrap" for sessions with active bootstrap processes
-  for session in &mut sessions {
-    let key = (session.task.id, session.task.slug.clone());
-    if bootstrap_tasks.contains(&key) {
-      session.status = "Bootstrap".to_string();
-    }
-  }
+  let sessions = tmux_list(cfg, root).unwrap_or_default();
 
   // Task index
   let paths = crate::config::AgencyPaths::new(root, root);
@@ -530,19 +368,12 @@ fn build_project_snapshot(
     });
   }
 
-  // Determine candidate tasks for metrics: tasks with active sessions or bootstrap
-  let mut candidates: std::collections::HashSet<(u32, String)> = sessions
+  // Determine candidate tasks for metrics: tasks with active sessions
+  let candidates: std::collections::HashSet<(u32, String)> = sessions
     .iter()
-    .filter(|s| {
-      s.status == "Running"
-        || s.status == "Idle"
-        || s.status == "Exited"
-        || s.status == "Bootstrap"
-    })
+    .filter(|s| s.status == "Running" || s.status == "Idle" || s.status == "Exited")
     .map(|s| (s.task.id, s.task.slug.clone()))
     .collect();
-  // Also include tasks with active bootstraps that might not have sessions yet
-  candidates.extend(bootstrap_tasks.iter().cloned());
 
   // Compute metrics
   let mut metrics: Vec<TaskMetrics> = Vec::new();
