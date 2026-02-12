@@ -217,21 +217,6 @@ pub fn create_worktree_for_task(
   })
 }
 
-/// Run full bootstrap in a worktree: copy files and run the bootstrap command.
-///
-/// This copies gitignored files and runs the bootstrap command.
-/// Receives pre-built environment variables from the caller.
-pub fn run_bootstrap_in_worktree(
-  repo_root: &Path,
-  worktree_dir: &Path,
-  cfg: &BootstrapConfig,
-  env_vars: &std::collections::HashMap<String, String>,
-) -> anyhow::Result<()> {
-  bootstrap_worktree(repo_root, worktree_dir, cfg)?;
-  run_bootstrap_cmd_with_env(repo_root, worktree_dir, cfg, env_vars);
-  Ok(())
-}
-
 /// Run the configured bootstrap command with custom environment variables.
 pub fn run_bootstrap_cmd_with_env(
   repo_root: &Path,

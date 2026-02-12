@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use anyhow::{Context, Result};
 
 use crate::config::AppContext;
-use crate::utils::bootstrap::{create_worktree_for_task, run_bootstrap_in_worktree};
+use crate::utils::bootstrap::{create_worktree_for_task, run_bootstrap_cmd_with_env};
 use crate::utils::git::{ensure_branch_at, open_main_repo, repo_workdir_or, rev_parse};
 use crate::utils::task::{
   TaskFrontmatterExt, branch_name, parse_task_markdown, resolve_id_or_slug, task_file,
@@ -37,7 +37,7 @@ pub fn run(ctx: &AppContext, ident: &str) -> Result<()> {
   let repo_root = repo_workdir_or(&repo, ctx.paths.root());
   let bcfg = ctx.config.bootstrap_config();
   let env_vars: HashMap<String, String> = std::env::vars().collect();
-  run_bootstrap_in_worktree(&repo_root, &wt_result.worktree_dir, &bcfg, &env_vars)?;
+  run_bootstrap_cmd_with_env(&repo_root, &wt_result.worktree_dir, &bcfg, &env_vars);
 
   Ok(())
 }
