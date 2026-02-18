@@ -17,33 +17,13 @@ use gix as git;
 /// Maximum file size for any bootstrap file copying (10MB)
 const MAX_BOOTSTRAP_FILE_BYTES: u64 = 10 * 1024 * 1024;
 
-/// Maximum file size for synchronous copying during worktree creation (100KB)
-/// Files under this threshold are copied immediately; larger files are handled in background.
-const SYNC_BOOTSTRAP_FILE_BYTES: u64 = 100 * 1024;
-
-/// Copy small gitignored root files synchronously during worktree creation.
-///
-/// This ensures commonly-needed files like .env are available immediately
-/// when the user attaches to the session, without waiting for background bootstrap.
-pub fn sync_copy_small_gitignored_files(
-  root_workdir: &Path,
-  dst_worktree: &Path,
-  cfg: &BootstrapConfig,
-) -> Result<()> {
-  copy_gitignored_root_files(root_workdir, dst_worktree, cfg, Some(SYNC_BOOTSTRAP_FILE_BYTES))
-}
-
-/// Bootstrap a worktree by copying larger gitignored files and included directories.
-///
-/// This runs in the background and handles files larger than the sync threshold,
-/// as well as directories explicitly included in the bootstrap config.
+/// Bootstrap a worktree by copying gitignored root files and included directories.
 pub fn bootstrap_worktree(
   root_workdir: &Path,
   dst_worktree: &Path,
   cfg: &BootstrapConfig,
 ) -> Result<()> {
-  // Copy remaining large files (small ones were already copied synchronously)
-  copy_gitignored_root_files(root_workdir, dst_worktree, cfg, None)?;
+  copy_gitignored_root_files(root_workdir, dst_worktree, cfg)?;
 
   // Copy explicitly included files and directories using glob patterns
   for pattern in &cfg.include {
@@ -92,13 +72,11 @@ pub fn bootstrap_worktree(
 
 /// Copy gitignored root files to the worktree.
 ///
-/// If `max_size` is Some, only files under that size are copied.
 /// Files that already exist in the destination are skipped.
 fn copy_gitignored_root_files(
   root_workdir: &Path,
   dst_worktree: &Path,
   cfg: &BootstrapConfig,
-  max_size: Option<u64>,
 ) -> Result<()> {
   let entries = discover_root_entries(root_workdir)?;
 
@@ -147,13 +125,6 @@ fn copy_gitignored_root_files(
       continue;
     }
 
-    // If max_size is specified, only copy files within that size
-    if let Some(max) = max_size
-      && size > max
-    {
-      continue;
-    }
-
     let dst_path = dst_worktree.join(name);
     if dst_path.exists() {
       continue;
@@ -193,17 +164,17 @@ fn copy_included_file(src: &Path, dst: &Path) -> Result<()> {
 /// Result from creating a worktree.
 pub struct CreateWorktreeResult {
   pub worktree_dir: PathBuf,
-  /// True if the worktree was newly created (bootstrap will run in background)
+  /// True if the worktree was newly created (bootstrap cmd still needs to run)
   pub is_new: bool,
 }
 
-/// Create a worktree for a task (fast, synchronous).
+/// Create a worktree for a task and copy bootstrap files synchronously.
 ///
-/// This creates the git worktree, files symlink, and copies small gitignored files
-/// (like .env) synchronously. Larger files and directories are handled by
-/// `run_bootstrap_in_worktree` in the background.
+/// This creates the git worktree, files symlink, and copies all gitignored files
+/// and included directories. The bootstrap command is NOT run here (it needs
+/// environment variables built later); callers should run it separately.
 ///
-/// Returns the worktree path and whether background bootstrap is needed.
+/// Returns the worktree path and whether the bootstrap command needs to run.
 pub fn create_worktree_for_task(
   ctx: &AppContext,
   repo: &git::Repository,
@@ -227,12 +198,12 @@ pub fn create_worktree_for_task(
 
   create_files_symlink(&ctx.paths, task, &worktree_dir_path);
 
-  // Copy small gitignored files synchronously (like .env) so they're available immediately
+  // Copy all bootstrap files synchronously so they're available before the agent starts
   if is_new {
     let repo_root = repo_workdir_or(repo, ctx.paths.root());
     let bcfg = ctx.config.bootstrap_config();
-    if let Err(err) = sync_copy_small_gitignored_files(&repo_root, &worktree_dir_path, &bcfg) {
-      log_warn!("Failed to copy small gitignored files: {err}");
+    if let Err(err) = bootstrap_worktree(&repo_root, &worktree_dir_path, &bcfg) {
+      log_warn!("Failed to copy bootstrap files: {err}");
     }
   }
 
@@ -246,23 +217,8 @@ pub fn create_worktree_for_task(
   })
 }
 
-/// Run bootstrap operations in a worktree (slow, meant for background execution).
-///
-/// This copies gitignored files and runs the bootstrap command.
-/// Receives pre-built environment variables from the caller.
-pub fn run_bootstrap_in_worktree(
-  repo_root: &Path,
-  worktree_dir: &Path,
-  cfg: &BootstrapConfig,
-  env_vars: &std::collections::HashMap<String, String>,
-) -> anyhow::Result<()> {
-  bootstrap_worktree(repo_root, worktree_dir, cfg)?;
-  run_bootstrap_cmd_with_env(repo_root, worktree_dir, cfg, env_vars);
-  Ok(())
-}
-
 /// Run the configured bootstrap command with custom environment variables.
-fn run_bootstrap_cmd_with_env(
+pub fn run_bootstrap_cmd_with_env(
   repo_root: &Path,
   worktree_dir: &Path,
   cfg: &BootstrapConfig,

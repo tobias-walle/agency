@@ -10,6 +10,10 @@ use crate::utils::log::t;
 const SETUP_TEMPLATE: &str = r#"#!/usr/bin/env bash
 set -euo pipefail
 
+# This script runs synchronously before the agent starts.
+# To run slow commands without blocking, background them with &:
+#   slow-command &
+
 echo "Setup"
 "#;
 
